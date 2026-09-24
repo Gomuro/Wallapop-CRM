@@ -117,10 +117,10 @@ export function ProductCard({
   return (
     <Link
       href={`/products/${product.id}`}
-      className="group block rounded-xl outline-none transition-[box-shadow,transform] hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.99]"
+      className="group flex h-full min-h-0 flex-col rounded-xl bg-card outline-none ring-1 ring-border transition-[box-shadow,transform] duration-200 hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.99]"
     >
-      <Card className="gap-0 py-0 shadow-none">
-        <div className="relative aspect-square overflow-hidden bg-muted">
+      <Card className="h-full gap-0 overflow-hidden py-0 shadow-none ring-0">
+        <div className="relative aspect-square shrink-0 overflow-hidden bg-muted">
           {cover ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img
@@ -137,22 +137,20 @@ export function ProductCard({
             className="top-2 left-2"
           />
         </div>
-        <div className="space-y-1 p-2.5">
+        <div className="flex flex-1 flex-col gap-1 p-2.5">
           <PriceSku price={product.price} sku={product.sku} />
           <p className="line-clamp-2 min-h-10 text-sm leading-snug">{product.title}</p>
-          {accounts.length > 0 ? (
-            <div className="flex flex-wrap gap-1">
-              {accounts.map((listing) => (
-                <Badge
-                  key={listing.id}
-                  variant="outline"
-                  className="max-w-full shrink truncate shadow-none"
-                >
-                  {listing.accountName}
-                </Badge>
-              ))}
-            </div>
-          ) : null}
+          <div className="mt-auto flex min-h-5 flex-wrap content-start gap-1">
+            {accounts.map((listing) => (
+              <Badge
+                key={listing.id}
+                variant="outline"
+                className="max-w-full shrink truncate shadow-none"
+              >
+                {listing.accountName}
+              </Badge>
+            ))}
+          </div>
         </div>
       </Card>
     </Link>

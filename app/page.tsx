@@ -54,7 +54,7 @@ export default async function CatalogPage({
             ) : null}
           </div>
         ) : view === "grid" ? (
-          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          <div className="grid auto-rows-fr grid-cols-2 items-stretch gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {products.map((product) => (
               <ProductCard key={product.id} product={product} view="grid" />
             ))}
