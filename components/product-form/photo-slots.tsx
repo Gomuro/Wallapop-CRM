@@ -1,13 +1,7 @@
 "use client"
 
-import { useRef, useState, type ReactNode } from "react"
-import {
-  ChevronLeftIcon,
-  ChevronRightIcon,
-  LoaderCircleIcon,
-  PlusIcon,
-  XIcon,
-} from "lucide-react"
+import { useEffect, useRef, useState, type PointerEvent as ReactPointerEvent } from "react"
+import { LoaderCircleIcon, PlusIcon, XIcon } from "lucide-react"
 
 import { uploadProductImages } from "@/app/actions/uploads"
 import { Badge } from "@/components/ui/badge"
@@ -16,8 +10,8 @@ import { typeMeta } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"]
-
-const PHOTO_SLOT_MIME = "application/x-wallapop-photo-slot"
+const DRAG_THRESHOLD_PX = 8
+const PRESS_DELAY_MS = 150
 
 function compactImages(value: unknown): string[] {
   if (!Array.isArray(value)) return []
@@ -43,49 +37,14 @@ function reorderPhotos(images: string[], from: number, to: number): string[] {
   return next
 }
 
-function readSlotIndex(dataTransfer: DataTransfer): number | null {
-  const raw =
-    dataTransfer.getData(PHOTO_SLOT_MIME) || dataTransfer.getData("text/plain")
-  if (!raw) return null
-  const index = Number.parseInt(raw, 10)
-  return Number.isInteger(index) ? index : null
-}
-
-function SlotControl({
-  label,
-  disabled,
-  className,
-  onClick,
-  children,
-}: {
-  label: string
-  disabled?: boolean
-  className?: string
-  onClick: () => void
-  children: ReactNode
-}) {
-  return (
-    <button
-      type="button"
-      aria-label={label}
-      disabled={disabled}
-      draggable={false}
-      onPointerDown={(event) => event.stopPropagation()}
-      onClick={(event) => {
-        event.stopPropagation()
-        event.preventDefault()
-        onClick()
-      }}
-      className={cn(
-        "absolute z-10 flex size-8 items-center justify-center rounded-full bg-background/95 text-foreground shadow-sm ring-1 ring-border backdrop-blur-sm",
-        "transition-opacity focus-visible:ring-3 focus-visible:ring-ring/50",
-        "disabled:pointer-events-none disabled:opacity-40",
-        className,
-      )}
-    >
-      {children}
-    </button>
-  )
+type DragSession = {
+  pointerId: number
+  from: number
+  startX: number
+  startY: number
+  ready: boolean
+  active: boolean
+  timer: number
 }
 
 export function PhotoSlots({
@@ -96,7 +55,9 @@ export function PhotoSlots({
   onChange: (images: string[]) => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
-  const dragIndexRef = useRef<number | null>(null)
+  const gridRef = useRef<HTMLDivElement>(null)
+  const sessionRef = useRef<DragSession | null>(null)
+  const overIndexRef = useRef<number | null>(null)
   const replaceIndexRef = useRef<number | undefined>(undefined)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
@@ -108,7 +69,6 @@ export function PhotoSlots({
     { length: PRODUCT_IMAGE_MAX },
     (_, index) => safeImages[index] ?? null,
   )
-  const lastFilled = safeImages.length - 1
 
   function commit(next: string[]) {
     onChange(compactImages(next).slice(0, PRODUCT_IMAGE_MAX))
@@ -181,27 +141,121 @@ export function PhotoSlots({
     }
   }
 
-  function move(index: number, direction: -1 | 1) {
-    commit(reorderPhotos(safeImages, index, index + direction))
-  }
-
   function remove(index: number) {
     commit(safeImages.filter((_, itemIndex) => itemIndex !== index))
   }
 
-  function setDragSource(index: number | null) {
-    dragIndexRef.current = index
-    setDragIndex(index)
+  function setHoverSlot(index: number | null) {
+    overIndexRef.current = index
+    setOverIndex(index)
+  }
+
+  function slotIndexFromPoint(x: number, y: number): number | null {
+    const grid = gridRef.current
+    if (!grid) return null
+    const hit = document.elementFromPoint(x, y)
+    const slot = hit?.closest("[data-photo-slot]")
+    if (!slot || !grid.contains(slot)) return null
+    const index = Number(slot.getAttribute("data-photo-slot"))
+    return Number.isInteger(index) ? index : null
+  }
+
+  function dropTarget(index: number | null): number | null {
+    if (index === null) return null
+    if (index < safeImages.length) return index
+    return Math.min(index, safeImages.length)
   }
 
   function clearDrag() {
-    dragIndexRef.current = null
+    if (sessionRef.current?.timer) window.clearTimeout(sessionRef.current.timer)
+    sessionRef.current = null
+    overIndexRef.current = null
     setDragIndex(null)
     setOverIndex(null)
   }
 
-  function openFilePicker(atIndex?: number) {
-    replaceIndexRef.current = atIndex
+  function finishDrag() {
+    const session = sessionRef.current
+    if (!session?.active) {
+      clearDrag()
+      return
+    }
+    const from = session.from
+    const to = dropTarget(overIndexRef.current)
+    clearDrag()
+    if (to === null || from === to) return
+    if (from < 0 || from >= safeImages.length) return
+    commit(reorderPhotos(safeImages, from, to))
+  }
+
+  function onSlotPointerDown(event: ReactPointerEvent<HTMLDivElement>, index: number) {
+    if (uploading || event.button !== 0) return
+    const pointerId = event.pointerId
+    const isTouch = event.pointerType === "touch"
+    const timer = isTouch
+      ? window.setTimeout(() => {
+          const session = sessionRef.current
+          if (!session || session.pointerId !== pointerId) return
+          session.ready = true
+        }, PRESS_DELAY_MS)
+      : 0
+    sessionRef.current = {
+      pointerId,
+      from: index,
+      startX: event.clientX,
+      startY: event.clientY,
+      ready: !isTouch,
+      active: false,
+      timer,
+    }
+  }
+
+  function onSlotPointerMove(event: ReactPointerEvent<HTMLDivElement>) {
+    const session = sessionRef.current
+    if (!session || session.pointerId !== event.pointerId) return
+    const distance = Math.hypot(
+      event.clientX - session.startX,
+      event.clientY - session.startY,
+    )
+
+    if (!session.active) {
+      if (!session.ready) {
+        if (distance > DRAG_THRESHOLD_PX) clearDrag()
+        return
+      }
+      if (distance < DRAG_THRESHOLD_PX) return
+      session.active = true
+      event.currentTarget.setPointerCapture(event.pointerId)
+      setDragIndex(session.from)
+      setHoverSlot(session.from)
+    }
+
+    event.preventDefault()
+    const hover = slotIndexFromPoint(event.clientX, event.clientY)
+    if (hover !== overIndexRef.current) setHoverSlot(hover)
+  }
+
+  function onSlotPointerUp(event: ReactPointerEvent<HTMLDivElement>) {
+    const session = sessionRef.current
+    if (!session || session.pointerId !== event.pointerId) return
+    if (event.currentTarget.hasPointerCapture(event.pointerId)) {
+      event.currentTarget.releasePointerCapture(event.pointerId)
+    }
+    finishDrag()
+  }
+
+  useEffect(() => {
+    if (dragIndex === null) return
+
+    const blockScroll = (event: TouchEvent) => {
+      if (event.cancelable) event.preventDefault()
+    }
+    document.addEventListener("touchmove", blockScroll, { passive: false })
+    return () => document.removeEventListener("touchmove", blockScroll)
+  }, [dragIndex])
+
+  function openFilePicker() {
+    replaceIndexRef.current = undefined
     inputRef.current?.click()
   }
 
@@ -225,96 +279,72 @@ export function PhotoSlots({
           event.target.value = ""
         }}
       />
-      <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
+      <div
+        ref={gridRef}
+        className={cn(
+          "grid grid-cols-3 gap-2 md:grid-cols-4",
+          dragIndex !== null && "touch-none",
+        )}
+      >
         {slots.map((src, index) => (
           <div
             key={index}
-            draggable={Boolean(src) && !uploading}
-            onDragStart={(event) => {
-              if (!src || uploading) {
-                event.preventDefault()
-                return
-              }
-              event.dataTransfer.effectAllowed = "move"
-              event.dataTransfer.setData(PHOTO_SLOT_MIME, String(index))
-              event.dataTransfer.setData("text/plain", String(index))
-              setDragSource(index)
-            }}
-            onDragEnd={clearDrag}
+            data-photo-slot={index}
+            onPointerDown={
+              src ? (event) => onSlotPointerDown(event, index) : undefined
+            }
+            onPointerMove={src ? onSlotPointerMove : undefined}
+            onPointerUp={src ? onSlotPointerUp : undefined}
+            onPointerCancel={src ? onSlotPointerUp : undefined}
             onDragOver={(event) => {
+              if (!event.dataTransfer.types.includes("Files")) return
               event.preventDefault()
-              event.dataTransfer.dropEffect =
-                dragIndexRef.current !== null ? "move" : "copy"
-              if (overIndex !== index) setOverIndex(index)
-            }}
-            onDragLeave={() => {
-              setOverIndex((current) => (current === index ? null : current))
             }}
             onDrop={(event) => {
+              if (!event.dataTransfer.files.length) return
               event.preventDefault()
-              event.stopPropagation()
-              const from =
-                dragIndexRef.current ?? readSlotIndex(event.dataTransfer)
-              const files = event.dataTransfer.files
-              clearDrag()
-
-              if (from !== null) {
-                if (from === index) return
-                if (from < 0 || from >= safeImages.length) return
-                const to = src ? index : Math.min(index, safeImages.length)
-                commit(reorderPhotos(safeImages, from, to))
-                return
-              }
-
-              if (files.length) {
-                void addFiles(files, src ? index : undefined)
-              }
+              void addFiles(event.dataTransfer.files, src ? index : undefined)
             }}
             className={cn(
-              "relative aspect-square overflow-hidden rounded-lg",
+              "relative aspect-square select-none rounded-lg",
               src ? "bg-muted" : "bg-transparent",
-              dragIndex === index && "opacity-50",
-              overIndex === index && dragIndex !== null && "ring-2 ring-primary",
+              dragIndex === index &&
+                "z-20 scale-105 touch-none opacity-80 shadow-lg",
+              overIndex === index &&
+                dragIndex !== null &&
+                dragIndex !== index &&
+                "ring-2 ring-primary",
             )}
           >
             {src ? (
               <>
-                {/* eslint-disable-next-line @next/next/no-img-element */}
-                <img
-                  src={src}
-                  alt=""
-                  draggable={false}
-                  className="size-full object-cover"
-                />
+                <div className="size-full overflow-hidden rounded-lg">
+                  {/* eslint-disable-next-line @next/next/no-img-element */}
+                  <img
+                    src={src}
+                    alt=""
+                    draggable={false}
+                    className="pointer-events-none size-full object-cover"
+                  />
+                </div>
                 {index === 0 ? (
-                  <Badge className="absolute top-1 left-1 z-10 h-5 max-w-[calc(100%-2.5rem)] bg-background px-1.5 text-[10px] font-medium text-foreground shadow-sm ring-1 ring-border">
+                  <Badge className="pointer-events-none absolute top-1 left-1 z-10 h-5 max-w-[calc(100%-2.5rem)] bg-background px-1.5 text-[10px] font-medium text-foreground shadow-sm ring-1 ring-border">
                     Головне
                   </Badge>
                 ) : null}
-                <SlotControl
-                  label={`Delete photo ${index + 1}`}
+                <button
+                  type="button"
+                  aria-label={`Delete photo ${index + 1}`}
                   disabled={uploading}
-                  className="top-1 right-1"
-                  onClick={() => remove(index)}
+                  onPointerDown={(event) => event.stopPropagation()}
+                  onClick={(event) => {
+                    event.stopPropagation()
+                    remove(index)
+                  }}
+                  className="absolute top-1 right-1 z-10 flex size-8 items-center justify-center rounded-full bg-background/95 text-foreground shadow-sm ring-1 ring-border backdrop-blur-sm focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-40"
                 >
                   <XIcon className="size-3.5" />
-                </SlotControl>
-                <SlotControl
-                  label={`Move photo ${index + 1} left`}
-                  disabled={uploading || index === 0}
-                  className="bottom-1 left-1"
-                  onClick={() => move(index, -1)}
-                >
-                  <ChevronLeftIcon className="size-3.5" />
-                </SlotControl>
-                <SlotControl
-                  label={`Move photo ${index + 1} right`}
-                  disabled={uploading || index >= lastFilled}
-                  className="bottom-1 right-1"
-                  onClick={() => move(index, 1)}
-                >
-                  <ChevronRightIcon className="size-3.5" />
-                </SlotControl>
+                </button>
               </>
             ) : (
               <button
@@ -328,7 +358,7 @@ export function PhotoSlots({
                   }
                   openFilePicker()
                 }}
-                className="flex size-full items-center justify-center border border-dashed border-border hover:bg-accent disabled:pointer-events-none"
+                className="flex size-full items-center justify-center rounded-lg border border-dashed border-border hover:bg-accent disabled:pointer-events-none"
               >
                 {uploading && index === safeImages.length ? (
                   <LoaderCircleIcon className="size-5 animate-spin text-primary" />
@@ -341,8 +371,7 @@ export function PhotoSlots({
         ))}
       </div>
       <p className={cn(typeMeta, "text-muted-foreground")}>
-        Tap + to upload. Use arrows or drag to reorder. JPEG/PNG/WebP, max 10MB.
-        EXIF is stripped on save.
+        Tap + to upload. Drag to reorder. JPEG/PNG/WebP, max 10MB.
       </p>
       {error ? (
         <p className="text-xs text-destructive" role="alert">
