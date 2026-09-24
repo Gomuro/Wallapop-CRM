@@ -1,33 +1,17 @@
 "use client"
 
-import { useRef, useState } from "react"
+import { useRef, useState, type ReactNode } from "react"
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
   LoaderCircleIcon,
   PlusIcon,
-  Trash2Icon,
+  XIcon,
 } from "lucide-react"
 
 import { uploadProductImages } from "@/app/actions/uploads"
 import { Badge } from "@/components/ui/badge"
-import { Button } from "@/components/ui/button"
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-} from "@/components/ui/dialog"
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-} from "@/components/ui/drawer"
 import { PRODUCT_IMAGE_MAX } from "@/lib/validations/product"
-import { useIsMd } from "@/lib/ui/media"
 import { typeMeta } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
 
@@ -67,6 +51,43 @@ function readSlotIndex(dataTransfer: DataTransfer): number | null {
   return Number.isInteger(index) ? index : null
 }
 
+function SlotControl({
+  label,
+  disabled,
+  className,
+  onClick,
+  children,
+}: {
+  label: string
+  disabled?: boolean
+  className?: string
+  onClick: () => void
+  children: ReactNode
+}) {
+  return (
+    <button
+      type="button"
+      aria-label={label}
+      disabled={disabled}
+      draggable={false}
+      onPointerDown={(event) => event.stopPropagation()}
+      onClick={(event) => {
+        event.stopPropagation()
+        event.preventDefault()
+        onClick()
+      }}
+      className={cn(
+        "absolute z-10 flex size-8 items-center justify-center rounded-full bg-background/95 text-foreground shadow-sm ring-1 ring-border backdrop-blur-sm",
+        "transition-opacity focus-visible:ring-3 focus-visible:ring-ring/50",
+        "disabled:pointer-events-none disabled:opacity-40",
+        className,
+      )}
+    >
+      {children}
+    </button>
+  )
+}
+
 export function PhotoSlots({
   images = [],
   onChange,
@@ -76,8 +97,7 @@ export function PhotoSlots({
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
   const dragIndexRef = useRef<number | null>(null)
-  const isMd = useIsMd()
-  const [activeIndex, setActiveIndex] = useState<number | null>(null)
+  const replaceIndexRef = useRef<number | undefined>(undefined)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
   const [overIndex, setOverIndex] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
@@ -88,9 +108,7 @@ export function PhotoSlots({
     { length: PRODUCT_IMAGE_MAX },
     (_, index) => safeImages[index] ?? null,
   )
-  const activeSrc =
-    activeIndex !== null ? (safeImages[activeIndex] ?? null) : null
-  const editorOpen = activeSrc !== null
+  const lastFilled = safeImages.length - 1
 
   function commit(next: string[]) {
     onChange(compactImages(next).slice(0, PRODUCT_IMAGE_MAX))
@@ -164,31 +182,11 @@ export function PhotoSlots({
   }
 
   function move(index: number, direction: -1 | 1) {
-    const target = index + direction
-    if (target < 0 || target >= safeImages.length) return
-    const next = [...safeImages]
-    const current = next[index]
-    const swapped = next[target]
-    if (!current || !swapped) return
-    next[index] = swapped
-    next[target] = current
-    commit(next)
-    setActiveIndex(target)
-  }
-
-  function makeCover(index: number) {
-    if (index <= 0 || index >= safeImages.length) return
-    const next = [...safeImages]
-    const [item] = next.splice(index, 1)
-    if (!item) return
-    next.unshift(item)
-    commit(next)
-    setActiveIndex(0)
+    commit(reorderPhotos(safeImages, index, index + direction))
   }
 
   function remove(index: number) {
     commit(safeImages.filter((_, itemIndex) => itemIndex !== index))
-    setActiveIndex(null)
   }
 
   function setDragSource(index: number | null) {
@@ -202,76 +200,10 @@ export function PhotoSlots({
     setOverIndex(null)
   }
 
-  const editorActions = (
-    <div className="flex flex-col gap-2">
-      <div className="grid grid-cols-3 gap-2">
-        <Button
-          type="button"
-          variant="outline"
-          className="h-11"
-          aria-label="Move left"
-          disabled={uploading || activeIndex === 0}
-          onClick={() => activeIndex !== null && move(activeIndex, -1)}
-        >
-          <ChevronLeftIcon />
-          Left
-        </Button>
-        <Button
-          type="button"
-          variant="outline"
-          className="h-11"
-          aria-label="Move right"
-          disabled={
-            uploading || activeIndex === null || activeIndex >= safeImages.length - 1
-          }
-          onClick={() => activeIndex !== null && move(activeIndex, 1)}
-        >
-          Right
-          <ChevronRightIcon />
-        </Button>
-        <Button
-          type="button"
-          variant="destructive"
-          className="h-11"
-          aria-label="Delete photo"
-          disabled={uploading}
-          onClick={() => activeIndex !== null && remove(activeIndex)}
-        >
-          <Trash2Icon />
-        </Button>
-      </div>
-      {activeIndex !== null && activeIndex > 0 ? (
-        <Button
-          type="button"
-          variant="secondary"
-          className="h-11 w-full"
-          disabled={uploading}
-          onClick={() => makeCover(activeIndex)}
-        >
-          Set as main
-        </Button>
-      ) : null}
-      <Button
-        type="button"
-        variant="secondary"
-        className="h-11 w-full"
-        disabled={uploading}
-        onClick={() => inputRef.current?.click()}
-      >
-        {uploading ? <LoaderCircleIcon className="animate-spin" /> : null}
-        Replace photo
-      </Button>
-    </div>
-  )
-
-  const preview = activeSrc ? (
-    // eslint-disable-next-line @next/next/no-img-element
-    <img
-      src={activeSrc}
-      alt=""
-      className="mx-auto max-h-72 w-full rounded-lg bg-muted object-contain"
-    />
-  ) : null
+  function openFilePicker(atIndex?: number) {
+    replaceIndexRef.current = atIndex
+    inputRef.current?.click()
+  }
 
   return (
     <div className="space-y-2">
@@ -288,15 +220,15 @@ export function PhotoSlots({
         aria-label="Upload photos"
         className="sr-only"
         onChange={(event) => {
-          void addFiles(event.target.files, activeIndex ?? undefined)
+          void addFiles(event.target.files, replaceIndexRef.current)
+          replaceIndexRef.current = undefined
           event.target.value = ""
         }}
       />
       <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
         {slots.map((src, index) => (
-          <button
+          <div
             key={index}
-            type="button"
             draggable={Boolean(src) && !uploading}
             onDragStart={(event) => {
               if (!src || uploading) {
@@ -338,92 +270,85 @@ export function PhotoSlots({
                 void addFiles(files, src ? index : undefined)
               }
             }}
-            onClick={() => {
-              if (src) {
-                setActiveIndex(index)
-                return
-              }
-              if (safeImages.length >= PRODUCT_IMAGE_MAX) {
-                setError(`Maximum ${PRODUCT_IMAGE_MAX} photos.`)
-                return
-              }
-              setActiveIndex(null)
-              inputRef.current?.click()
-            }}
             className={cn(
-              "relative flex aspect-square items-center justify-center overflow-hidden rounded-lg transition-shadow",
-              src
-                ? "border-0 bg-muted hover:ring-2 hover:ring-primary/40"
-                : "border border-dashed border-border bg-transparent hover:bg-accent",
+              "relative aspect-square overflow-hidden rounded-lg",
+              src ? "bg-muted" : "bg-transparent",
               dragIndex === index && "opacity-50",
               overIndex === index && dragIndex !== null && "ring-2 ring-primary",
             )}
-            disabled={uploading}
-            aria-label={src ? `Photo ${index + 1}` : `Add photo ${index + 1}`}
           >
             {src ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img src={src} alt="" draggable={false} className="size-full object-cover" />
-            ) : uploading && index === safeImages.length ? (
-              <LoaderCircleIcon className="size-5 animate-spin text-primary" />
+              <>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img
+                  src={src}
+                  alt=""
+                  draggable={false}
+                  className="size-full object-cover"
+                />
+                {index === 0 ? (
+                  <Badge className="absolute top-1 left-1 z-10 h-5 max-w-[calc(100%-2.5rem)] bg-background px-1.5 text-[10px] font-medium text-foreground shadow-sm ring-1 ring-border">
+                    Головне
+                  </Badge>
+                ) : null}
+                <SlotControl
+                  label={`Delete photo ${index + 1}`}
+                  disabled={uploading}
+                  className="top-1 right-1"
+                  onClick={() => remove(index)}
+                >
+                  <XIcon className="size-3.5" />
+                </SlotControl>
+                <SlotControl
+                  label={`Move photo ${index + 1} left`}
+                  disabled={uploading || index === 0}
+                  className="bottom-1 left-1"
+                  onClick={() => move(index, -1)}
+                >
+                  <ChevronLeftIcon className="size-3.5" />
+                </SlotControl>
+                <SlotControl
+                  label={`Move photo ${index + 1} right`}
+                  disabled={uploading || index >= lastFilled}
+                  className="bottom-1 right-1"
+                  onClick={() => move(index, 1)}
+                >
+                  <ChevronRightIcon className="size-3.5" />
+                </SlotControl>
+              </>
             ) : (
-              <PlusIcon className="size-5 text-muted-foreground" />
+              <button
+                type="button"
+                disabled={uploading}
+                aria-label={`Add photo ${index + 1}`}
+                onClick={() => {
+                  if (safeImages.length >= PRODUCT_IMAGE_MAX) {
+                    setError(`Maximum ${PRODUCT_IMAGE_MAX} photos.`)
+                    return
+                  }
+                  openFilePicker()
+                }}
+                className="flex size-full items-center justify-center border border-dashed border-border hover:bg-accent disabled:pointer-events-none"
+              >
+                {uploading && index === safeImages.length ? (
+                  <LoaderCircleIcon className="size-5 animate-spin text-primary" />
+                ) : (
+                  <PlusIcon className="size-5 text-muted-foreground" />
+                )}
+              </button>
             )}
-            {index === 0 && src ? (
-              <Badge className="absolute top-1 left-1 z-10 h-5 max-w-[calc(100%-0.5rem)] bg-background px-1.5 text-[10px] font-medium text-foreground shadow-sm ring-1 ring-border">
-                Головне
-              </Badge>
-            ) : null}
-          </button>
+          </div>
         ))}
       </div>
       <p className={cn(typeMeta, "text-muted-foreground")}>
-        Tap a slot to upload. Drag to reorder. JPEG/PNG/WebP, max 10MB. EXIF is
-        stripped on save.
+        Tap + to upload. Use arrows or drag to reorder. JPEG/PNG/WebP, max 10MB.
+        EXIF is stripped on save.
       </p>
       {error ? (
         <p className="text-xs text-destructive" role="alert">
           {error}
         </p>
       ) : null}
-
-      {isMd ? (
-        <Dialog
-          open={editorOpen}
-          onOpenChange={(open) => {
-            if (!open) setActiveIndex(null)
-          }}
-        >
-          <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-md">
-            <DialogHeader>
-              <DialogTitle>Photo {(activeIndex ?? 0) + 1}</DialogTitle>
-            </DialogHeader>
-            {preview}
-            {editorActions}
-          </DialogContent>
-        </Dialog>
-      ) : (
-        <Drawer
-          open={editorOpen}
-          onOpenChange={(open) => {
-            if (!open) setActiveIndex(null)
-          }}
-          showSwipeHandle
-        >
-          <DrawerContent>
-            <DrawerHeader>
-              <DrawerTitle>Photo {(activeIndex ?? 0) + 1}</DrawerTitle>
-            </DrawerHeader>
-            {activeSrc ? <div className="px-4">{preview}</div> : null}
-            <DrawerFooter>
-              {editorActions}
-              <DrawerClose render={<Button variant="ghost" className="h-12 w-full" />}>
-                Close
-              </DrawerClose>
-            </DrawerFooter>
-          </DrawerContent>
-        </Drawer>
-      )}
     </div>
   )
 }
