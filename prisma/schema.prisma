@@ -1,0 +1,78 @@
+// Central schema for the Vercel Next.js app and the VPS API/worker.
+// ProductListing is the Phase 2 multi-account join ("where it hangs").
+
+generator client {
+  provider = "prisma-client"
+  output   = "../lib/generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ProductStatus {
+  ACTIVE
+  SOLD
+  INACTIVE
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ListingStatus {
+  ACTIVE
+  DEACTIVATED
+  READY_TO_POST
+}
+
+model Product {
+  id            String        @id @default(cuid())
+  sku           String        @unique
+  title         String
+  description   String        @db.Text
+  price         Float
+  category      String
+  condition     String
+  weight        Float?
+  images        String[]      @default([])
+  status        ProductStatus @default(ACTIVE)
+  externalLinks String[]      @default([]) @map("external_links")
+  listings      ProductListing[]
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([title])
+  @@map("products")
+}
+
+model Account {
+  id            String        @id @default(cuid())
+  name          String
+  status        AccountStatus @default(ACTIVE)
+  externalLinks String[]      @default([]) @map("external_links")
+  listings      ProductListing[]
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  @@map("accounts")
+}
+
+model ProductListing {
+  id            String        @id @default(cuid())
+  productId     String        @map("product_id")
+  accountId     String        @map("account_id")
+  product       Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  account       Account       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  externalUrl   String?       @map("external_url")
+  externalLinks String[]      @default([]) @map("external_links")
+  status        ListingStatus @default(ACTIVE)
+  createdAt     DateTime      @default(now()) @map("created_at")
+  updatedAt     DateTime      @updatedAt @map("updated_at")
+
+  @@unique([productId, accountId])
+  @@index([status])
+  @@map("product_listings")
+}

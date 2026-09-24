@@ -1,0 +1,10 @@
+---
+description: Global Next.js and React coding standards
+globs: **/*.tsx, **/*.ts
+alwaysApply: true
+---
+- Use Next.js App Router (app directory).
+- Use Server Actions for data mutations, avoid API routes unless necessary.
+- Use shadcn/ui components and Tailwind CSS for styling.
+- Ensure all UI is Mobile-First. The interface must look and feel like a native mobile app (specifically Wallapop).
+- Use Prisma ORM for database operations.
