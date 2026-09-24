@@ -9,10 +9,11 @@ import { typeScreen } from "@/lib/ui/type"
 export default function NewProductPage() {
   return (
     <>
-      <header className="sticky top-0 z-30 flex items-center gap-1 border-b bg-background px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))]">
+      <header className="sticky top-0 z-30 flex items-center gap-1 border-b bg-background px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:top-14 md:px-8">
         <Button
           variant="ghost"
           size="icon"
+          className="size-11"
           nativeButton={false}
           render={<Link href="/" />}
           aria-label="Back to catalog"

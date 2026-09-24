@@ -4,6 +4,7 @@ import { useRef, useState } from "react"
 import {
   ChevronLeftIcon,
   ChevronRightIcon,
+  LoaderCircleIcon,
   PlusIcon,
   Trash2Icon,
 } from "lucide-react"
@@ -11,6 +12,12 @@ import {
 import { uploadProductImages } from "@/app/actions/uploads"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+} from "@/components/ui/dialog"
 import {
   Drawer,
   DrawerClose,
@@ -20,8 +27,11 @@ import {
   DrawerTitle,
 } from "@/components/ui/drawer"
 import { PRODUCT_IMAGE_MAX } from "@/lib/validations/product"
+import { useIsMd } from "@/lib/ui/media"
 import { typeMeta } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
+
+const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"]
 
 function compactImages(value: unknown): string[] {
   if (!Array.isArray(value)) return []
@@ -38,8 +48,10 @@ export function PhotoSlots({
   onChange: (images: string[]) => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const isMd = useIsMd()
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
+  const [overIndex, setOverIndex] = useState<number | null>(null)
   const [uploading, setUploading] = useState(false)
   const [error, setError] = useState<string | null>(null)
 
@@ -50,23 +62,40 @@ export function PhotoSlots({
   )
   const activeSrc =
     activeIndex !== null ? (safeImages[activeIndex] ?? null) : null
+  const editorOpen = activeSrc !== null
 
   function commit(next: string[]) {
     onChange(compactImages(next).slice(0, PRODUCT_IMAGE_MAX))
   }
 
+  function roomFor(atIndex?: number) {
+    const replacing =
+      typeof atIndex === "number" && atIndex >= 0 && atIndex < safeImages.length
+    return replacing
+      ? PRODUCT_IMAGE_MAX - safeImages.length + 1
+      : PRODUCT_IMAGE_MAX - safeImages.length
+  }
+
   async function addFiles(fileList: FileList | null, atIndex?: number) {
-    if (!fileList?.length) return
-    const files = Array.from(fileList).filter((file) =>
-      ["image/jpeg", "image/png", "image/webp"].includes(file.type),
-    )
-    if (files.length === 0) {
+    if (!fileList?.length || uploading) return
+    const incoming = Array.from(fileList)
+    const valid = incoming.filter((file) => ACCEPTED_TYPES.includes(file.type))
+    const rejectedType = incoming.length - valid.length
+    if (valid.length === 0) {
       setError("Use JPEG, PNG, or WebP.")
       return
     }
 
+    const room = roomFor(atIndex)
+    if (room <= 0) {
+      setError(`Maximum ${PRODUCT_IMAGE_MAX} photos.`)
+      return
+    }
+
+    const accepted = valid.slice(0, room)
+    const skipped = valid.length - accepted.length
     const formData = new FormData()
-    files.forEach((file) => formData.append("files", file))
+    accepted.forEach((file) => formData.append("files", file))
     setUploading(true)
     setError(null)
     try {
@@ -89,6 +118,16 @@ export function PhotoSlots({
         })
       }
       commit(next)
+      const notes: string[] = []
+      if (skipped > 0) {
+        notes.push(
+          `Maximum ${PRODUCT_IMAGE_MAX} photos. Extra files were not added.`,
+        )
+      }
+      if (rejectedType > 0) {
+        notes.push("Some files were skipped. Use JPEG, PNG, or WebP.")
+      }
+      setError(notes.length > 0 ? notes.join(" ") : null)
     } catch {
       setError("Could not save image.")
     } finally {
@@ -109,14 +148,100 @@ export function PhotoSlots({
     setActiveIndex(target)
   }
 
+  function makeCover(index: number) {
+    if (index <= 0 || index >= safeImages.length) return
+    const next = [...safeImages]
+    const [item] = next.splice(index, 1)
+    if (!item) return
+    next.unshift(item)
+    commit(next)
+    setActiveIndex(0)
+  }
+
   function remove(index: number) {
     commit(safeImages.filter((_, itemIndex) => itemIndex !== index))
     setActiveIndex(null)
   }
 
+  function clearDrag() {
+    setDragIndex(null)
+    setOverIndex(null)
+  }
+
+  const editorActions = (
+    <div className="flex flex-col gap-2">
+      <div className="grid grid-cols-3 gap-2">
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11"
+          aria-label="Move left"
+          disabled={uploading || activeIndex === 0}
+          onClick={() => activeIndex !== null && move(activeIndex, -1)}
+        >
+          <ChevronLeftIcon />
+          Left
+        </Button>
+        <Button
+          type="button"
+          variant="outline"
+          className="h-11"
+          aria-label="Move right"
+          disabled={
+            uploading || activeIndex === null || activeIndex >= safeImages.length - 1
+          }
+          onClick={() => activeIndex !== null && move(activeIndex, 1)}
+        >
+          Right
+          <ChevronRightIcon />
+        </Button>
+        <Button
+          type="button"
+          variant="destructive"
+          className="h-11"
+          aria-label="Delete photo"
+          disabled={uploading}
+          onClick={() => activeIndex !== null && remove(activeIndex)}
+        >
+          <Trash2Icon />
+        </Button>
+      </div>
+      {activeIndex !== null && activeIndex > 0 ? (
+        <Button
+          type="button"
+          variant="secondary"
+          className="h-11 w-full"
+          disabled={uploading}
+          onClick={() => makeCover(activeIndex)}
+        >
+          Set as main
+        </Button>
+      ) : null}
+      <Button
+        type="button"
+        variant="secondary"
+        className="h-11 w-full"
+        disabled={uploading}
+        onClick={() => inputRef.current?.click()}
+      >
+        {uploading ? <LoaderCircleIcon className="animate-spin" /> : null}
+        Replace photo
+      </Button>
+    </div>
+  )
+
+  const preview = activeSrc ? (
+    // eslint-disable-next-line @next/next/no-img-element
+    <img
+      src={activeSrc}
+      alt=""
+      className="mx-auto max-h-72 w-full rounded-lg bg-muted object-contain"
+    />
+  ) : null
+
   return (
     <div className="space-y-2">
-      <p className={cn(typeMeta, "text-muted-foreground")}>
+      <p className={cn(typeMeta, "text-muted-foreground")} aria-live="polite">
         {safeImages.length}/{PRODUCT_IMAGE_MAX} · 6–10 for posting
         {uploading ? " · Uploading…" : ""}
       </p>
@@ -125,55 +250,64 @@ export function PhotoSlots({
         type="file"
         accept="image/jpeg,image/png,image/webp"
         multiple
+        tabIndex={-1}
+        aria-label="Upload photos"
         className="sr-only"
         onChange={(event) => {
           void addFiles(event.target.files, activeIndex ?? undefined)
           event.target.value = ""
         }}
       />
-      <div className="grid grid-cols-3 gap-2">
+      <div className="grid grid-cols-3 gap-2 md:grid-cols-4">
         {slots.map((src, index) => (
           <button
             key={index}
             type="button"
-            draggable={Boolean(src)}
+            draggable={Boolean(src) && !uploading}
             onDragStart={() => setDragIndex(index)}
-            onDragOver={(event) => event.preventDefault()}
+            onDragEnd={clearDrag}
+            onDragOver={(event) => {
+              event.preventDefault()
+              setOverIndex(index)
+            }}
+            onDragLeave={() => {
+              setOverIndex((current) => (current === index ? null : current))
+            }}
             onDrop={(event) => {
               event.preventDefault()
+              const from = dragIndex
+              clearDrag()
               if (event.dataTransfer.files.length) {
                 void addFiles(event.dataTransfer.files, src ? index : undefined)
-                setDragIndex(null)
                 return
               }
-              if (dragIndex === null || dragIndex === index) return
+              if (from === null || from === index) return
               const next = [...safeImages]
-              if (dragIndex < 0 || dragIndex >= next.length) {
-                setDragIndex(null)
-                return
-              }
-              const [moved] = next.splice(dragIndex, 1)
-              if (!moved) {
-                setDragIndex(null)
-                return
-              }
+              if (from < 0 || from >= next.length) return
+              const [moved] = next.splice(from, 1)
+              if (!moved) return
               next.splice(Math.min(index, next.length), 0, moved)
               commit(next)
-              setDragIndex(null)
             }}
             onClick={() => {
               if (src) {
                 setActiveIndex(index)
                 return
               }
+              if (safeImages.length >= PRODUCT_IMAGE_MAX) {
+                setError(`Maximum ${PRODUCT_IMAGE_MAX} photos.`)
+                return
+              }
               setActiveIndex(null)
               inputRef.current?.click()
             }}
             className={cn(
-              "relative flex aspect-square items-center justify-center overflow-hidden rounded-lg",
+              "relative flex aspect-square items-center justify-center overflow-hidden rounded-lg transition-shadow",
               src
-                ? "border-0 bg-transparent"
-                : "border border-dashed border-muted-foreground/30 bg-transparent",
+                ? "border-0 bg-muted hover:ring-2 hover:ring-primary/40"
+                : "border border-dashed border-border bg-transparent hover:bg-accent",
+              dragIndex === index && "opacity-50",
+              overIndex === index && dragIndex !== null && "ring-2 ring-primary",
             )}
             disabled={uploading}
             aria-label={src ? `Photo ${index + 1}` : `Add photo ${index + 1}`}
@@ -181,11 +315,13 @@ export function PhotoSlots({
             {src ? (
               // eslint-disable-next-line @next/next/no-img-element
               <img src={src} alt="" className="size-full object-cover" />
+            ) : uploading && index === safeImages.length ? (
+              <LoaderCircleIcon className="size-5 animate-spin text-primary" />
             ) : (
               <PlusIcon className="size-5 text-muted-foreground" />
             )}
-            {index === 0 ? (
-              <Badge className="absolute top-1 left-1 z-10 h-5 bg-accent px-1.5 text-[10px] font-medium text-accent-foreground shadow-sm">
+            {index === 0 && src ? (
+              <Badge className="absolute top-1 left-1 z-10 h-5 max-w-[calc(100%-0.5rem)] bg-background px-1.5 text-[10px] font-medium text-foreground shadow-sm ring-1 ring-border">
                 Головне
               </Badge>
             ) : null}
@@ -202,63 +338,43 @@ export function PhotoSlots({
         </p>
       ) : null}
 
-      <Drawer open={activeSrc !== null} onOpenChange={(open) => !open && setActiveIndex(null)}>
-        <DrawerContent>
-          <DrawerHeader>
-            <DrawerTitle>Photo {(activeIndex ?? 0) + 1}</DrawerTitle>
-          </DrawerHeader>
-          {activeSrc ? (
-            <div className="px-4">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
-                src={activeSrc}
-                alt=""
-                className="mx-auto max-h-56 w-full rounded-lg object-cover"
-              />
-            </div>
-          ) : null}
-          <DrawerFooter>
-            <div className="grid grid-cols-3 gap-2">
-              <Button
-                type="button"
-                variant="outline"
-                disabled={activeIndex === 0}
-                onClick={() => activeIndex !== null && move(activeIndex, -1)}
-              >
-                <ChevronLeftIcon />
-                Left
-              </Button>
-              <Button
-                type="button"
-                variant="outline"
-                disabled={activeIndex === null || activeIndex >= safeImages.length - 1}
-                onClick={() => activeIndex !== null && move(activeIndex, 1)}
-              >
-                Right
-                <ChevronRightIcon />
-              </Button>
-              <Button
-                type="button"
-                variant="destructive"
-                onClick={() => activeIndex !== null && remove(activeIndex)}
-              >
-                <Trash2Icon />
-              </Button>
-            </div>
-            <Button
-              type="button"
-              variant="secondary"
-              className="w-full"
-              onClick={() => inputRef.current?.click()}
-            >
-              Replace photo
-            </Button>
-            <DrawerClose render={<Button variant="ghost" className="w-full" />}>
-              Close
-            </DrawerClose>
-          </DrawerFooter>
-        </DrawerContent>
-      </Drawer>
+      {isMd ? (
+        <Dialog
+          open={editorOpen}
+          onOpenChange={(open) => {
+            if (!open) setActiveIndex(null)
+          }}
+        >
+          <DialogContent className="max-w-[calc(100%-2rem)] sm:max-w-md">
+            <DialogHeader>
+              <DialogTitle>Photo {(activeIndex ?? 0) + 1}</DialogTitle>
+            </DialogHeader>
+            {preview}
+            {editorActions}
+          </DialogContent>
+        </Dialog>
+      ) : (
+        <Drawer
+          open={editorOpen}
+          onOpenChange={(open) => {
+            if (!open) setActiveIndex(null)
+          }}
+          showSwipeHandle
+        >
+          <DrawerContent>
+            <DrawerHeader>
+              <DrawerTitle>Photo {(activeIndex ?? 0) + 1}</DrawerTitle>
+            </DrawerHeader>
+            {activeSrc ? <div className="px-4">{preview}</div> : null}
+            <DrawerFooter>
+              {editorActions}
+              <DrawerClose render={<Button variant="ghost" className="h-12 w-full" />}>
+                Close
+              </DrawerClose>
+            </DrawerFooter>
+          </DrawerContent>
+        </Drawer>
+      )}
     </div>
   )
 }

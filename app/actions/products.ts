@@ -55,7 +55,6 @@ function formToPayload(formData: FormData) {
     weight: weightRaw === "" ? null : Number(weightRaw),
     images: parseImages(formData.get("images")),
     status: String(formData.get("status") || "ACTIVE"),
-    externalLinks: [] as string[],
   }
 }
 
@@ -105,7 +104,7 @@ export async function createProductAction(
         fieldErrors: { sku: "SKU already exists." },
       }
     }
-    throw error
+    return { error: "Could not save the item. Try again." }
   }
 }
 
@@ -143,23 +142,37 @@ export async function updateProductAction(
         fieldErrors: { sku: "SKU already exists." },
       }
     }
-    throw error
+    return { error: "Could not save the item. Try again." }
   }
 }
 
-export async function markProductSoldAction(id: string): Promise<void> {
-  const product = await markProductSold(id)
-  if (!product) {
-    throw new Error("Product not found.")
+const SOLD_ERRORS = {
+  "not-found": "Product not found.",
+  "already-sold": "This item is already sold.",
+} as const
+
+export async function markProductSoldAction(
+  id: string,
+): Promise<{ error?: string }> {
+  try {
+    const result = await markProductSold(id)
+    if (!result.ok) return { error: SOLD_ERRORS[result.reason] }
+    revalidateProductViews(id)
+    return {}
+  } catch {
+    return { error: "Could not mark as sold." }
   }
-  revalidateProductViews(id)
 }
 
-export async function deleteProductAction(id: string): Promise<void> {
-  const removed = await deleteProduct(id)
-  if (!removed) {
-    throw new Error("Product not found.")
+export async function deleteProductAction(
+  id: string,
+): Promise<{ error?: string }> {
+  try {
+    const removed = await deleteProduct(id)
+    if (!removed) return { error: "Product not found." }
+    revalidateProductViews(id)
+  } catch {
+    return { error: "Could not delete item." }
   }
-  revalidateProductViews(id)
   redirect("/")
 }

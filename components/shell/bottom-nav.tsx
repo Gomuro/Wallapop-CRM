@@ -14,7 +14,7 @@ export function BottomNav() {
   const newItemActive = pathname === "/products/new"
 
   return (
-    <nav className="fixed inset-x-0 bottom-0 z-40 mx-auto flex w-full max-w-lg border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm">
+    <nav className="fixed inset-x-0 bottom-0 z-40 flex w-full border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden">
       <div className="grid w-full grid-cols-2 px-2 py-1">
         <Link
           href="/"

@@ -24,11 +24,11 @@ function OverlayStatusBadge({
   return (
     <span
       className={cn(
-        "absolute z-10 rounded-full bg-background/95 shadow-sm backdrop-blur-sm",
+        "absolute z-10 max-w-[calc(100%-0.75rem)] rounded-full bg-background/95 shadow-sm ring-1 ring-border backdrop-blur-sm",
         className,
       )}
     >
-      <Badge variant={statusVariant(status)} className="shadow-none">
+      <Badge variant={statusVariant(status)} className="max-w-full shrink truncate shadow-none">
         {statusLabel(status)}
       </Badge>
     </span>
@@ -66,7 +66,10 @@ export function ProductCard({
 
   if (view === "list") {
     return (
-      <Link href={`/products/${product.id}`} className="block">
+      <Link
+        href={`/products/${product.id}`}
+        className="group block rounded-xl outline-none transition-[box-shadow,transform] hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.99]"
+      >
         <Card size="sm" className="flex-row items-stretch gap-0 py-0 shadow-none">
           <div className="relative size-24 shrink-0 overflow-hidden bg-muted">
             {cover ? (
@@ -74,7 +77,10 @@ export function ProductCard({
               <img
                 src={cover}
                 alt=""
-                className="size-full object-cover"
+                className={cn(
+                  "size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]",
+                  product.status === "SOLD" && "opacity-70",
+                )}
               />
             ) : (
               <div className="size-full bg-muted" />
@@ -95,7 +101,7 @@ export function ProductCard({
                   <Badge
                     key={listing.id}
                     variant="outline"
-                    className="max-w-24 truncate shadow-none"
+                    className="max-w-full shrink truncate shadow-none"
                   >
                     {listing.accountName}
                   </Badge>
@@ -109,12 +115,22 @@ export function ProductCard({
   }
 
   return (
-    <Link href={`/products/${product.id}`} className="block">
+    <Link
+      href={`/products/${product.id}`}
+      className="group block rounded-xl outline-none transition-[box-shadow,transform] hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.99]"
+    >
       <Card className="gap-0 py-0 shadow-none">
         <div className="relative aspect-square overflow-hidden bg-muted">
           {cover ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img src={cover} alt="" className="size-full object-cover" />
+            <img
+              src={cover}
+              alt=""
+              className={cn(
+                "size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]",
+                product.status === "SOLD" && "opacity-70",
+              )}
+            />
           ) : null}
           <OverlayStatusBadge
             status={product.status}
@@ -130,7 +146,7 @@ export function ProductCard({
                 <Badge
                   key={listing.id}
                   variant="outline"
-                  className="max-w-24 truncate shadow-none"
+                  className="max-w-full shrink truncate shadow-none"
                 >
                   {listing.accountName}
                 </Badge>

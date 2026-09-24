@@ -1,5 +1,9 @@
+import Link from "next/link"
+
 import { CatalogToolbar } from "@/components/catalog/catalog-toolbar"
 import { ProductCard } from "@/components/catalog/product-card"
+import { PageContainer } from "@/components/shell/page-container"
+import { Button } from "@/components/ui/button"
 import { listProducts } from "@/lib/inventory/store"
 import type { ProductStatus } from "@/lib/validations"
 
@@ -31,13 +35,26 @@ export default async function CatalogPage({
   return (
     <>
       <CatalogToolbar q={q} status={status} view={view} />
-      <main className="flex-1 px-4 py-3">
+      <PageContainer className="flex-1 py-3">
         {products.length === 0 ? (
-          <p className="px-1 py-10 text-center text-sm text-muted-foreground">
-            No items match this search.
-          </p>
+          <div className="flex flex-col items-center gap-3 px-1 py-16 text-center">
+            <p className="text-sm text-muted-foreground">
+              {q || status !== "ALL"
+                ? "No items match this search."
+                : "No items yet."}
+            </p>
+            {!q && status === "ALL" ? (
+              <Button
+                className="h-11"
+                nativeButton={false}
+                render={<Link href="/products/new" />}
+              >
+                New item
+              </Button>
+            ) : null}
+          </div>
         ) : view === "grid" ? (
-          <div className="grid grid-cols-2 gap-2">
+          <div className="grid grid-cols-2 gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
             {products.map((product) => (
               <ProductCard key={product.id} product={product} view="grid" />
             ))}
@@ -49,7 +66,7 @@ export default async function CatalogPage({
             ))}
           </div>
         )}
-      </main>
+      </PageContainer>
     </>
   )
 }

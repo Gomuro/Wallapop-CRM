@@ -1,6 +1,6 @@
 import { nanoid } from "nanoid"
 
-import type { InventoryProduct } from "@/lib/inventory/types"
+import type { InventoryProduct, MarkSoldResult } from "@/lib/inventory/types"
 import type { ProductCreateInput, ProductUpdateInput } from "@/lib/validations"
 
 const images = (ids: number[]) =>
@@ -298,6 +298,7 @@ export function memoryUpdateProduct(
   if (input.sku !== undefined && skuTaken(input.sku, id)) uniqueSkuError()
 
   const current = products[index]
+  const status = input.status ?? current.status
   const next: InventoryProduct = {
     ...current,
     sku: input.sku ?? current.sku,
@@ -308,8 +309,15 @@ export function memoryUpdateProduct(
     condition: input.condition ?? current.condition,
     weight: input.weight === undefined ? current.weight : input.weight,
     images: input.images ?? current.images,
-    status: input.status ?? current.status,
+    status,
     externalLinks: input.externalLinks ?? current.externalLinks,
+    listings:
+      status === "SOLD"
+        ? current.listings.map((listing) => ({
+            ...listing,
+            status: "DEACTIVATED",
+          }))
+        : current.listings,
     updatedAt: nowIso(),
   }
   products[index] = next
@@ -324,11 +332,12 @@ export function memoryDeleteProduct(id: string): boolean {
   return true
 }
 
-export function memoryMarkProductSold(id: string): InventoryProduct | null {
+export function memoryMarkProductSold(id: string): MarkSoldResult {
   const products = state().products
   const index = products.findIndex((item) => item.id === id)
-  if (index < 0) return null
+  if (index < 0) return { ok: false, reason: "not-found" }
   const current = products[index]
+  if (current.status === "SOLD") return { ok: false, reason: "already-sold" }
   const next: InventoryProduct = {
     ...current,
     status: "SOLD",
@@ -339,5 +348,5 @@ export function memoryMarkProductSold(id: string): InventoryProduct | null {
     updatedAt: nowIso(),
   }
   products[index] = next
-  return cloneProduct(next)
+  return { ok: true, product: cloneProduct(next) }
 }

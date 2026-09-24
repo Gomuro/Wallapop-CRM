@@ -13,6 +13,7 @@ import {
 import type { ProductCreateInput, ProductUpdateInput } from "@/lib/validations"
 import type {
   InventoryProduct,
+  MarkSoldResult,
   ProductListQuery,
 } from "@/lib/inventory/types"
 
@@ -198,27 +199,38 @@ export async function updateProduct(
 ): Promise<InventoryProduct | null> {
   return withStore(async (prisma) => {
     try {
-      const row = await prisma.product.update({
-        where: { id },
-        data: {
-          ...(input.sku !== undefined ? { sku: input.sku } : {}),
-          ...(input.title !== undefined ? { title: input.title } : {}),
-          ...(input.description !== undefined
-            ? { description: input.description }
-            : {}),
-          ...(input.price !== undefined ? { price: input.price } : {}),
-          ...(input.category !== undefined ? { category: input.category } : {}),
-          ...(input.condition !== undefined
-            ? { condition: input.condition }
-            : {}),
-          ...(input.weight !== undefined ? { weight: input.weight ?? null } : {}),
-          ...(input.images !== undefined ? { images: input.images } : {}),
-          ...(input.status !== undefined ? { status: input.status } : {}),
-          ...(input.externalLinks !== undefined
-            ? { externalLinks: input.externalLinks }
-            : {}),
-        },
-        include: productInclude,
+      const row = await prisma.$transaction(async (tx) => {
+        if (input.status === "SOLD") {
+          await tx.productListing.updateMany({
+            where: { productId: id },
+            data: { status: "DEACTIVATED" },
+          })
+        }
+
+        return tx.product.update({
+          where: { id },
+          data: {
+            ...(input.sku !== undefined ? { sku: input.sku } : {}),
+            ...(input.title !== undefined ? { title: input.title } : {}),
+            ...(input.description !== undefined
+              ? { description: input.description }
+              : {}),
+            ...(input.price !== undefined ? { price: input.price } : {}),
+            ...(input.category !== undefined ? { category: input.category } : {}),
+            ...(input.condition !== undefined
+              ? { condition: input.condition }
+              : {}),
+            ...(input.weight !== undefined
+              ? { weight: input.weight ?? null }
+              : {}),
+            ...(input.images !== undefined ? { images: input.images } : {}),
+            ...(input.status !== undefined ? { status: input.status } : {}),
+            ...(input.externalLinks !== undefined
+              ? { externalLinks: input.externalLinks }
+              : {}),
+          },
+          include: productInclude,
+        })
       })
       return toInventoryProduct(row)
     } catch (error) {
@@ -240,25 +252,35 @@ export async function deleteProduct(id: string): Promise<boolean> {
   }, () => memoryDeleteProduct(id))
 }
 
-export async function markProductSold(
-  id: string,
-): Promise<InventoryProduct | null> {
+export async function markProductSold(id: string): Promise<MarkSoldResult> {
   return withStore(async (prisma) => {
-    const existing = await prisma.product.findUnique({ where: { id } })
-    if (!existing) return null
+    return prisma.$transaction(async (tx) => {
+      const flipped = await tx.product.updateMany({
+        where: { id, status: { not: "SOLD" } },
+        data: { status: "SOLD" },
+      })
 
-    const [, row] = await prisma.$transaction([
-      prisma.productListing.updateMany({
+      if (flipped.count === 0) {
+        const existing = await tx.product.findUnique({
+          where: { id },
+          select: { id: true },
+        })
+        return {
+          ok: false as const,
+          reason: existing ? ("already-sold" as const) : ("not-found" as const),
+        }
+      }
+
+      await tx.productListing.updateMany({
         where: { productId: id },
         data: { status: "DEACTIVATED" },
-      }),
-      prisma.product.update({
-        where: { id },
-        data: { status: "SOLD" },
-        include: productInclude,
-      }),
-    ])
+      })
 
-    return toInventoryProduct(row)
+      const row = await tx.product.findUniqueOrThrow({
+        where: { id },
+        include: productInclude,
+      })
+      return { ok: true as const, product: toInventoryProduct(row) }
+    })
   }, () => memoryMarkProductSold(id))
 }

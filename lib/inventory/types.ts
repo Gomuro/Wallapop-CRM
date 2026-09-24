@@ -30,6 +30,10 @@ export type ProductListQuery = {
   status?: ProductStatus | "ALL"
 }
 
+export type MarkSoldResult =
+  | { ok: true; product: InventoryProduct }
+  | { ok: false; reason: "not-found" | "already-sold" }
+
 export const PRODUCT_CATEGORIES = [
   "Electronics",
   "Home",

@@ -1,6 +1,7 @@
 "use client"
 
-import { useActionState, useState } from "react"
+import { useActionState, useEffect, useState, type ReactNode } from "react"
+import { LoaderCircleIcon } from "lucide-react"
 
 import { PhotoSlots } from "@/components/product-form/photo-slots"
 import { Button } from "@/components/ui/button"
@@ -51,32 +52,56 @@ export function ProductForm({
   const [condition, setCondition] = useState(product?.condition ?? "Good")
   const [status, setStatus] = useState<ProductStatus>(product?.status ?? "ACTIVE")
 
-  return (
-    <form action={formAction} className="flex flex-col gap-3 px-4 py-4">
-      <FormSection title="Фото">
-        <PhotoSlots images={images} onChange={setImages} />
-      </FormSection>
-      <input type="hidden" name="images" value={JSON.stringify(images)} />
+  useEffect(() => {
+    if (!state.error && !state.fieldErrors) return
+    const key = state.fieldErrors ? Object.keys(state.fieldErrors)[0] : undefined
+    const target =
+      (key ? document.getElementById(key) : null) ??
+      document.getElementById("form-error")
+    target?.scrollIntoView({ behavior: "smooth", block: "center" })
+    if (target instanceof HTMLElement) target.focus()
+  }, [state])
 
-      <FormSection title="Основне">
+  return (
+    <form
+      action={formAction}
+      noValidate
+      className="flex flex-col gap-4 px-4 py-4 md:px-8 lg:grid lg:grid-cols-12 lg:items-start lg:gap-8 lg:py-6"
+    >
+      <div className="min-w-0 lg:sticky lg:top-28 lg:col-span-7">
+        <FormSection title="Фото">
+          <div id="images" tabIndex={-1} className="scroll-mt-28 outline-none">
+            <PhotoSlots images={images} onChange={setImages} />
+          </div>
+          <input type="hidden" name="images" value={JSON.stringify(images)} />
+          {state.fieldErrors?.images ? (
+            <p id="images-error" className="text-xs text-destructive" role="alert">
+              {state.fieldErrors.images}
+            </p>
+          ) : null}
+        </FormSection>
+      </div>
+
+      <div className="flex min-w-0 flex-col gap-3 lg:col-span-5">
+        <FormSection title="Основне">
         <Field label="Title" htmlFor="title" error={state.fieldErrors?.title}>
           <Input
             id="title"
             name="title"
-            required
             defaultValue={product?.title}
-            className="h-11"
+            className="h-11 scroll-mt-28"
             aria-invalid={Boolean(state.fieldErrors?.title)}
+            aria-describedby={state.fieldErrors?.title ? "title-error" : undefined}
           />
         </Field>
         <Field label="SKU" htmlFor="sku" error={state.fieldErrors?.sku}>
           <Input
             id="sku"
             name="sku"
-            required
             defaultValue={product?.sku}
-            className="h-11 tabular-nums"
+            className="h-11 scroll-mt-28 tabular-nums"
             aria-invalid={Boolean(state.fieldErrors?.sku)}
+            aria-describedby={state.fieldErrors?.sku ? "sku-error" : undefined}
           />
         </Field>
         <Field
@@ -89,7 +114,11 @@ export function ProductForm({
             name="description"
             rows={5}
             defaultValue={product?.description}
+            className="scroll-mt-28"
             aria-invalid={Boolean(state.fieldErrors?.description)}
+            aria-describedby={
+              state.fieldErrors?.description ? "description-error" : undefined
+            }
           />
         </Field>
       </FormSection>
@@ -102,10 +131,11 @@ export function ProductForm({
             type="number"
             min="0"
             step="0.01"
-            required
+            inputMode="decimal"
             defaultValue={product?.price}
-            className="h-11 tabular-nums"
+            className="h-11 scroll-mt-28 tabular-nums"
             aria-invalid={Boolean(state.fieldErrors?.price)}
+            aria-describedby={state.fieldErrors?.price ? "price-error" : undefined}
           />
         </Field>
       </FormSection>
@@ -122,12 +152,14 @@ export function ProductForm({
             type="number"
             min="0"
             step="0.01"
+            inputMode="decimal"
             defaultValue={product?.weight ?? ""}
-            className="h-11 tabular-nums"
+            className="h-11 scroll-mt-28 tabular-nums"
             aria-invalid={Boolean(state.fieldErrors?.weight)}
+            aria-describedby={state.fieldErrors?.weight ? "weight-error" : undefined}
           />
         </Field>
-        <Field label="Category" error={state.fieldErrors?.category}>
+        <Field label="Category" htmlFor="category" error={state.fieldErrors?.category}>
           <Select
             name="category"
             value={category}
@@ -137,8 +169,12 @@ export function ProductForm({
             )}
           >
             <SelectTrigger
+              id="category"
               className="h-11 w-full data-[size=default]:h-11"
               aria-invalid={Boolean(state.fieldErrors?.category)}
+              aria-describedby={
+                state.fieldErrors?.category ? "category-error" : undefined
+              }
             >
               <SelectValue />
             </SelectTrigger>
@@ -151,7 +187,7 @@ export function ProductForm({
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Condition" error={state.fieldErrors?.condition}>
+        <Field label="Condition" htmlFor="condition" error={state.fieldErrors?.condition}>
           <Select
             name="condition"
             value={condition}
@@ -161,8 +197,12 @@ export function ProductForm({
             )}
           >
             <SelectTrigger
+              id="condition"
               className="h-11 w-full data-[size=default]:h-11"
               aria-invalid={Boolean(state.fieldErrors?.condition)}
+              aria-describedby={
+                state.fieldErrors?.condition ? "condition-error" : undefined
+              }
             >
               <SelectValue />
             </SelectTrigger>
@@ -175,7 +215,7 @@ export function ProductForm({
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Status" error={state.fieldErrors?.status}>
+        <Field label="Status" htmlFor="status" error={state.fieldErrors?.status}>
           <Select
             name="status"
             value={status}
@@ -188,8 +228,12 @@ export function ProductForm({
             }}
           >
             <SelectTrigger
+              id="status"
               className="h-11 w-full data-[size=default]:h-11"
               aria-invalid={Boolean(state.fieldErrors?.status)}
+              aria-describedby={
+                state.fieldErrors?.status ? "status-error" : undefined
+              }
             >
               <SelectValue />
             </SelectTrigger>
@@ -205,14 +249,22 @@ export function ProductForm({
       </FormSection>
 
       {state.error ? (
-        <p className="text-sm text-destructive" role="alert">
+        <p id="form-error" className="text-sm text-destructive" role="alert">
           {state.error}
         </p>
       ) : null}
 
-      <Button type="submit" className="h-12 w-full" size="lg" disabled={pending}>
+      <Button
+        type="submit"
+        className="h-12 w-full scroll-mb-28"
+        size="lg"
+        disabled={pending}
+        aria-busy={pending}
+      >
+        {pending ? <LoaderCircleIcon className="animate-spin" /> : null}
         {pending ? "Saving…" : submitLabel}
       </Button>
+      </div>
     </form>
   )
 }
@@ -222,7 +274,7 @@ function FormSection({
   children,
 }: {
   title: string
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
     <Card className="gap-3 overflow-visible py-3 shadow-none">
@@ -243,14 +295,14 @@ function Field({
   label: string
   htmlFor?: string
   error?: string
-  children: React.ReactNode
+  children: ReactNode
 }) {
   return (
     <div className="space-y-1.5">
       <Label htmlFor={htmlFor}>{label}</Label>
       {children}
       {error ? (
-        <p className="text-xs text-destructive" role="alert">
+        <p id={htmlFor ? `${htmlFor}-error` : undefined} className="text-xs text-destructive" role="alert">
           {error}
         </p>
       ) : null}
