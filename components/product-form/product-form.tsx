@@ -15,6 +15,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import type { ProductActionState } from "@/app/actions/products"
+import { statusLabel } from "@/lib/inventory/format"
 import {
   PRODUCT_CATEGORIES,
   PRODUCT_CONDITIONS,
@@ -139,7 +140,7 @@ export function ProductForm({
           <SelectContent>
             {STATUS_OPTIONS.map((item) => (
               <SelectItem key={item} value={item}>
-                {item}
+                {statusLabel(item)}
               </SelectItem>
             ))}
           </SelectContent>

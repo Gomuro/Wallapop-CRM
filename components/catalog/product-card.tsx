@@ -49,7 +49,11 @@ export function ProductCard({
                 {statusLabel(product.status)}
               </Badge>
               {accounts.map((listing) => (
-                <Badge key={listing.id} variant="outline">
+                <Badge
+                  key={listing.id}
+                  variant="outline"
+                  className="max-w-24 truncate"
+                >
                   {listing.accountName}
                 </Badge>
               ))}
@@ -79,7 +83,11 @@ export function ProductCard({
               {statusLabel(product.status)}
             </Badge>
             {accounts.map((listing) => (
-              <Badge key={listing.id} variant="outline">
+              <Badge
+                key={listing.id}
+                variant="outline"
+                className="max-w-24 truncate"
+              >
                 {listing.accountName}
               </Badge>
             ))}

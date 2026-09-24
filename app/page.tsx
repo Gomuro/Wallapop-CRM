@@ -31,7 +31,7 @@ export default async function CatalogPage({
   return (
     <>
       <CatalogToolbar q={q} status={status} view={view} />
-      <main className="flex-1 px-3 py-3">
+      <main className="flex-1 px-4 py-3">
         {products.length === 0 ? (
           <p className="px-1 py-10 text-center text-sm text-muted-foreground">
             No items match this search.

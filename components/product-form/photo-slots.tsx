@@ -93,7 +93,7 @@ export function PhotoSlots({
           event.target.value = ""
         }}
       />
-      <div className="grid grid-cols-4 gap-2">
+      <div className="grid grid-cols-3 gap-2 sm:grid-cols-4">
         {slots.map((src, index) => (
           <button
             key={index}

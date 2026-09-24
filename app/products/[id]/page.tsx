@@ -37,7 +37,7 @@ export default async function ProductDetailPage({
           {product.title}
         </h1>
       </header>
-      <div className="flex snap-x snap-mandatory gap-2 overflow-x-auto bg-muted px-3 py-3">
+      <div className="flex min-w-0 snap-x snap-mandatory gap-2 overflow-x-auto bg-muted px-3 py-3 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
         {product.images.length === 0 ? (
           <div className="aspect-square w-full max-w-sm rounded-xl bg-background" />
         ) : (
@@ -79,10 +79,11 @@ export default async function ProductDetailPage({
               {product.listings.map((listing) => (
                 <li
                   key={listing.id}
-                  className="flex items-center justify-between rounded-lg border px-3 py-2 text-sm"
+                  className="flex min-w-0 items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
                 >
-                  <span>{listing.accountName}</span>
+                  <span className="min-w-0 truncate">{listing.accountName}</span>
                   <Badge
+                    className="shrink-0"
                     variant={
                       listing.status === "ACTIVE" ? "default" : "outline"
                     }
