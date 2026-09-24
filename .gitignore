@@ -57,3 +57,7 @@ blob-report/
 docs/
 prototype/
 references/
+
+# Uploaded product photos (keep folder)
+public/uploads/*
+!public/uploads/.gitkeep

@@ -5,11 +5,53 @@ import { Card } from "@/components/ui/card"
 import { formatEuro, statusLabel } from "@/lib/inventory/format"
 import type { InventoryProduct } from "@/lib/inventory/types"
 import type { ProductStatus } from "@/lib/validations"
+import { typeMeta, typePrice } from "@/lib/ui/type"
+import { cn } from "@/lib/utils"
 
 function statusVariant(status: ProductStatus) {
   if (status === "SOLD") return "secondary" as const
   if (status === "INACTIVE") return "outline" as const
   return "default" as const
+}
+
+function OverlayStatusBadge({
+  status,
+  className,
+}: {
+  status: ProductStatus
+  className?: string
+}) {
+  return (
+    <span
+      className={cn(
+        "absolute z-10 rounded-full bg-background/95 shadow-sm backdrop-blur-sm",
+        className,
+      )}
+    >
+      <Badge variant={statusVariant(status)} className="shadow-none">
+        {statusLabel(status)}
+      </Badge>
+    </span>
+  )
+}
+
+function PriceSku({
+  price,
+  sku,
+}: {
+  price: number
+  sku: string
+}) {
+  return (
+    <div className="flex min-w-0 items-baseline justify-between gap-2">
+      <p className={cn(typePrice, "shrink-0 text-primary")}>
+        {formatEuro(price)}
+      </p>
+      <p className={cn(typeMeta, "min-w-0 truncate text-right text-muted-foreground")}>
+        {sku}
+      </p>
+    </div>
+  )
 }
 
 export function ProductCard({
@@ -25,7 +67,7 @@ export function ProductCard({
   if (view === "list") {
     return (
       <Link href={`/products/${product.id}`} className="block">
-        <Card size="sm" className="flex-row items-stretch gap-0 py-0">
+        <Card size="sm" className="flex-row items-stretch gap-0 py-0 shadow-none">
           <div className="relative size-24 shrink-0 overflow-hidden bg-muted">
             {cover ? (
               // eslint-disable-next-line @next/next/no-img-element
@@ -37,27 +79,29 @@ export function ProductCard({
             ) : (
               <div className="size-full bg-muted" />
             )}
+            <OverlayStatusBadge
+              status={product.status}
+              className="top-1.5 left-1.5"
+            />
           </div>
           <div className="flex min-w-0 flex-1 flex-col justify-between p-3">
-            <div>
-              <p className="text-sm font-medium text-primary">{formatEuro(product.price)}</p>
+            <div className="min-w-0">
+              <PriceSku price={product.price} sku={product.sku} />
               <p className="mt-0.5 line-clamp-2 text-sm leading-snug">{product.title}</p>
-              <p className="mt-0.5 text-xs text-muted-foreground">{product.sku}</p>
             </div>
-            <div className="mt-2 flex flex-wrap gap-1">
-              <Badge variant={statusVariant(product.status)}>
-                {statusLabel(product.status)}
-              </Badge>
-              {accounts.map((listing) => (
-                <Badge
-                  key={listing.id}
-                  variant="outline"
-                  className="max-w-24 truncate"
-                >
-                  {listing.accountName}
-                </Badge>
-              ))}
-            </div>
+            {accounts.length > 0 ? (
+              <div className="mt-2 flex flex-wrap gap-1">
+                {accounts.map((listing) => (
+                  <Badge
+                    key={listing.id}
+                    variant="outline"
+                    className="max-w-24 truncate shadow-none"
+                  >
+                    {listing.accountName}
+                  </Badge>
+                ))}
+              </div>
+            ) : null}
           </div>
         </Card>
       </Link>
@@ -66,32 +110,33 @@ export function ProductCard({
 
   return (
     <Link href={`/products/${product.id}`} className="block">
-      <Card className="gap-0 py-0">
+      <Card className="gap-0 py-0 shadow-none">
         <div className="relative aspect-square overflow-hidden bg-muted">
           {cover ? (
             // eslint-disable-next-line @next/next/no-img-element
             <img src={cover} alt="" className="size-full object-cover" />
           ) : null}
-          <span className="absolute bottom-2 left-2 rounded-md bg-background/95 px-1.5 py-0.5 text-sm font-semibold text-primary shadow-sm">
-            {formatEuro(product.price)}
-          </span>
+          <OverlayStatusBadge
+            status={product.status}
+            className="top-2 left-2"
+          />
         </div>
-        <div className="space-y-1.5 p-2.5">
+        <div className="space-y-1 p-2.5">
+          <PriceSku price={product.price} sku={product.sku} />
           <p className="line-clamp-2 min-h-10 text-sm leading-snug">{product.title}</p>
-          <div className="flex flex-wrap gap-1">
-            <Badge variant={statusVariant(product.status)}>
-              {statusLabel(product.status)}
-            </Badge>
-            {accounts.map((listing) => (
-              <Badge
-                key={listing.id}
-                variant="outline"
-                className="max-w-24 truncate"
-              >
-                {listing.accountName}
-              </Badge>
-            ))}
-          </div>
+          {accounts.length > 0 ? (
+            <div className="flex flex-wrap gap-1">
+              {accounts.map((listing) => (
+                <Badge
+                  key={listing.id}
+                  variant="outline"
+                  className="max-w-24 truncate shadow-none"
+                >
+                  {listing.accountName}
+                </Badge>
+              ))}
+            </div>
+          ) : null}
         </div>
       </Card>
     </Link>

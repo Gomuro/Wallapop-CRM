@@ -1,18 +1,14 @@
 import type { Metadata } from "next"
-import { Geist, Geist_Mono } from "next/font/google"
+import { Plus_Jakarta_Sans } from "next/font/google"
 
 import { AppShell } from "@/components/shell/app-shell"
 
 import "./globals.css"
 
-const geistSans = Geist({
-  variable: "--font-geist-sans",
-  subsets: ["latin"],
-})
-
-const geistMono = Geist_Mono({
-  variable: "--font-geist-mono",
-  subsets: ["latin"],
+const plusJakarta = Plus_Jakarta_Sans({
+  subsets: ["latin", "latin-ext", "cyrillic-ext"],
+  variable: "--font-plus-jakarta",
+  display: "swap",
 })
 
 export const metadata: Metadata = {
@@ -24,9 +20,10 @@ export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
       lang="en"
-      className={`${geistSans.variable} ${geistMono.variable} h-full antialiased`}
+      suppressHydrationWarning
+      className={`${plusJakarta.variable} ${plusJakarta.className} h-full antialiased`}
     >
-      <body className="min-h-full bg-muted">
+      <body className={`${plusJakarta.className} min-h-full bg-background font-sans`} suppressHydrationWarning>
         <AppShell>{children}</AppShell>
       </body>
     </html>

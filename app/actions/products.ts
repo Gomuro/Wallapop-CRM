@@ -1,6 +1,7 @@
 "use server"
 
 import { revalidatePath } from "next/cache"
+import { isRedirectError } from "next/dist/client/components/redirect-error"
 import { redirect } from "next/navigation"
 
 import {
@@ -58,7 +59,18 @@ function formToPayload(formData: FormData) {
   }
 }
 
-function firstFieldError(error: { issues: readonly { path: PropertyKey[]; message: string }[] }) {
+function isUniqueSkuError(error: unknown) {
+  return (
+    typeof error === "object" &&
+    error !== null &&
+    "code" in error &&
+    error.code === "P2002"
+  )
+}
+
+function firstFieldError(error: {
+  issues: readonly { path: PropertyKey[]; message: string }[]
+}) {
   const fieldErrors: Record<string, string> = {}
   for (const issue of error.issues) {
     const key = issue.path[0]
@@ -81,9 +93,20 @@ export async function createProductAction(
     }
   }
 
-  const product = createProduct(parsed.data)
-  revalidateProductViews(product.id)
-  redirect(`/products/${product.id}`)
+  try {
+    const product = await createProduct(parsed.data)
+    revalidateProductViews(product.id)
+    redirect(`/products/${product.id}`)
+  } catch (error) {
+    if (isRedirectError(error)) throw error
+    if (isUniqueSkuError(error)) {
+      return {
+        error: "SKU already exists.",
+        fieldErrors: { sku: "SKU already exists." },
+      }
+    }
+    throw error
+  }
 }
 
 export async function updateProductAction(
@@ -91,7 +114,7 @@ export async function updateProductAction(
   _prev: ProductActionState,
   formData: FormData,
 ): Promise<ProductActionState> {
-  const existing = getProduct(id)
+  const existing = await getProduct(id)
   if (!existing) {
     return { error: "Product not found." }
   }
@@ -104,17 +127,28 @@ export async function updateProductAction(
     }
   }
 
-  const product = updateProduct(id, parsed.data)
-  if (!product) {
-    return { error: "Product not found." }
-  }
+  try {
+    const product = await updateProduct(id, parsed.data)
+    if (!product) {
+      return { error: "Product not found." }
+    }
 
-  revalidateProductViews(id)
-  redirect(`/products/${id}`)
+    revalidateProductViews(id)
+    redirect(`/products/${id}`)
+  } catch (error) {
+    if (isRedirectError(error)) throw error
+    if (isUniqueSkuError(error)) {
+      return {
+        error: "SKU already exists.",
+        fieldErrors: { sku: "SKU already exists." },
+      }
+    }
+    throw error
+  }
 }
 
 export async function markProductSoldAction(id: string): Promise<void> {
-  const product = markProductSold(id)
+  const product = await markProductSold(id)
   if (!product) {
     throw new Error("Product not found.")
   }
@@ -122,7 +156,7 @@ export async function markProductSoldAction(id: string): Promise<void> {
 }
 
 export async function deleteProductAction(id: string): Promise<void> {
-  const removed = deleteProduct(id)
+  const removed = await deleteProduct(id)
   if (!removed) {
     throw new Error("Product not found.")
   }

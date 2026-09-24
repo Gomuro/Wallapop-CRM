@@ -5,7 +5,14 @@ export const PRODUCT_IMAGE_MAX = 10
 
 export const productStatusSchema = z.enum(["ACTIVE", "SOLD", "INACTIVE"])
 
-export const productImageUrlSchema = z.string().trim().url()
+export const productImageUrlSchema = z
+  .string()
+  .trim()
+  .min(1)
+  .refine(
+    (value) => value.startsWith("/uploads/") || URL.canParse(value),
+    "Invalid image URL",
+  )
 
 export const productImagesSchema = z
   .array(productImageUrlSchema)

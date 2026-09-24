@@ -23,7 +23,7 @@ export default async function CatalogPage({
       : "ALL"
   const view = firstParam(params.view) === "list" ? "list" : "grid"
 
-  const products = listProducts({
+  const products = await listProducts({
     q,
     status: status as ProductStatus | "ALL",
   })

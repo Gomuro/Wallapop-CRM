@@ -2,22 +2,13 @@
 
 import { useRouter } from "next/navigation"
 import { useEffect, useState, useTransition } from "react"
-import { LayoutGridIcon, ListIcon, SlidersHorizontalIcon } from "lucide-react"
+import { LayoutGridIcon, ListIcon, SearchIcon } from "lucide-react"
 
-import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import {
-  Drawer,
-  DrawerClose,
-  DrawerContent,
-  DrawerFooter,
-  DrawerHeader,
-  DrawerTitle,
-  DrawerTrigger,
-} from "@/components/ui/drawer"
 import { Input } from "@/components/ui/input"
-import { Label } from "@/components/ui/label"
 import type { ProductStatus } from "@/lib/validations"
+import { typeMeta } from "@/lib/ui/type"
+import { cn } from "@/lib/utils"
 
 const STATUS_FILTERS: { value: "ALL" | ProductStatus; label: string }[] = [
   { value: "ALL", label: "All" },
@@ -79,93 +70,60 @@ export function CatalogToolbar({
   }
 
   return (
-    <header className="sticky top-0 z-30 space-y-3 border-b bg-background/95 px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] backdrop-blur-sm">
-      <div className="flex items-center justify-between gap-2">
-        <h1 className="text-lg font-semibold tracking-tight">Catalog</h1>
-        <div className="flex items-center gap-1">
-          <Button
-            variant={view === "grid" ? "secondary" : "ghost"}
-            size="icon"
-            aria-label="Grid view"
-            aria-pressed={view === "grid"}
-            onClick={() => go({ view: "grid" })}
-          >
-            <LayoutGridIcon />
-          </Button>
-          <Button
-            variant={view === "list" ? "secondary" : "ghost"}
-            size="icon"
-            aria-label="List view"
-            aria-pressed={view === "list"}
-            onClick={() => go({ view: "list" })}
-          >
-            <ListIcon />
-          </Button>
-          <Drawer>
-            <DrawerTrigger
-              render={<Button variant="ghost" size="icon" />}
-              aria-label="Filters"
-            >
-              <SlidersHorizontalIcon />
-            </DrawerTrigger>
-            <DrawerContent>
-              <DrawerHeader>
-                <DrawerTitle>Filter</DrawerTitle>
-              </DrawerHeader>
-              <div className="space-y-3 px-4 py-3">
-                <div className="space-y-1.5">
-                  <Label htmlFor="drawer-search">Keyword</Label>
-                  <Input
-                    id="drawer-search"
-                    value={draft}
-                    onChange={(event) => setDraft(event.target.value)}
-                    placeholder="SKU or title"
-                    className="h-11"
-                  />
-                </div>
-                <div className="flex flex-wrap gap-1.5">
-                  {STATUS_FILTERS.map((filter) => (
-                    <Button
-                      key={filter.value}
-                      type="button"
-                      size="sm"
-                      variant={status === filter.value ? "default" : "outline"}
-                      onClick={() => go({ status: filter.value })}
-                    >
-                      {filter.label}
-                    </Button>
-                  ))}
-                </div>
-              </div>
-              <DrawerFooter>
-                <DrawerClose render={<Button className="w-full" size="lg" />}>
-                  Apply
-                </DrawerClose>
-              </DrawerFooter>
-            </DrawerContent>
-          </Drawer>
-        </div>
+    <header className="sticky top-0 z-30 space-y-3 border-b bg-background px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+      <h1 className="sr-only">Catalog</h1>
+      <div className="relative w-full">
+        <SearchIcon className="pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
+        <Input
+          value={draft}
+          onChange={(event) => setDraft(event.target.value)}
+          placeholder="Search SKU or title"
+          className="h-11 w-full pr-2.5 !pl-9"
+          aria-label="Search catalog"
+        />
       </div>
-      <Input
-        value={draft}
-        onChange={(event) => setDraft(event.target.value)}
-        placeholder="Search SKU or title"
-        className="h-11"
-        aria-label="Search catalog"
-      />
-      <div className="flex gap-1.5 overflow-x-auto pb-0.5">
-        {STATUS_FILTERS.map((filter) => (
-          <button
-            key={filter.value}
-            type="button"
-            onClick={() => go({ status: filter.value })}
-            className="shrink-0"
-          >
-            <Badge variant={status === filter.value ? "default" : "outline"}>
-              {filter.label}
-            </Badge>
-          </button>
-        ))}
+      <div className="flex items-center gap-1.5">
+        <div className="flex min-w-0 flex-1 gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+          {STATUS_FILTERS.map((filter) => {
+            const active = status === filter.value
+            return (
+              <button
+                key={filter.value}
+                type="button"
+                onClick={() => go({ status: filter.value })}
+                className={cn(
+                  typeMeta,
+                  "inline-flex h-11 shrink-0 items-center rounded-full px-3",
+                  active
+                    ? "bg-primary/10 text-primary"
+                    : "bg-muted text-muted-foreground",
+                )}
+              >
+                {filter.label}
+              </button>
+            )
+          })}
+        </div>
+        <Button
+          variant={view === "grid" ? "secondary" : "ghost"}
+          size="icon"
+          className="size-11"
+          aria-label="Grid view"
+          aria-pressed={view === "grid"}
+          onClick={() => go({ view: "grid" })}
+        >
+          <LayoutGridIcon />
+        </Button>
+        <Button
+          variant={view === "list" ? "secondary" : "ghost"}
+          size="icon"
+          className="size-11"
+          aria-label="List view"
+          aria-pressed={view === "list"}
+          onClick={() => go({ view: "list" })}
+        >
+          <ListIcon />
+        </Button>
       </div>
       {pending ? (
         <p className="sr-only" aria-live="polite">

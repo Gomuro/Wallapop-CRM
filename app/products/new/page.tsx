@@ -4,6 +4,7 @@ import { ChevronLeftIcon } from "lucide-react"
 import { createProductAction } from "@/app/actions/products"
 import { ProductForm } from "@/components/product-form/product-form"
 import { Button } from "@/components/ui/button"
+import { typeScreen } from "@/lib/ui/type"
 
 export default function NewProductPage() {
   return (
@@ -18,7 +19,7 @@ export default function NewProductPage() {
         >
           <ChevronLeftIcon />
         </Button>
-        <h1 className="text-base font-semibold">New item</h1>
+        <h1 className={typeScreen}>New item</h1>
       </header>
       <ProductForm action={createProductAction} submitLabel="Create item" />
     </>

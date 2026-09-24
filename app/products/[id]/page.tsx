@@ -2,6 +2,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ChevronLeftIcon } from "lucide-react"
 
+import { ProductGallery } from "@/components/catalog/product-gallery"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
@@ -11,6 +12,8 @@ import {
 } from "@/components/product-form/product-actions"
 import { formatEuro, statusLabel } from "@/lib/inventory/format"
 import { getProduct } from "@/lib/inventory/store"
+import { typeMeta, typePrice, typeScreen, typeSection } from "@/lib/ui/type"
+import { cn } from "@/lib/utils"
 
 export default async function ProductDetailPage({
   params,
@@ -18,7 +21,7 @@ export default async function ProductDetailPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const product = getProduct(id)
+  const product = await getProduct(id)
   if (!product) notFound()
 
   return (
@@ -33,32 +36,20 @@ export default async function ProductDetailPage({
         >
           <ChevronLeftIcon />
         </Button>
-        <h1 className="min-w-0 flex-1 truncate text-base font-semibold">
+        <h1 className={cn(typeScreen, "min-w-0 flex-1 truncate")}>
           {product.title}
         </h1>
       </header>
-      <div className="flex min-w-0 snap-x snap-mandatory gap-2 overflow-x-auto bg-muted px-3 py-3 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-        {product.images.length === 0 ? (
-          <div className="aspect-square w-full max-w-sm rounded-xl bg-background" />
-        ) : (
-          product.images.map((src) => (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
-              key={src}
-              src={src}
-              alt=""
-              className="aspect-square w-[85%] max-w-sm shrink-0 snap-center rounded-xl object-cover"
-            />
-          ))
-        )}
-      </div>
-      <main className="space-y-4 px-4 py-4">
+      <ProductGallery images={product.images} alt={product.title} />
+      <main className="space-y-4 px-4 pt-4 pb-32">
         <div>
-          <p className="text-2xl font-semibold text-primary">
-            {formatEuro(product.price)}
-          </p>
+          <div className="flex min-w-0 items-baseline justify-between gap-2">
+            <p className={cn(typePrice, "text-primary")}>
+              {formatEuro(product.price)}
+            </p>
+            <p className={cn(typeMeta, "text-muted-foreground")}>{product.sku}</p>
+          </div>
           <p className="mt-1 text-lg font-medium leading-snug">{product.title}</p>
-          <p className="mt-1 text-sm text-muted-foreground">{product.sku}</p>
         </div>
         <div className="flex flex-wrap gap-1.5">
           <Badge>{statusLabel(product.status)}</Badge>
@@ -69,7 +60,7 @@ export default async function ProductDetailPage({
           ) : null}
         </div>
         <div>
-          <p className="text-sm font-medium">Where it hangs</p>
+          <p className={typeSection}>Where it hangs</p>
           {product.listings.length === 0 ? (
             <p className="mt-1 text-sm text-muted-foreground">
               Not listed on any account yet.
@@ -107,13 +98,15 @@ export default async function ProductDetailPage({
           >
             Edit item
           </Button>
-          <SoldSyncButton
-            productId={product.id}
-            disabled={product.status === "SOLD"}
-          />
           <DeleteProductButton productId={product.id} />
         </div>
       </main>
+      <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 mx-auto w-full max-w-lg bg-background/95 px-4 py-2 backdrop-blur-sm">
+        <SoldSyncButton
+          productId={product.id}
+          disabled={product.status === "SOLD"}
+        />
+      </div>
     </>
   )
 }

@@ -6,6 +6,7 @@ import { updateProductAction } from "@/app/actions/products"
 import { ProductForm } from "@/components/product-form/product-form"
 import { Button } from "@/components/ui/button"
 import { getProduct } from "@/lib/inventory/store"
+import { typeScreen } from "@/lib/ui/type"
 
 export default async function EditProductPage({
   params,
@@ -13,7 +14,7 @@ export default async function EditProductPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const product = getProduct(id)
+  const product = await getProduct(id)
   if (!product) notFound()
 
   const action = updateProductAction.bind(null, product.id)
@@ -30,7 +31,7 @@ export default async function EditProductPage({
         >
           <ChevronLeftIcon />
         </Button>
-        <h1 className="text-base font-semibold">Edit item</h1>
+        <h1 className={typeScreen}>Edit item</h1>
       </header>
       <ProductForm
         product={product}
