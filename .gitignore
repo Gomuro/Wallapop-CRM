@@ -38,3 +38,8 @@ venv/
 test-results/
 playwright-report/
 blob-report/
+.playwright-mcp/
+
+# Local-only assets (not versioned)
+prototype/
+references/
