@@ -33,11 +33,38 @@ import { cn } from "@/lib/utils"
 
 const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"]
 
+const PHOTO_SLOT_MIME = "application/x-wallapop-photo-slot"
+
 function compactImages(value: unknown): string[] {
   if (!Array.isArray(value)) return []
   return value.filter(
     (item): item is string => typeof item === "string" && item.length > 0,
   )
+}
+
+function reorderPhotos(images: string[], from: number, to: number): string[] {
+  if (
+    from === to ||
+    from < 0 ||
+    to < 0 ||
+    from >= images.length
+  ) {
+    return images
+  }
+
+  const next = [...images]
+  const [moved] = next.splice(from, 1)
+  if (!moved) return images
+  next.splice(Math.min(to, next.length), 0, moved)
+  return next
+}
+
+function readSlotIndex(dataTransfer: DataTransfer): number | null {
+  const raw =
+    dataTransfer.getData(PHOTO_SLOT_MIME) || dataTransfer.getData("text/plain")
+  if (!raw) return null
+  const index = Number.parseInt(raw, 10)
+  return Number.isInteger(index) ? index : null
 }
 
 export function PhotoSlots({
@@ -48,6 +75,7 @@ export function PhotoSlots({
   onChange: (images: string[]) => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
+  const dragIndexRef = useRef<number | null>(null)
   const isMd = useIsMd()
   const [activeIndex, setActiveIndex] = useState<number | null>(null)
   const [dragIndex, setDragIndex] = useState<number | null>(null)
@@ -163,7 +191,13 @@ export function PhotoSlots({
     setActiveIndex(null)
   }
 
+  function setDragSource(index: number | null) {
+    dragIndexRef.current = index
+    setDragIndex(index)
+  }
+
   function clearDrag() {
+    dragIndexRef.current = null
     setDragIndex(null)
     setOverIndex(null)
   }
@@ -264,30 +298,45 @@ export function PhotoSlots({
             key={index}
             type="button"
             draggable={Boolean(src) && !uploading}
-            onDragStart={() => setDragIndex(index)}
+            onDragStart={(event) => {
+              if (!src || uploading) {
+                event.preventDefault()
+                return
+              }
+              event.dataTransfer.effectAllowed = "move"
+              event.dataTransfer.setData(PHOTO_SLOT_MIME, String(index))
+              event.dataTransfer.setData("text/plain", String(index))
+              setDragSource(index)
+            }}
             onDragEnd={clearDrag}
             onDragOver={(event) => {
               event.preventDefault()
-              setOverIndex(index)
+              event.dataTransfer.dropEffect =
+                dragIndexRef.current !== null ? "move" : "copy"
+              if (overIndex !== index) setOverIndex(index)
             }}
             onDragLeave={() => {
               setOverIndex((current) => (current === index ? null : current))
             }}
             onDrop={(event) => {
               event.preventDefault()
-              const from = dragIndex
+              event.stopPropagation()
+              const from =
+                dragIndexRef.current ?? readSlotIndex(event.dataTransfer)
+              const files = event.dataTransfer.files
               clearDrag()
-              if (event.dataTransfer.files.length) {
-                void addFiles(event.dataTransfer.files, src ? index : undefined)
+
+              if (from !== null) {
+                if (from === index) return
+                if (from < 0 || from >= safeImages.length) return
+                const to = src ? index : Math.min(index, safeImages.length)
+                commit(reorderPhotos(safeImages, from, to))
                 return
               }
-              if (from === null || from === index) return
-              const next = [...safeImages]
-              if (from < 0 || from >= next.length) return
-              const [moved] = next.splice(from, 1)
-              if (!moved) return
-              next.splice(Math.min(index, next.length), 0, moved)
-              commit(next)
+
+              if (files.length) {
+                void addFiles(files, src ? index : undefined)
+              }
             }}
             onClick={() => {
               if (src) {
@@ -314,7 +363,7 @@ export function PhotoSlots({
           >
             {src ? (
               // eslint-disable-next-line @next/next/no-img-element
-              <img src={src} alt="" className="size-full object-cover" />
+              <img src={src} alt="" draggable={false} className="size-full object-cover" />
             ) : uploading && index === safeImages.length ? (
               <LoaderCircleIcon className="size-5 animate-spin text-primary" />
             ) : (
