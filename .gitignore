@@ -1,0 +1,40 @@
+# Dependencies
+node_modules/
+.pnp
+.pnp.js
+
+# Build / cache
+dist/
+build/
+.next/
+out/
+.cache/
+*.tsbuildinfo
+
+# Environment & secrets
+.env
+.env.*
+!.env.example
+*.pem
+*.key
+credentials.json
+**/secrets/
+
+# OS & IDE
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/*
+!.vscode/extensions.json
+
+# Logs & local data
+*.log
+npm-debug.log*
+__pycache__/
+.venv/
+venv/
+
+# Playwright / test artifacts
+test-results/
+playwright-report/
+blob-report/
