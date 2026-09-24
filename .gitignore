@@ -24,6 +24,7 @@ credentials.json
 .DS_Store
 Thumbs.db
 .idea/
+.history/
 .vscode/*
 !.vscode/extensions.json
 
@@ -40,6 +41,9 @@ playwright-report/
 blob-report/
 .playwright-mcp/
 
-# Local-only assets (not versioned)
+# Local-only (not on GitHub)
+README.md
+docs/
+app/
 prototype/
 references/
