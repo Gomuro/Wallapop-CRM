@@ -12,7 +12,9 @@
     "db:validate": "prisma validate",
     "db:migrate": "prisma migrate dev",
     "db:push": "prisma db push",
-    "db:seed": "npx tsx prisma/seed.ts"
+    "db:seed": "npx tsx prisma/seed.ts",
+    "server:dev": "tsx server/src/index.ts",
+    "server:start": "tsx server/src/index.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
