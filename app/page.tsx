@@ -45,13 +45,15 @@ export default async function CatalogPage({
           <CatalogEmpty view={view} />
         ) : (
           <div className="flex flex-col items-center gap-3 px-1 py-16 text-center">
-            <p className="text-sm text-muted-foreground">No items yet.</p>
+            <p className="text-sm text-muted-foreground">
+              Aún no hay productos.
+            </p>
             <Button
               className="h-11"
               nativeButton={false}
               render={<Link href="/products/new" />}
             >
-              New item
+              + Subir producto
             </Button>
           </div>
         )

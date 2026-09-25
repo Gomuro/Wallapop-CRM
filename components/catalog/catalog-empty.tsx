@@ -11,9 +11,9 @@ export function CatalogEmpty({ view }: { view: "grid" | "list" }) {
       <div className="flex size-14 items-center justify-center rounded-full bg-muted">
         <SearchXIcon className="size-6 text-muted-foreground" />
       </div>
-      <p className="text-sm font-medium">Нічого не знайдено</p>
+      <p className="text-sm font-medium">No se encontraron productos</p>
       <Button className="h-11" nativeButton={false} render={<Link href={href} />}>
-        Скинути фільтри
+        Restablecer filtros
       </Button>
     </div>
   )

@@ -16,10 +16,10 @@ export async function uploadProductImages(
     .filter((entry): entry is File => entry instanceof File && entry.size > 0)
 
   if (files.length === 0) {
-    return { urls: [], error: "No images selected." }
+    return { urls: [], error: "No hay imágenes seleccionadas." }
   }
   if (files.length > PRODUCT_IMAGE_MAX) {
-    return { urls: [], error: `Maximum ${PRODUCT_IMAGE_MAX} photos.` }
+    return { urls: [], error: `Máximo ${PRODUCT_IMAGE_MAX} fotos.` }
   }
 
   try {
@@ -30,7 +30,7 @@ export async function uploadProductImages(
     return { urls }
   } catch (error) {
     const message =
-      error instanceof Error ? error.message : "Could not save image."
+      error instanceof Error ? error.message : "No se pudo guardar la imagen."
     return { urls: [], error: message }
   }
 }

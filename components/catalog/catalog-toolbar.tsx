@@ -12,10 +12,10 @@ import { typeMeta } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
 
 const STATUS_FILTERS: { value: "ALL" | ProductStatus; label: string }[] = [
-  { value: "ALL", label: "All" },
-  { value: "ACTIVE", label: "Active" },
-  { value: "SOLD", label: "Sold" },
-  { value: "INACTIVE", label: "Inactive" },
+  { value: "ALL", label: "Todos" },
+  { value: "ACTIVE", label: "En venta" },
+  { value: "SOLD", label: "Vendidos" },
+  { value: "INACTIVE", label: "Inactivos" },
 ]
 
 function catalogHref(next: {
@@ -101,7 +101,7 @@ export function CatalogToolbar({
           aria-hidden="true"
         />
       ) : null}
-      <h1 className="sr-only">Catalog</h1>
+      <h1 className="sr-only">Catálogo</h1>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
         <div className="relative w-full md:max-w-sm md:flex-1">
           <SearchIcon className="pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
@@ -114,14 +114,14 @@ export function CatalogToolbar({
               const nextQ = draft.trim()
               if (nextQ !== draft) setDraft(nextQ)
             }}
-            placeholder="Search SKU or title"
+            placeholder="Buscar por SKU o título..."
             className={cn("h-11 w-full !pl-9", draft ? "pr-11" : "pr-2.5")}
-            aria-label="Search catalog"
+            aria-label="Buscar por SKU o título"
           />
           {draft ? (
             <button
               type="button"
-              aria-label="Clear search"
+              aria-label="Borrar búsqueda"
               onClick={clearSearch}
               className="absolute top-1/2 right-1 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
             >
@@ -142,7 +142,7 @@ export function CatalogToolbar({
                   disabled={empty && !active}
                   onClick={() => go({ status: filter.value })}
                   aria-pressed={active}
-                  aria-label={`${filter.label}, ${count} items`}
+                  aria-label={`${filter.label}, ${count} productos`}
                   className={cn(
                     typeMeta,
                     "inline-flex h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-full px-3 font-semibold transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
@@ -163,7 +163,7 @@ export function CatalogToolbar({
               variant={view === "grid" ? "secondary" : "ghost"}
               size="icon"
               className="size-11"
-              aria-label="Grid view"
+              aria-label="Vista de cuadrícula"
               aria-pressed={view === "grid"}
               onClick={() => go({ view: "grid" })}
             >
@@ -173,7 +173,7 @@ export function CatalogToolbar({
               variant={view === "list" ? "secondary" : "ghost"}
               size="icon"
               className="size-11"
-              aria-label="List view"
+              aria-label="Vista de lista"
               aria-pressed={view === "list"}
               onClick={() => go({ view: "list" })}
             >

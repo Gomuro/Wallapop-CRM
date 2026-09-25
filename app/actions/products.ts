@@ -87,7 +87,7 @@ export async function createProductAction(
   const parsed = productCreateSchema.safeParse(formToPayload(formData))
   if (!parsed.success) {
     return {
-      error: "Check the highlighted fields.",
+      error: "Revisa los campos marcados.",
       fieldErrors: firstFieldError(parsed.error),
     }
   }
@@ -100,11 +100,11 @@ export async function createProductAction(
     if (isRedirectError(error)) throw error
     if (isUniqueSkuError(error)) {
       return {
-        error: "SKU already exists.",
-        fieldErrors: { sku: "SKU already exists." },
+        error: "Ese SKU ya existe.",
+        fieldErrors: { sku: "Ese SKU ya existe." },
       }
     }
-    return { error: "Could not save the item. Try again." }
+    return { error: "No se pudo guardar el producto. Inténtalo de nuevo." }
   }
 }
 
@@ -115,13 +115,13 @@ export async function updateProductAction(
 ): Promise<ProductActionState> {
   const existing = await getProduct(id)
   if (!existing) {
-    return { error: "Product not found." }
+    return { error: "Producto no encontrado." }
   }
 
   const parsed = productUpdateSchema.safeParse(formToPayload(formData))
   if (!parsed.success) {
     return {
-      error: "Check the highlighted fields.",
+      error: "Revisa los campos marcados.",
       fieldErrors: firstFieldError(parsed.error),
     }
   }
@@ -129,7 +129,7 @@ export async function updateProductAction(
   try {
     const product = await updateProduct(id, parsed.data)
     if (!product) {
-      return { error: "Product not found." }
+      return { error: "Producto no encontrado." }
     }
 
     revalidateProductViews(id)
@@ -138,17 +138,17 @@ export async function updateProductAction(
     if (isRedirectError(error)) throw error
     if (isUniqueSkuError(error)) {
       return {
-        error: "SKU already exists.",
-        fieldErrors: { sku: "SKU already exists." },
+        error: "Ese SKU ya existe.",
+        fieldErrors: { sku: "Ese SKU ya existe." },
       }
     }
-    return { error: "Could not save the item. Try again." }
+    return { error: "No se pudo guardar el producto. Inténtalo de nuevo." }
   }
 }
 
 const SOLD_ERRORS = {
-  "not-found": "Product not found.",
-  "already-sold": "This item is already sold.",
+  "not-found": "Producto no encontrado.",
+  "already-sold": "Este producto ya está vendido.",
 } as const
 
 export async function markProductSoldAction(
@@ -160,7 +160,7 @@ export async function markProductSoldAction(
     revalidateProductViews(id)
     return {}
   } catch {
-    return { error: "Could not mark as sold." }
+    return { error: "No se pudo marcar como vendido." }
   }
 }
 
@@ -169,10 +169,10 @@ export async function deleteProductAction(
 ): Promise<{ error?: string }> {
   try {
     const removed = await deleteProduct(id)
-    if (!removed) return { error: "Product not found." }
+    if (!removed) return { error: "Producto no encontrado." }
     revalidateProductViews(id)
   } catch {
-    return { error: "Could not delete item." }
+    return { error: "No se pudo eliminar el producto." }
   }
   redirect("/")
 }

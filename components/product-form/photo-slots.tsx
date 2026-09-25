@@ -88,13 +88,13 @@ export function PhotoSlots({
     const valid = incoming.filter((file) => ACCEPTED_TYPES.includes(file.type))
     const rejectedType = incoming.length - valid.length
     if (valid.length === 0) {
-      setError("Use JPEG, PNG, or WebP.")
+      setError("Usa JPEG, PNG o WebP.")
       return
     }
 
     const room = roomFor(atIndex)
     if (room <= 0) {
-      setError(`Maximum ${PRODUCT_IMAGE_MAX} photos.`)
+      setError(`Máximo ${PRODUCT_IMAGE_MAX} fotos.`)
       return
     }
 
@@ -107,7 +107,7 @@ export function PhotoSlots({
     try {
       const result = await uploadProductImages(formData)
       if (result.error || result.urls.length === 0) {
-        setError(result.error ?? "Could not save image.")
+        setError(result.error ?? "No se pudo guardar la imagen.")
         return
       }
 
@@ -127,15 +127,15 @@ export function PhotoSlots({
       const notes: string[] = []
       if (skipped > 0) {
         notes.push(
-          `Maximum ${PRODUCT_IMAGE_MAX} photos. Extra files were not added.`,
+          `Máximo ${PRODUCT_IMAGE_MAX} fotos. No se añadieron los archivos extra.`,
         )
       }
       if (rejectedType > 0) {
-        notes.push("Some files were skipped. Use JPEG, PNG, or WebP.")
+        notes.push("Algunos archivos se omitieron. Usa JPEG, PNG o WebP.")
       }
       setError(notes.length > 0 ? notes.join(" ") : null)
     } catch {
-      setError("Could not save image.")
+      setError("No se pudo guardar la imagen.")
     } finally {
       setUploading(false)
     }
@@ -262,8 +262,8 @@ export function PhotoSlots({
   return (
     <div className="space-y-2">
       <p className={cn(typeMeta, "text-muted-foreground")} aria-live="polite">
-        {safeImages.length}/{PRODUCT_IMAGE_MAX} · 6–10 for posting
-        {uploading ? " · Uploading…" : ""}
+        {safeImages.length}/{PRODUCT_IMAGE_MAX} · 6–10 para publicar
+        {uploading ? " · Subiendo…" : ""}
       </p>
       <input
         ref={inputRef}
@@ -271,7 +271,7 @@ export function PhotoSlots({
         accept="image/jpeg,image/png,image/webp"
         multiple
         tabIndex={-1}
-        aria-label="Upload photos"
+        aria-label="Subir fotos"
         className="sr-only"
         onChange={(event) => {
           void addFiles(event.target.files, replaceIndexRef.current)
@@ -329,12 +329,12 @@ export function PhotoSlots({
                 </div>
                 {index === 0 ? (
                   <Badge className="pointer-events-none absolute top-1 left-1 z-10 h-5 max-w-[calc(100%-2.5rem)] bg-background px-1.5 text-[10px] font-medium text-foreground shadow-sm ring-1 ring-border">
-                    Головне
+                    Foto principal
                   </Badge>
                 ) : null}
                 <button
                   type="button"
-                  aria-label={`Delete photo ${index + 1}`}
+                  aria-label={`Eliminar foto ${index + 1}`}
                   disabled={uploading}
                   onPointerDown={(event) => event.stopPropagation()}
                   onClick={(event) => {
@@ -350,10 +350,10 @@ export function PhotoSlots({
               <button
                 type="button"
                 disabled={uploading}
-                aria-label={`Add photo ${index + 1}`}
+                aria-label={`Añadir foto ${index + 1}`}
                 onClick={() => {
                   if (safeImages.length >= PRODUCT_IMAGE_MAX) {
-                    setError(`Maximum ${PRODUCT_IMAGE_MAX} photos.`)
+                    setError(`Máximo ${PRODUCT_IMAGE_MAX} fotos.`)
                     return
                   }
                   openFilePicker()
@@ -371,7 +371,7 @@ export function PhotoSlots({
         ))}
       </div>
       <p className={cn(typeMeta, "text-muted-foreground")}>
-        Tap + to upload. Drag to reorder. JPEG/PNG/WebP, max 10MB.
+        Toca + para subir. Arrastra para ordenar. JPEG/PNG/WebP, máx 10MB.
       </p>
       {error ? (
         <p className="text-xs text-destructive" role="alert">

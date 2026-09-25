@@ -33,7 +33,7 @@ export function BottomNav() {
               catalogActive ? "text-primary-text" : "text-foreground",
             )}
           >
-            Catalog
+            Catálogo
           </span>
         </Link>
         <Link
@@ -53,7 +53,7 @@ export function BottomNav() {
               newItemActive ? "text-primary-text" : "text-foreground",
             )}
           >
-            New item
+            Subir producto
           </span>
         </Link>
       </div>

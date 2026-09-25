@@ -16,13 +16,13 @@ export default function NewProductPage() {
           className="size-11"
           nativeButton={false}
           render={<Link href="/" />}
-          aria-label="Back to catalog"
+          aria-label="Volver al catálogo"
         >
           <ChevronLeftIcon />
         </Button>
-        <h1 className={typeScreen}>New item</h1>
+        <h1 className={typeScreen}>Subir producto</h1>
       </header>
-      <ProductForm action={createProductAction} submitLabel="Create item" />
+      <ProductForm action={createProductAction} submitLabel="Publicar" />
     </>
   )
 }

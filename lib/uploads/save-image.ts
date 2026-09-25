@@ -45,12 +45,12 @@ function isFsUnavailable(error: unknown) {
 
 export async function saveStrippedImage(file: File): Promise<string> {
   if (file.size > MAX_IMAGE_BYTES) {
-    throw new Error("Image must be 10MB or smaller.")
+    throw new Error("La imagen debe pesar 10MB o menos.")
   }
 
   const declaredType = file.type
   if (!isAllowedImageType(declaredType)) {
-    throw new Error("Use JPEG, PNG, or WebP.")
+    throw new Error("Usa JPEG, PNG o WebP.")
   }
 
   const buffer = Buffer.from(await file.arrayBuffer())
@@ -59,7 +59,7 @@ export async function saveStrippedImage(file: File): Promise<string> {
   const target = FORMAT_BY_TYPE[declaredType]
 
   if (detected !== target) {
-    throw new Error("File type does not match contents.")
+    throw new Error("El tipo de archivo no coincide con el contenido.")
   }
 
   // rotate() applies EXIF orientation; omitting withMetadata() strips EXIF/GPS.

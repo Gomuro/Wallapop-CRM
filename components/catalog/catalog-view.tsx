@@ -69,7 +69,7 @@ export function CatalogView({
         </div>
         {pending ? (
           <p className="sr-only" aria-live="polite">
-            Updating catalog
+            Actualizando catálogo
           </p>
         ) : null}
       </PageContainer>

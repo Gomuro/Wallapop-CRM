@@ -45,7 +45,7 @@ export function ProductGallery({
       tabIndex={count > 1 ? 0 : undefined}
       role={count > 1 ? "region" : undefined}
       aria-roledescription={count > 1 ? "carousel" : undefined}
-      aria-label={count > 1 ? `${alt}. Photo ${active + 1} of ${count}` : alt}
+      aria-label={count > 1 ? `${alt}. Foto ${active + 1} de ${count}` : alt}
       onKeyDown={(event) => {
         if (count < 2) return
         if (event.key === "ArrowRight") {
@@ -86,7 +86,7 @@ export function ProductGallery({
         <>
           <button
             type="button"
-            aria-label="Previous photo"
+            aria-label="Foto anterior"
             disabled={active === 0}
             onClick={() => scrollToIndex(active - 1)}
             className="absolute top-1/2 left-3 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-background/95 text-foreground shadow-sm ring-1 ring-border transition-opacity hover:bg-background focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-40 md:inline-flex md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
@@ -95,7 +95,7 @@ export function ProductGallery({
           </button>
           <button
             type="button"
-            aria-label="Next photo"
+            aria-label="Foto siguiente"
             disabled={active === count - 1}
             onClick={() => scrollToIndex(active + 1)}
             className="absolute top-1/2 right-3 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-background/95 text-foreground shadow-sm ring-1 ring-border transition-opacity hover:bg-background focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-40 md:inline-flex md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
@@ -108,7 +108,7 @@ export function ProductGallery({
                 <button
                   key={index}
                   type="button"
-                  aria-label={`Photo ${index + 1}`}
+                  aria-label={`Foto ${index + 1}`}
                   aria-current={index === active ? "true" : undefined}
                   onClick={() => scrollToIndex(index)}
                   className="flex size-6 items-center justify-center"

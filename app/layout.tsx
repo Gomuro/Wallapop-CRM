@@ -13,13 +13,13 @@ const plusJakarta = Plus_Jakarta_Sans({
 
 export const metadata: Metadata = {
   title: "Wallapop CRM",
-  description: "Mobile-first inventory for Wallapop listings",
+  description: "Inventario móvil para anuncios de Wallapop",
 }
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
-      lang="en"
+      lang="es-ES"
       suppressHydrationWarning
       className={`${plusJakarta.variable} ${plusJakarta.className} h-full antialiased`}
     >

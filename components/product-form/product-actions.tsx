@@ -91,7 +91,7 @@ function ConfirmFrame({
           ) : null}
           <DialogFooter>
             <DialogClose render={<Button variant="outline" className="h-11" />}>
-              Cancel
+              Cancelar
             </DialogClose>
             {confirm}
           </DialogFooter>
@@ -118,7 +118,7 @@ function ConfirmFrame({
         <DrawerFooter>
           {confirm}
           <DrawerClose render={<Button variant="ghost" className="h-12 w-full" />}>
-            Cancel
+            Cancelar
           </DrawerClose>
         </DrawerFooter>
       </DrawerContent>
@@ -167,12 +167,12 @@ export function SoldSyncButton({
     <ConfirmFrame
       open={open}
       onOpenChange={handleOpenChange}
-      label={isSold ? "Sold" : "Mark as SOLD"}
+      label={isSold ? "Vendido" : "Marcar como vendido"}
       triggerClassName="h-12 w-full"
       triggerVariant={isSold ? "secondary" : "default"}
       triggerDisabled={isSold}
-      title="Mark as SOLD"
-      description="This sets the product to SOLD and deactivates every linked listing."
+      title="Marcar como vendido"
+      description="El producto pasará a Vendido y se desactivarán todos los anuncios vinculados."
       error={error}
       confirm={
         <Button
@@ -182,7 +182,7 @@ export function SoldSyncButton({
           onClick={confirmSold}
         >
           {pending ? <LoaderCircleIcon className="animate-spin" /> : null}
-          {pending ? "Syncing…" : "Confirm sold"}
+          {pending ? "Sincronizando…" : "Confirmar"}
         </Button>
       }
     />
@@ -201,11 +201,11 @@ export function DeleteProductButton({ productId }: { productId: string }) {
         setOpen(next)
         if (!next) setError(null)
       }}
-      label="Delete item"
+      label="Eliminar"
       triggerClassName="h-12 w-full text-destructive"
       triggerVariant="ghost"
-      title="Delete product"
-      description="This removes the item from the catalog. It cannot be undone in this session."
+      title="Eliminar producto"
+      description="Se quitará del catálogo. Esta acción no se puede deshacer en esta sesión."
       error={error}
       confirm={
         <Button
@@ -221,13 +221,13 @@ export function DeleteProductButton({ productId }: { productId: string }) {
                 if (result?.error) setError(result.error)
               } catch (caught) {
                 if (isNextRedirect(caught)) throw caught
-                setError("Could not delete item.")
+                setError("No se pudo eliminar el producto.")
               }
             })
           }}
         >
           {pending ? <LoaderCircleIcon className="animate-spin" /> : null}
-          {pending ? "Deleting…" : "Delete"}
+          {pending ? "Eliminando…" : "Eliminar"}
         </Button>
       }
     />

@@ -5,60 +5,60 @@ export const PRODUCT_IMAGE_MAX = 10
 
 export const productStatusSchema = z.enum(
   ["ACTIVE", "SOLD", "INACTIVE"],
-  { error: "Choose a status." },
+  { error: "Elige un estado de venta." },
 )
 
 export const productImageUrlSchema = z
   .string()
   .trim()
-  .min(1, "Invalid image URL")
+  .min(1, "URL de imagen no válida")
   .refine(
     (value) =>
       value.startsWith("/uploads/") ||
       value.startsWith("data:image/") ||
       URL.canParse(value),
-    "Invalid image URL",
+    "URL de imagen no válida",
   )
 
 export const productImagesSchema = z
   .array(productImageUrlSchema)
-  .max(PRODUCT_IMAGE_MAX, `Add up to ${PRODUCT_IMAGE_MAX} photos.`)
+  .max(PRODUCT_IMAGE_MAX, `Añade como máximo ${PRODUCT_IMAGE_MAX} fotos.`)
 
 export const productPublishImagesSchema = productImagesSchema.min(
   PRODUCT_IMAGE_MIN,
-  `Add at least ${PRODUCT_IMAGE_MIN} photos.`,
+  `Añade al menos ${PRODUCT_IMAGE_MIN} fotos.`,
 )
 
 export const productCreateSchema = z.object({
-  sku: z.string().trim().min(1, "Enter a SKU.").max(64, "SKU is too long."),
+  sku: z.string().trim().min(1, "Introduce un SKU.").max(64, "El SKU es demasiado largo."),
   title: z
     .string()
     .trim()
-    .min(1, "Enter a title.")
-    .max(200, "Title is too long."),
+    .min(1, "Introduce un título.")
+    .max(200, "El título es demasiado largo."),
   description: z
     .string()
     .trim()
-    .max(10_000, "Description is too long.")
+    .max(10_000, "La descripción es demasiado larga.")
     .default(""),
   price: z
-    .number({ error: "Enter a valid price." })
-    .finite("Enter a valid price.")
-    .nonnegative("Price cannot be negative."),
+    .number({ error: "Introduce un precio válido." })
+    .finite("Introduce un precio válido.")
+    .nonnegative("El precio no puede ser negativo."),
   category: z
     .string()
     .trim()
-    .min(1, "Choose a category.")
-    .max(100, "Category is too long."),
+    .min(1, "Elige una categoría.")
+    .max(100, "La categoría es demasiado larga."),
   condition: z
     .string()
     .trim()
-    .min(1, "Choose a condition.")
-    .max(100, "Condition is too long."),
+    .min(1, "Elige un estado.")
+    .max(100, "El estado es demasiado largo."),
   weight: z
-    .number({ error: "Enter a valid weight." })
-    .finite("Enter a valid weight.")
-    .nonnegative("Weight cannot be negative.")
+    .number({ error: "Introduce un peso válido." })
+    .finite("Introduce un peso válido.")
+    .nonnegative("El peso no puede ser negativo.")
     .nullable()
     .optional(),
   images: productImagesSchema.default([]),

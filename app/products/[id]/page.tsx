@@ -10,7 +10,7 @@ import {
   DeleteProductButton,
   SoldSyncButton,
 } from "@/components/product-form/product-actions"
-import { formatEuro, listingStatusLabel, statusLabel } from "@/lib/inventory/format"
+import { formatEuro, listingStatusLabel, statusLabel, categoryLabel, conditionLabel } from "@/lib/inventory/format"
 import { getProduct } from "@/lib/inventory/store"
 import { typeMeta, typePrice, typeScreen, typeSection } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
@@ -33,7 +33,7 @@ export default async function ProductDetailPage({
           className="size-11"
           nativeButton={false}
           render={<Link href="/" />}
-          aria-label="Back to catalog"
+          aria-label="Volver al catálogo"
         >
           <ChevronLeftIcon />
         </Button>
@@ -76,17 +76,17 @@ export default async function ProductDetailPage({
             >
               {statusLabel(product.status)}
             </Badge>
-            <Badge variant="outline">{product.category}</Badge>
-            <Badge variant="outline">{product.condition}</Badge>
+            <Badge variant="outline">{categoryLabel(product.category)}</Badge>
+            <Badge variant="outline">{conditionLabel(product.condition)}</Badge>
             {product.weight != null ? (
               <Badge variant="secondary">{product.weight} kg</Badge>
             ) : null}
           </div>
           <div>
-            <p className={typeSection}>Where it hangs</p>
+            <p className={typeSection}>Publicado en</p>
             {product.listings.length === 0 ? (
               <p className="mt-1 text-sm text-muted-foreground">
-                Not listed on any account yet.
+                Todavía no está en ninguna cuenta.
               </p>
             ) : (
               <ul className="mt-2 space-y-1.5">
@@ -111,7 +111,7 @@ export default async function ProductDetailPage({
           </div>
           <Separator />
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-            {product.description || "No description."}
+            {product.description || "Sin descripción."}
           </p>
           <div className="space-y-2 pt-2">
             <Button
@@ -119,7 +119,7 @@ export default async function ProductDetailPage({
               nativeButton={false}
               render={<Link href={`/products/${product.id}/edit`} />}
             >
-              Edit item
+              Editar producto
             </Button>
             <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 border-t bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:inset-auto md:z-auto md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
               <SoldSyncButton

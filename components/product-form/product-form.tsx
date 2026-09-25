@@ -17,7 +17,7 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import type { ProductActionState } from "@/app/actions/products"
-import { statusLabel } from "@/lib/inventory/format"
+import { statusLabel, categoryLabel, conditionLabel } from "@/lib/inventory/format"
 import {
   PRODUCT_CATEGORIES,
   PRODUCT_CONDITIONS,
@@ -69,7 +69,7 @@ export function ProductForm({
       className="flex flex-col gap-4 px-4 py-4 md:px-8 lg:grid lg:grid-cols-12 lg:items-start lg:gap-8 lg:py-6"
     >
       <div className="min-w-0 lg:sticky lg:top-28 lg:col-span-7">
-        <FormSection title="Фото">
+        <FormSection title="Fotos">
           <div id="images" tabIndex={-1} className="scroll-mt-28 outline-none">
             <PhotoSlots images={images} onChange={setImages} />
           </div>
@@ -83,8 +83,8 @@ export function ProductForm({
       </div>
 
       <div className="flex min-w-0 flex-col gap-3 lg:col-span-5">
-        <FormSection title="Основне">
-        <Field label="Title" htmlFor="title" error={state.fieldErrors?.title}>
+        <FormSection title="Detalles del producto">
+        <Field label="Título" htmlFor="title" error={state.fieldErrors?.title}>
           <Input
             id="title"
             name="title"
@@ -105,7 +105,7 @@ export function ProductForm({
           />
         </Field>
         <Field
-          label="Description"
+          label="Descripción"
           htmlFor="description"
           error={state.fieldErrors?.description}
         >
@@ -123,8 +123,8 @@ export function ProductForm({
         </Field>
       </FormSection>
 
-      <FormSection title="Ціноутворення">
-        <Field label="Price (€)" htmlFor="price" error={state.fieldErrors?.price}>
+      <FormSection title="Precio">
+        <Field label="Precio (€)" htmlFor="price" error={state.fieldErrors?.price}>
           <Input
             id="price"
             name="price"
@@ -140,9 +140,9 @@ export function ProductForm({
         </Field>
       </FormSection>
 
-      <FormSection title="Параметри">
+      <FormSection title="Parámetros">
         <Field
-          label="Weight (kg)"
+          label="Peso"
           htmlFor="weight"
           error={state.fieldErrors?.weight}
         >
@@ -159,13 +159,13 @@ export function ProductForm({
             aria-describedby={state.fieldErrors?.weight ? "weight-error" : undefined}
           />
         </Field>
-        <Field label="Category" htmlFor="category" error={state.fieldErrors?.category}>
+        <Field label="Categoría" htmlFor="category" error={state.fieldErrors?.category}>
           <Select
             name="category"
             value={category}
             onValueChange={(value) => value && setCategory(value)}
             items={Object.fromEntries(
-              PRODUCT_CATEGORIES.map((item) => [item, item]),
+              PRODUCT_CATEGORIES.map((item) => [item, categoryLabel(item)]),
             )}
           >
             <SelectTrigger
@@ -181,19 +181,19 @@ export function ProductForm({
             <SelectContent>
               {PRODUCT_CATEGORIES.map((item) => (
                 <SelectItem key={item} value={item}>
-                  {item}
+                  {categoryLabel(item)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Condition" htmlFor="condition" error={state.fieldErrors?.condition}>
+        <Field label="Estado" htmlFor="condition" error={state.fieldErrors?.condition}>
           <Select
             name="condition"
             value={condition}
             onValueChange={(value) => value && setCondition(value)}
             items={Object.fromEntries(
-              PRODUCT_CONDITIONS.map((item) => [item, item]),
+              PRODUCT_CONDITIONS.map((item) => [item, conditionLabel(item)]),
             )}
           >
             <SelectTrigger
@@ -209,22 +209,22 @@ export function ProductForm({
             <SelectContent>
               {PRODUCT_CONDITIONS.map((item) => (
                 <SelectItem key={item} value={item}>
-                  {item}
+                  {conditionLabel(item)}
                 </SelectItem>
               ))}
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Status" htmlFor="status" error={state.fieldErrors?.status}>
+        <Field label="Estado de venta" htmlFor="status" error={state.fieldErrors?.status}>
           <Select
             name="status"
             value={status}
             onValueChange={(value) => value && setStatus(value as ProductStatus)}
             itemToStringLabel={(value) => statusLabel(value as ProductStatus)}
             items={{
-              ACTIVE: "Active",
-              INACTIVE: "Inactive",
-              SOLD: "Sold",
+              ACTIVE: "En venta",
+              INACTIVE: "Inactivo",
+              SOLD: "Vendido",
             }}
           >
             <SelectTrigger
@@ -262,7 +262,7 @@ export function ProductForm({
         aria-busy={pending}
       >
         {pending ? <LoaderCircleIcon className="animate-spin" /> : null}
-        {pending ? "Saving…" : submitLabel}
+        {pending ? "Guardando…" : submitLabel}
       </Button>
       </div>
     </form>

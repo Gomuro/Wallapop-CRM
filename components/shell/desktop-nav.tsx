@@ -29,7 +29,7 @@ export function DesktopNav() {
           )}
         >
           <LayoutGridIcon />
-          Catalog
+          Catálogo
         </Link>
         <Link
           href="/products/new"
@@ -42,7 +42,7 @@ export function DesktopNav() {
           )}
         >
           <PlusIcon />
-          New item
+          Subir producto
         </Link>
       </nav>
     </header>

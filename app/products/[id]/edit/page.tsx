@@ -28,17 +28,17 @@ export default async function EditProductPage({
           className="size-11"
           nativeButton={false}
           render={<Link href={`/products/${product.id}`} />}
-          aria-label="Back to item"
+          aria-label="Volver al producto"
         >
           <ChevronLeftIcon />
         </Button>
-        <h1 className={typeScreen}>Edit item</h1>
+        <h1 className={typeScreen}>Editar producto</h1>
       </header>
       <ProductForm
         key={product.id}
         product={product}
         action={action}
-        submitLabel="Save changes"
+        submitLabel="Guardar"
       />
     </>
   )
