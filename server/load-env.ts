@@ -1,5 +1,8 @@
-import { config } from "dotenv"
-import { dirname, resolve } from "node:path"
-import { fileURLToPath } from "node:url"
+import { existsSync } from "node:fs"
+import { resolve } from "node:path"
 
-config({ path: resolve(dirname(fileURLToPath(import.meta.url)), ".env") })
+import { config } from "dotenv"
+
+const fromRoot = resolve(process.cwd(), "server/.env")
+const fromServer = resolve(process.cwd(), ".env")
+config({ path: existsSync(fromRoot) ? fromRoot : fromServer })

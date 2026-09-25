@@ -72,8 +72,8 @@
 
 | Метод | Шлях | Нотатки |
 |-------|------|---------|
-| GET | `/api/v1/categories` | `ORDER BY parentId, sortOrder`. Поля: `id`, `wallapopId`, `parentId`, `slug`, `nameEs`, `nameUk`, `isLeaf`, `leafSelectionMandatory`, `depth`, `path`, `sortOrder` |
-| GET | `/api/v1/categories/:id` | Один вузол |
+| GET | `/api/v1/categories` | `ORDER BY parentId, sortOrder` (корені `parentId` null спочатку). Поля: `id`, `wallapopId`, `parentId`, `slug`, `nameEs`, `nameUk`, `isLeaf`, `leafSelectionMandatory`, `depth`, `path`, `sortOrder`. Опційно `?parentId=` (cuid або `root` лише корені) |
+| GET | `/api/v1/categories/:id` | Один вузол, інакше 404 |
 
 Каскад форми: корінь → … → **листок**. `products.categoryId` лише листок, інакше 400 `INVALID_CATEGORY`.
 
@@ -83,7 +83,7 @@
 
 | Метод | Шлях | Нотатки |
 |-------|------|---------|
-| GET | `/api/v1/products` | Пагінація `page`, `pageSize`. Фільтри `status`, `q` (SKU/назва) |
+| GET | `/api/v1/products` | Пагінація `page` (default 1), `pageSize` (default 20, max 100). Фільтри: `status` (`ALL` \| `ACTIVE` \| `SOLD` \| `INACTIVE`), `q` (SKU або title, case-insensitive), опційно `categoryId`. Сортування: `updatedAt` desc. Відповідь: `{ products: [{ id, sku, title, price, currency, status, categoryId, coverUrl, updatedAt, listingActive }], page, pageSize, total, totalPages }` |
 | POST | `/api/v1/products` | `sku`, `title`, `description`, `price`, `currency` default `EUR`, `categoryId` (листок), `condition` enum, `brand?`, `weightKg?`, `typeAttributes?`. Авто listing на default, статус `READY_TO_POST` |
 | GET | `/api/v1/products/:id` | Картка + images + listing |
 | PATCH | `/api/v1/products/:id` | Часткове оновлення складу |

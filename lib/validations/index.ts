@@ -46,6 +46,8 @@ export {
   productCreateSchema,
   productImagesSchema,
   productImageUrlSchema,
+  productListQuerySchema,
+  productListStatusFilterSchema,
   productPublishImagesSchema,
   productStatusSchema,
   productUpdateSchema,
@@ -56,6 +58,8 @@ export {
 export type {
   ProductCondition,
   ProductCreateInput,
+  ProductListQuery,
+  ProductListStatusFilter,
   ProductStatus,
   ProductUpdateInput,
   WarehouseProductCreateInput,

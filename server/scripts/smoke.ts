@@ -137,12 +137,25 @@ async function main() {
   expectStatus("GET /api/v1/auth/me", me.status, 200, me.body)
   ok("GET /api/v1/auth/me")
 
-  const products = await request("GET", "/api/v1/products")
-  expectStatus("GET /api/v1/products (authed)", products.status, 501, products.body)
-  if (errorCode(products.body) !== "NOT_IMPLEMENTED") {
-    fail("GET /api/v1/products (authed)", "expected error.code NOT_IMPLEMENTED")
+  const products = await request(
+    "GET",
+    "/api/v1/products?page=1&pageSize=20",
+  )
+  expectStatus("GET /api/v1/products (authed)", products.status, 200, products.body)
+  if (typeof products.body !== "object" || products.body === null) {
+    fail("GET /api/v1/products (authed)", "expected JSON body")
   }
-  ok("GET /api/v1/products (authed)  501")
+  const list = products.body as Json
+  if (!Array.isArray(list.products)) {
+    fail("GET /api/v1/products (authed)", "expected products array")
+  }
+  if (list.page !== 1 || list.pageSize !== 20) {
+    fail("GET /api/v1/products (authed)", "expected page=1 pageSize=20")
+  }
+  if (typeof list.total !== "number" || typeof list.totalPages !== "number") {
+    fail("GET /api/v1/products (authed)", "expected total and totalPages")
+  }
+  ok("GET /api/v1/products (authed)  200")
 
   const logout = await request("POST", "/api/v1/auth/logout")
   expectStatus("POST /api/v1/auth/logout", logout.status, 200, logout.body)

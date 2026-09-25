@@ -117,6 +117,25 @@ export const warehouseProductCreateSchema = z.object({
 
 export const warehouseProductUpdateSchema = warehouseProductCreateSchema.partial()
 
+export const productListStatusFilterSchema = z.enum([
+  "ALL",
+  "ACTIVE",
+  "SOLD",
+  "INACTIVE",
+])
+
+export const productListQuerySchema = z.object({
+  page: z.coerce.number().int().min(1).default(1),
+  pageSize: z.coerce.number().int().min(1).max(100).default(20),
+  status: productListStatusFilterSchema.default("ALL"),
+  q: z
+    .string()
+    .trim()
+    .optional()
+    .transform((value) => (value && value.length > 0 ? value : undefined)),
+  categoryId: z.string().trim().min(1).optional(),
+})
+
 export const warehouseProductCreateWithLeafSchema =
   warehouseProductCreateSchema
     .extend({ category: productCategoryLeafSchema })
@@ -147,3 +166,7 @@ export type WarehouseProductCreateInput = z.infer<
 export type WarehouseProductUpdateInput = z.infer<
   typeof warehouseProductUpdateSchema
 >
+export type ProductListStatusFilter = z.infer<
+  typeof productListStatusFilterSchema
+>
+export type ProductListQuery = z.infer<typeof productListQuerySchema>
