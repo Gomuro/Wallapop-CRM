@@ -2,6 +2,7 @@ import Link from "next/link"
 import { notFound } from "next/navigation"
 import { ChevronLeftIcon } from "lucide-react"
 
+import { ApiUnavailable } from "@/components/api/api-unavailable"
 import { ProductGallery } from "@/components/catalog/product-gallery"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -17,6 +18,8 @@ import {
   formatEuro,
   statusLabel,
 } from "@/lib/inventory/format"
+import { apiUnavailableReason } from "@/lib/api/availability"
+import { isApiConfigured } from "@/lib/api/config"
 import { getProduct } from "@/lib/inventory/store"
 import { typeMeta, typePrice, typeScreen, typeSection } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
@@ -26,8 +29,18 @@ export default async function ProductDetailPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  if (!isApiConfigured()) {
+    return <ApiUnavailable reason="config" />
+  }
+
   const { id } = await params
-  const product = await getProduct(id)
+  let product: Awaited<ReturnType<typeof getProduct>>
+  try {
+    product = await getProduct(id)
+  } catch (error) {
+    const reason = apiUnavailableReason(error) ?? "unreachable"
+    return <ApiUnavailable reason={reason} />
+  }
   if (!product) notFound()
 
   return (

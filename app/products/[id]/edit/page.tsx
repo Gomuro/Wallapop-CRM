@@ -3,9 +3,12 @@ import { notFound } from "next/navigation"
 import { ChevronLeftIcon } from "lucide-react"
 
 import { updateProductAction } from "@/app/actions/products"
+import { ApiUnavailable } from "@/components/api/api-unavailable"
 import { ListingFields } from "@/components/product-form/listing-fields"
 import { ProductForm } from "@/components/product-form/product-form"
 import { Button } from "@/components/ui/button"
+import { apiUnavailableReason } from "@/lib/api/availability"
+import { isApiConfigured } from "@/lib/api/config"
 import { getProduct, listCategoriesFlat } from "@/lib/inventory/store"
 import { typeScreen } from "@/lib/ui/type"
 
@@ -14,11 +17,22 @@ export default async function EditProductPage({
 }: {
   params: Promise<{ id: string }>
 }) {
+  if (!isApiConfigured()) {
+    return <ApiUnavailable reason="config" />
+  }
+
   const { id } = await params
-  const [product, categories] = await Promise.all([
-    getProduct(id),
-    listCategoriesFlat(),
-  ])
+  let product: Awaited<ReturnType<typeof getProduct>>
+  let categories: Awaited<ReturnType<typeof listCategoriesFlat>>
+  try {
+    ;[product, categories] = await Promise.all([
+      getProduct(id),
+      listCategoriesFlat(),
+    ])
+  } catch (error) {
+    const reason = apiUnavailableReason(error) ?? "unreachable"
+    return <ApiUnavailable reason={reason} />
+  }
   if (!product) notFound()
 
   const action = updateProductAction.bind(null, product.id)
