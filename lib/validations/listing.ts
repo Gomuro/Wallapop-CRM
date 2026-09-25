@@ -1,22 +1,40 @@
 import { z } from "zod"
 
 export const listingStatusSchema = z.enum([
+  "READY_TO_POST",
   "ACTIVE",
   "DEACTIVATED",
-  "READY_TO_POST",
 ])
 
 export const productListingCreateSchema = z.object({
   productId: z.string().trim().min(1),
   accountId: z.string().trim().min(1),
   externalUrl: z.string().trim().url().nullable().optional(),
-  externalLinks: z.array(z.string().trim().url()).default([]),
-  status: listingStatusSchema.default("ACTIVE"),
+  externalItemId: z.string().trim().min(1).nullable().optional(),
+  shippingEnabled: z.boolean().default(false),
+  shippingUpToKg: z.number().int().positive().nullable().optional(),
+  status: listingStatusSchema.default("READY_TO_POST"),
 })
 
 export const productListingUpdateSchema = productListingCreateSchema
   .omit({ productId: true, accountId: true })
   .partial()
+
+export const productListingApiPutBodySchema = z
+  .object({
+    externalUrl: z.string().trim().url().nullable().optional(),
+    status: listingStatusSchema.optional(),
+    shippingEnabled: z.boolean().optional(),
+    shippingUpToKg: z.number().int().positive().nullable().optional(),
+  })
+  .strict()
+  .refine((o) => Object.keys(o).length > 0, {
+    message: "At least one field is required.",
+  })
+
+export type ProductListingApiPutBody = z.infer<
+  typeof productListingApiPutBodySchema
+>
 
 export type ProductListingCreateInput = z.infer<
   typeof productListingCreateSchema

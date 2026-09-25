@@ -1,0 +1,152 @@
+// Express warehouse API (server/). Not used by the Next UI on Vercel.
+generator client {
+  provider = "prisma-client"
+  output   = "../generated/prisma"
+}
+
+datasource db {
+  provider = "postgresql"
+}
+
+enum ProductStatus {
+  ACTIVE
+  SOLD
+  INACTIVE
+}
+
+enum AccountStatus {
+  ACTIVE
+  INACTIVE
+}
+
+enum ListingStatus {
+  READY_TO_POST
+  ACTIVE
+  DEACTIVATED
+}
+
+enum ProductCondition {
+  NEW
+  AS_GOOD_AS_NEW
+  GOOD
+  FAIR
+  HAS_GIVEN_IT_ALL
+}
+
+model User {
+  id           String   @id @default(cuid())
+  email        String   @unique
+  passwordHash String   @map("password_hash")
+  name         String
+  createdAt    DateTime @default(now()) @map("created_at")
+  updatedAt    DateTime @updatedAt @map("updated_at")
+
+  @@map("users")
+}
+
+model Account {
+  id         String          @id @default(cuid())
+  name       String
+  status     AccountStatus   @default(ACTIVE)
+  // One default account: SQL partial unique in mvp_schema (Prisma cannot express it).
+  isDefault  Boolean         @default(false) @map("is_default")
+  city      String?
+  postalCode String?      @map("postal_code")
+  listings  ProductListing[]
+  createdAt DateTime      @default(now()) @map("created_at")
+  updatedAt DateTime      @updatedAt @map("updated_at")
+
+  @@map("accounts")
+}
+
+model Category {
+  id                       String     @id @default(cuid())
+  wallapopId               Int        @unique @map("wallapop_id")
+  parentId                 String?    @map("parent_id")
+  parent                   Category?  @relation("CategoryTree", fields: [parentId], references: [id], onDelete: Restrict)
+  children                 Category[] @relation("CategoryTree")
+  slug                     String     @unique
+  nameEs                   String     @map("name_es")
+  nameUk                   String     @map("name_uk")
+  isLeaf                   Boolean    @map("is_leaf")
+  leafSelectionMandatory   Boolean    @map("leaf_selection_mandatory")
+  verticalId               String?    @map("vertical_id")
+  listingType              String?    @map("listing_type")
+  // Materialized path of wallapop_id segments, always trailing slash (e.g. "24200/24201/24203/").
+  // Descendants of 24200 (self + children): WHERE path LIKE '24200/%'
+  // Breadcrumbs: split by '/', drop empties, lookup those wallapop_ids in order.
+  // Later product counts: category_id IN (SELECT id FROM categories WHERE path LIKE '24200/%')
+  path                     String     @db.VarChar(255)
+  depth                    Int
+  attributes               Json       @default("{}")
+  seoLegacyId              Int?       @map("seo_legacy_id")
+  sortOrder                Int        @map("sort_order")
+  products                 Product[]
+  createdAt                DateTime   @default(now()) @map("created_at")
+  updatedAt                DateTime   @updatedAt @map("updated_at")
+
+  @@index([parentId, sortOrder])
+  @@index([path])
+  @@map("categories")
+}
+
+model Product {
+  id              String            @id @default(cuid())
+  sku             String            @unique
+  title           String
+  description     String            @db.Text
+  price           Decimal           @db.Decimal(10, 2)
+  currency        String            @default("EUR") @db.Char(3)
+  categoryId      String            @map("category_id")
+  category        Category          @relation(fields: [categoryId], references: [id], onDelete: Restrict)
+  condition       ProductCondition
+  brand           String?
+  weightKg        Decimal?          @map("weight_kg") @db.Decimal(8, 3)
+  status          ProductStatus     @default(ACTIVE)
+  typeAttributes  Json              @default("{}") @map("type_attributes")
+  soldAt          DateTime?         @map("sold_at")
+  soldPrice       Decimal?          @map("sold_price") @db.Decimal(10, 2)
+  images          ProductImage[]
+  listings        ProductListing[]
+  createdAt       DateTime          @default(now()) @map("created_at")
+  updatedAt       DateTime          @updatedAt @map("updated_at")
+
+  @@index([status])
+  @@index([categoryId])
+  @@index([title])
+  @@map("products")
+}
+
+model ProductImage {
+  id          String   @id @default(cuid())
+  productId   String   @map("product_id")
+  product     Product  @relation(fields: [productId], references: [id], onDelete: Cascade)
+  storageKey  String   @map("storage_key")
+  url         String
+  sortOrder   Int      @map("sort_order")
+  createdAt   DateTime @default(now()) @map("created_at")
+
+  @@index([productId, sortOrder])
+  @@map("product_images")
+}
+
+model ProductListing {
+  id                 String        @id @default(cuid())
+  productId          String        @map("product_id")
+  accountId          String        @map("account_id")
+  product            Product       @relation(fields: [productId], references: [id], onDelete: Cascade)
+  account            Account       @relation(fields: [accountId], references: [id], onDelete: Cascade)
+  status             ListingStatus @default(READY_TO_POST)
+  externalUrl        String?       @map("external_url")
+  externalItemId     String?       @map("external_item_id")
+  shippingEnabled    Boolean       @default(false) @map("shipping_enabled")
+  shippingUpToKg     Int?          @map("shipping_up_to_kg")
+  lastPostedAt       DateTime?     @map("last_posted_at")
+  lastEditedAt       DateTime?     @map("last_edited_at")
+  createdAt          DateTime      @default(now()) @map("created_at")
+  updatedAt          DateTime      @updatedAt @map("updated_at")
+
+  @@unique([productId, accountId])
+  @@index([status])
+  @@map("product_listings")
+}

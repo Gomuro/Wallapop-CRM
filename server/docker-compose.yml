@@ -1,0 +1,25 @@
+# Postgres for the Express API (server/). Next/Vercel does not run this.
+# Local #53: host 5432–5435 are taken by native PostgreSQL, so map 5436.
+name: wallapop-crm
+
+services:
+  db:
+    image: postgres:16-alpine
+    container_name: wallapop-crm-db
+    restart: unless-stopped
+    environment:
+      POSTGRES_USER: wallapop
+      POSTGRES_PASSWORD: wallapop
+      POSTGRES_DB: wallapop_crm
+    ports:
+      - "5436:5432"
+    volumes:
+      - wallapop_crm_pg:/var/lib/postgresql/data
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U wallapop -d wallapop_crm"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+
+volumes:
+  wallapop_crm_pg:

@@ -1,0 +1,28 @@
+@baseUrl = http://localhost:4000
+@email = operator@example.com
+@password = local-dev-only
+
+### Health
+GET {{baseUrl}}/health
+
+### Products without session → 401
+GET {{baseUrl}}/api/v1/products
+
+### Login (REST Client keeps Set-Cookie in the jar for the next calls)
+# @name login
+POST {{baseUrl}}/api/v1/auth/login
+Content-Type: application/json
+
+{
+  "email": "{{email}}",
+  "password": "{{password}}"
+}
+
+### Me
+GET {{baseUrl}}/api/v1/auth/me
+
+### Products after login → 501 until #55
+GET {{baseUrl}}/api/v1/products
+
+### Logout
+POST {{baseUrl}}/api/v1/auth/logout

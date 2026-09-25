@@ -43,10 +43,15 @@ const CATEGORY_LABELS: Record<string, string> = {
 
 const CONDITION_LABELS: Record<string, string> = {
   New: "Nuevo",
+  NEW: "Nuevo",
   "As good as new": "Como nuevo",
+  AS_GOOD_AS_NEW: "Como nuevo",
   Good: "En buen estado",
+  GOOD: "En buen estado",
   Fair: "Aceptable",
+  FAIR: "Aceptable",
   "Has given it all": "Lo ha dado todo",
+  HAS_GIVEN_IT_ALL: "Lo ha dado todo",
 }
 
 export function categoryLabel(value: string) {

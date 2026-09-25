@@ -19,11 +19,13 @@ next-env.d.ts
 .vercel
 coverage/
 lib/generated/
+server/generated/
 
 # Environment & secrets
 .env
 .env.*
 !.env.example
+!server/.env.example
 *.pem
 *.key
 credentials.json
@@ -38,6 +40,7 @@ Thumbs.db
 !.vscode/extensions.json
 
 # Logs & local data
+.pgdata/
 *.log
 npm-debug.log*
 yarn-debug.log*

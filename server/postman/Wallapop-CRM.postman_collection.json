@@ -1,0 +1,431 @@
+{
+  "info": {
+    "name": "Wallapop CRM API",
+    "description": "Express `/api/v1` (cookie `crm_session`, not Bearer).\n\nImport this file **and** `local.postman_environment.json`.\nSelect environment **Wallapop CRM · local**.\n\n**401 Sign in required** = немає сесії. Спочатку **Smoke → Login** (200), потім Me / categories / products.\nPostman на `http://` часто не кладе `Secure` cookie в jar — колекція після Login сама ставить заголовок `Cookie` з `crmSession`.\n\nБез Postman: `npm run server:dev` потім `npm run server:smoke`.",
+    "schema": "https://schema.getpostman.com/json/collection/v2.1.0/collection.json"
+  },
+  "variable": [
+    { "key": "baseUrl", "value": "http://localhost:4000" },
+    { "key": "email", "value": "operator@example.com" },
+    { "key": "password", "value": "local-dev-only" },
+    { "key": "crmSession", "value": "" }
+  ],
+  "event": [
+    {
+      "listen": "prerequest",
+      "script": {
+        "type": "text/javascript",
+        "exec": [
+          "const skip = new Set([",
+          "  'Health',",
+          "  'Products (anon → 401)',",
+          "  'Login (bad password → 401)',",
+          "  'Login'",
+          "]);",
+          "if (skip.has(pm.info.requestName)) return;",
+          "const token = pm.collectionVariables.get('crmSession');",
+          "if (!token) return;",
+          "pm.request.headers.upsert({ key: 'Cookie', value: 'crm_session=' + token });"
+        ]
+      }
+    }
+  ],
+  "item": [
+    {
+      "name": "Smoke",
+      "item": [
+        {
+          "name": "Health",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('ok', () => pm.expect(pm.response.json().ok).to.eql(true));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/health"
+          }
+        },
+        {
+          "name": "Products (anon → 401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));",
+                  "pm.test('UNAUTHORIZED', () => pm.expect(pm.response.json().error.code).to.eql('UNAUTHORIZED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/products"
+          }
+        },
+        {
+          "name": "Login (bad password → 401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));",
+                  "pm.test('UNAUTHORIZED', () => pm.expect(pm.response.json().error.code).to.eql('UNAUTHORIZED'));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"wrong-password\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Login",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const user = pm.response.json().user;",
+                  "pm.test('user', () => {",
+                  "  pm.expect(user).to.have.property('id');",
+                  "  pm.expect(user.email).to.eql(pm.environment.get('email') || pm.collectionVariables.get('email'));",
+                  "});",
+                  "pm.collectionVariables.set('userId', user.id);",
+                  "const setCookies = pm.response.headers.all()",
+                  "  .filter((h) => h.key.toLowerCase() === 'set-cookie')",
+                  "  .map((h) => String(h.value));",
+                  "for (const raw of setCookies) {",
+                  "  const match = raw.match(/crm_session=([^;]+)/);",
+                  "  if (match) pm.collectionVariables.set('crmSession', match[1]);",
+                  "}"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"email\": \"{{email}}\",\n  \"password\": \"{{password}}\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/auth/login"
+          }
+        },
+        {
+          "name": "Me",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('same user', () => {",
+                  "  pm.expect(pm.response.json().user.id).to.eql(pm.collectionVariables.get('userId'));",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          }
+        },
+        {
+          "name": "Products (authed → 200)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "const body = pm.response.json();",
+                  "pm.test('products array', () => pm.expect(body.products).to.be.an('array'));",
+                  "pm.test('pagination', () => {",
+                  "  pm.expect(body.page).to.eql(1);",
+                  "  pm.expect(body.pageSize).to.eql(20);",
+                  "  pm.expect(body.total).to.be.a('number');",
+                  "  pm.expect(body.totalPages).to.be.a('number');",
+                  "});"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/products?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "Logout",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('200', () => pm.response.to.have.status(200));",
+                  "pm.test('ok', () => pm.expect(pm.response.json().ok).to.eql(true));",
+                  "pm.collectionVariables.unset('crmSession');"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "POST",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/logout"
+          }
+        },
+        {
+          "name": "Me (after logout → 401)",
+          "event": [
+            {
+              "listen": "test",
+              "script": {
+                "type": "text/javascript",
+                "exec": [
+                  "pm.test('401', () => pm.response.to.have.status(401));"
+                ]
+              }
+            }
+          ],
+          "request": {
+            "method": "GET",
+            "header": [],
+            "url": "{{baseUrl}}/api/v1/auth/me"
+          }
+        }
+      ]
+    },
+    {
+      "name": "Catalog (after Login, 501 until later issues)",
+      "item": [
+        {
+          "name": "GET /categories",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/categories"
+          }
+        },
+        {
+          "name": "GET /categories/:id",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/categories/replace-me"
+          }
+        },
+        {
+          "name": "GET /products",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/products?page=1&pageSize=20"
+          }
+        },
+        {
+          "name": "POST /products",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"sku\": \"DEMO-1\",\n  \"title\": \"Demo product\",\n  \"description\": \"Until #55 this is 501\",\n  \"price\": 19.99,\n  \"currency\": \"EUR\",\n  \"categoryId\": \"replace-with-leaf-id\",\n  \"condition\": \"GOOD\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/products"
+          }
+        },
+        {
+          "name": "GET /products/:id",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/products/replace-me"
+          }
+        },
+        {
+          "name": "PATCH /products/:id",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"title\": \"Updated title\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/products/replace-me"
+          }
+        },
+        {
+          "name": "DELETE /products/:id",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/products/replace-me"
+          }
+        },
+        {
+          "name": "PATCH /products/:id/status (INACTIVE)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"INACTIVE\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}/status"
+          }
+        },
+        {
+          "name": "PATCH /products/:id/status (ACTIVE)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}/status"
+          }
+        },
+        {
+          "name": "POST /products/:id/sold (with soldPrice)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"soldPrice\": 19.99\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}/sold"
+          }
+        },
+        {
+          "name": "POST /products/:id/sold (empty body)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}/sold"
+          }
+        },
+        {
+          "name": "GET /products/:id (after sold)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}"
+          }
+        },
+        {
+          "name": "POST /products/:id/images",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": [],
+                  "description": "One or more JPEG/PNG/WebP (field name files)"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/products/replace-me/images"
+          }
+        },
+        {
+          "name": "PATCH /products/:id/images",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\"image-id-1\", \"image-id-2\"]\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/products/replace-me/images"
+          }
+        },
+        {
+          "name": "PUT /products/:id/images/:imageId",
+          "request": {
+            "method": "PUT",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/products/replace-me/images/replace-image-id"
+          }
+        },
+        {
+          "name": "DELETE /products/:id/images/:imageId",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/products/replace-me/images/replace-image-id"
+          }
+        },
+        {
+          "name": "GET /products/:id/listing",
+          "request": {
+            "method": "GET",
+            "description": "Listing на default account (#65). Після POST product — status READY_TO_POST, externalUrl null.",
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}/listing"
+          }
+        },
+        {
+          "name": "PUT /products/:id/listing",
+          "request": {
+            "method": "PUT",
+            "description": "Upsert listing (default account). Не передавати accountId. Хоча б одне поле в body.",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"externalUrl\": \"https://es.wallapop.com/item/example\",\n  \"status\": \"ACTIVE\",\n  \"shippingEnabled\": true,\n  \"shippingUpToKg\": 5\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}/listing"
+          }
+        },
+        {
+          "name": "GET /accounts/default",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/accounts/default"
+          }
+        }
+      ]
+    }
+  ]
+}
