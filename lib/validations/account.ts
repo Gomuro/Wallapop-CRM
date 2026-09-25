@@ -5,7 +5,9 @@ export const accountStatusSchema = z.enum(["ACTIVE", "INACTIVE"])
 export const accountCreateSchema = z.object({
   name: z.string().trim().min(1).max(100),
   status: accountStatusSchema.default("ACTIVE"),
-  externalLinks: z.array(z.string().trim().url()).default([]),
+  isDefault: z.boolean().default(false),
+  city: z.string().trim().max(100).nullable().optional(),
+  postalCode: z.string().trim().max(16).nullable().optional(),
 })
 
 export const accountUpdateSchema = accountCreateSchema.partial()
