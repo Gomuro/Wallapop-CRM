@@ -33,7 +33,6 @@ function apiUpstreamRewrites(): { source: string; destination: string }[] {
   const upstream = process.env.API_UPSTREAM?.trim().replace(/\/$/, "")
   if (!upstream) return []
   return [
-    { source: "/api/v1/:path*", destination: `${upstream}/api/v1/:path*` },
     { source: "/uploads/:path*", destination: `${upstream}/uploads/:path*` },
   ]
 }
