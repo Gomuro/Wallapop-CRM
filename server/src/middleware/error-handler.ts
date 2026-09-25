@@ -1,4 +1,5 @@
 import type { NextFunction, Request, Response } from "express"
+import multer from "multer"
 
 import { sendError } from "../lib/http-error"
 
@@ -12,6 +13,16 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ) {
+  if (err instanceof multer.MulterError) {
+    const message =
+      err.code === "LIMIT_FILE_SIZE"
+        ? "Image must be 10MB or smaller."
+        : err.code === "LIMIT_FILE_COUNT"
+          ? "At most 10 files per request."
+          : err.message
+    sendError(res, 400, "VALIDATION_ERROR", message)
+    return
+  }
   console.error(err)
   sendError(res, 500, "INTERNAL", "Internal server error")
 }

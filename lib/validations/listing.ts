@@ -20,6 +20,22 @@ export const productListingUpdateSchema = productListingCreateSchema
   .omit({ productId: true, accountId: true })
   .partial()
 
+export const productListingApiPutBodySchema = z
+  .object({
+    externalUrl: z.string().trim().url().nullable().optional(),
+    status: listingStatusSchema.optional(),
+    shippingEnabled: z.boolean().optional(),
+    shippingUpToKg: z.number().int().positive().nullable().optional(),
+  })
+  .strict()
+  .refine((o) => Object.keys(o).length > 0, {
+    message: "At least one field is required.",
+  })
+
+export type ProductListingApiPutBody = z.infer<
+  typeof productListingApiPutBodySchema
+>
+
 export type ProductListingCreateInput = z.infer<
   typeof productListingCreateSchema
 >

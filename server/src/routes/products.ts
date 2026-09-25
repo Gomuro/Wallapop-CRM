@@ -5,11 +5,19 @@ import { ZodError } from "zod"
 import { assertProductCategoryIsLeaf } from "../../../lib/validations/category"
 import {
   productListQuerySchema,
+  productSoldBodySchema,
   warehouseProductCreateSchema,
+  warehouseProductStatusPatchSchema,
   warehouseProductUpdateSchema,
 } from "../../../lib/validations/product"
+import { deleteLocalImage } from "../../../lib/uploads/delete-local-image"
+import {
+  DEFAULT_ACCOUNT_MISSING_MESSAGE,
+  findDefaultAccountId,
+} from "../lib/default-account"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
+import { toListingJson } from "../lib/listing-json"
 import { isUniqueConstraint, prismaErrorCode } from "../lib/prisma-error"
 
 const productListInclude = {
@@ -21,9 +29,10 @@ const productListInclude = {
   listings: { select: { status: true } },
 }
 
-const productCardInclude = {
+export const productCardInclude = {
   images: { orderBy: { sortOrder: "asc" as const } },
   listings: {
+    where: { account: { isDefault: true } },
     orderBy: { createdAt: "asc" as const },
     take: 1,
     select: {
@@ -46,6 +55,7 @@ const createBodySchema = warehouseProductCreateSchema.omit({
 const updateBodySchema = warehouseProductUpdateSchema.omit({
   soldAt: true,
   soldPrice: true,
+  status: true,
 })
 
 function decimalJson(value: { toString(): string } | null | undefined) {
@@ -53,7 +63,7 @@ function decimalJson(value: { toString(): string } | null | undefined) {
   return Number(value.toString())
 }
 
-function toProductJson(row: {
+export function toProductJson(row: {
   id: string
   sku: string
   title: string
@@ -107,13 +117,13 @@ function toProductJson(row: {
       storageKey: image.storageKey,
       sortOrder: image.sortOrder,
     })),
-    listing: row.listings[0] ?? null,
+    listing: row.listings[0] ? toListingJson(row.listings[0]) : null,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }
 }
 
-function paramId(req: Request) {
+export function paramId(req: Request) {
   const id = req.params.id
   return typeof id === "string" ? id : Array.isArray(id) ? id[0] : ""
 }
@@ -190,7 +200,7 @@ function sendZod(res: Response, error: ZodError) {
   )
 }
 
-async function loadCard(
+export async function loadProductCard(
   prisma: NonNullable<ReturnType<typeof getPrisma>>,
   id: string,
 ) {
@@ -290,12 +300,9 @@ export async function createProduct(req: Request, res: Response) {
 
   if (!(await requireLeafCategory(prisma, body.categoryId, res))) return
 
-  const account = await prisma.account.findFirst({
-    where: { isDefault: true },
-    select: { id: true },
-  })
-  if (!account) {
-    sendError(res, 404, "NOT_FOUND", "Default account is not configured.")
+  const defaultAccountId = await findDefaultAccountId(prisma)
+  if (!defaultAccountId) {
+    sendError(res, 404, "NOT_FOUND", DEFAULT_ACCOUNT_MISSING_MESSAGE)
     return
   }
 
@@ -319,13 +326,13 @@ export async function createProduct(req: Request, res: Response) {
       await tx.productListing.create({
         data: {
           productId: product.id,
-          accountId: account.id,
+          accountId: defaultAccountId,
           status: "READY_TO_POST",
         },
       })
       return product.id
     })
-    const product = await loadCard(prisma, created)
+    const product = await loadProductCard(prisma, created)
     if (!product) {
       sendError(res, 500, "INTERNAL", "Product was not saved.")
       return
@@ -355,7 +362,7 @@ export async function getProduct(req: Request, res: Response) {
     sendError(res, 500, "INTERNAL", "Database is not configured.")
     return
   }
-  const product = await loadCard(prisma, id)
+  const product = await loadProductCard(prisma, id)
   if (!product) {
     sendError(res, 404, "NOT_FOUND", "Product not found.")
     return
@@ -403,7 +410,6 @@ export async function patchProduct(req: Request, res: Response) {
   if (body.condition !== undefined) data.condition = body.condition
   if (body.brand !== undefined) data.brand = body.brand
   if (body.weightKg !== undefined) data.weightKg = body.weightKg
-  if (body.status !== undefined) data.status = body.status
   if (body.typeAttributes !== undefined) {
     data.typeAttributes = body.typeAttributes as Prisma.InputJsonValue
   }
@@ -426,7 +432,148 @@ export async function patchProduct(req: Request, res: Response) {
     throw error
   }
 
-  const product = await loadCard(prisma, id)
+  const product = await loadProductCard(prisma, id)
+  if (!product) {
+    sendError(res, 404, "NOT_FOUND", "Product not found.")
+    return
+  }
+  res.json({ product: toProductJson(product) })
+}
+
+export async function patchProductStatus(req: Request, res: Response) {
+  const id = paramId(req)
+  if (!id) {
+    sendError(res, 404, "NOT_FOUND", "Product not found.")
+    return
+  }
+
+  let body: ReturnType<typeof warehouseProductStatusPatchSchema.parse>
+  try {
+    body = warehouseProductStatusPatchSchema.parse(req.body)
+  } catch (error) {
+    if (error instanceof ZodError) {
+      sendZod(res, error)
+      return
+    }
+    throw error
+  }
+
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+
+  const existing = await prisma.product.findUnique({
+    where: { id },
+    select: { status: true },
+  })
+  if (!existing) {
+    sendError(res, 404, "NOT_FOUND", "Product not found.")
+    return
+  }
+  if (existing.status === "SOLD") {
+    sendError(
+      res,
+      409,
+      "PRODUCT_SOLD",
+      "Sold products cannot change warehouse status.",
+    )
+    return
+  }
+
+  try {
+    await prisma.product.update({
+      where: { id },
+      data: { status: body.status },
+    })
+  } catch (error) {
+    if (prismaErrorCode(error) === "P2025") {
+      sendError(res, 404, "NOT_FOUND", "Product not found.")
+      return
+    }
+    throw error
+  }
+
+  const product = await loadProductCard(prisma, id)
+  if (!product) {
+    sendError(res, 404, "NOT_FOUND", "Product not found.")
+    return
+  }
+  res.json({ product: toProductJson(product) })
+}
+
+export async function postProductSold(req: Request, res: Response) {
+  const id = paramId(req)
+  if (!id) {
+    sendError(res, 404, "NOT_FOUND", "Product not found.")
+    return
+  }
+
+  let body: ReturnType<typeof productSoldBodySchema.parse>
+  try {
+    body = productSoldBodySchema.parse(req.body ?? {})
+  } catch (error) {
+    if (error instanceof ZodError) {
+      sendZod(res, error)
+      return
+    }
+    throw error
+  }
+
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+
+  type SoldTxResult =
+    | { kind: "not_found" }
+    | { kind: "already_sold" }
+    | { kind: "ok" }
+
+  let txResult: SoldTxResult
+  try {
+    txResult = await prisma.$transaction(async (tx) => {
+      const existing = await tx.product.findUnique({
+        where: { id },
+        select: { id: true, status: true, price: true },
+      })
+      if (!existing) return { kind: "not_found" }
+      if (existing.status === "SOLD") return { kind: "already_sold" }
+
+      await tx.product.update({
+        where: { id },
+        data: {
+          status: "SOLD",
+          soldAt: new Date(),
+          soldPrice: body.soldPrice ?? existing.price,
+        },
+      })
+      await tx.productListing.updateMany({
+        where: { productId: id },
+        data: { status: "DEACTIVATED" },
+      })
+      return { kind: "ok" }
+    })
+  } catch (error) {
+    if (prismaErrorCode(error) === "P2025") {
+      sendError(res, 404, "NOT_FOUND", "Product not found.")
+      return
+    }
+    throw error
+  }
+
+  if (txResult.kind === "not_found") {
+    sendError(res, 404, "NOT_FOUND", "Product not found.")
+    return
+  }
+  if (txResult.kind === "already_sold") {
+    sendError(res, 409, "ALREADY_SOLD", "Product is already sold.")
+    return
+  }
+
+  const product = await loadProductCard(prisma, id)
   if (!product) {
     sendError(res, 404, "NOT_FOUND", "Product not found.")
     return
@@ -445,6 +592,14 @@ export async function deleteProduct(req: Request, res: Response) {
     sendError(res, 500, "INTERNAL", "Database is not configured.")
     return
   }
+  const existing = await prisma.product.findUnique({
+    where: { id },
+    select: { images: { select: { storageKey: true } } },
+  })
+  if (!existing) {
+    sendError(res, 404, "NOT_FOUND", "Product not found.")
+    return
+  }
   try {
     await prisma.product.delete({ where: { id } })
   } catch (error) {
@@ -453,6 +608,9 @@ export async function deleteProduct(req: Request, res: Response) {
       return
     }
     throw error
+  }
+  for (const image of existing.images) {
+    await deleteLocalImage(image.storageKey)
   }
   res.json({ ok: true })
 }

@@ -17,5 +17,10 @@ export const productImageUpdateSchema = productImageCreateSchema
   .omit({ productId: true })
   .partial()
 
+export const productImagesReorderSchema = z.object({
+  ids: z.array(z.string().trim().min(1)).min(1).max(10),
+})
+
 export type ProductImageCreateInput = z.infer<typeof productImageCreateSchema>
 export type ProductImageUpdateInput = z.infer<typeof productImageUpdateSchema>
+export type ProductImagesReorderInput = z.infer<typeof productImagesReorderSchema>

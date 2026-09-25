@@ -43,6 +43,8 @@
 | 401 | `UNAUTHORIZED` | Немає/битий токен |
 | 404 | `NOT_FOUND` | Немає ресурсу або невідомий шлях |
 | 409 | `SKU_TAKEN` | Унікальний SKU |
+| 409 | `ALREADY_SOLD` | Повторний `POST …/sold` |
+| 409 | `PRODUCT_SOLD` | `PATCH …/status` на вже проданому SKU |
 | 500 | `INTERNAL` | Несподівана помилка |
 | 501 | `NOT_IMPLEMENTED` | Контракт є, хендлера ще немає |
 
@@ -86,38 +88,85 @@
 | GET | `/api/v1/products` | Пагінація `page` (default 1), `pageSize` (default 20, max 100). Фільтри: `status` (`ALL` \| `ACTIVE` \| `SOLD` \| `INACTIVE`), `q` (SKU або title, case-insensitive), опційно `categoryId`. Сортування: `updatedAt` desc. Відповідь: `{ products: [{ id, sku, title, price, currency, status, categoryId, coverUrl, updatedAt, listingActive }], page, pageSize, total, totalPages }` |
 | POST | `/api/v1/products` | `sku`, `title`, `description`, `price`, `currency` default `EUR`, `categoryId` (листок), `condition` enum, `brand?`, `weightKg?`, `typeAttributes?`. Авто listing на default, статус `READY_TO_POST` |
 | GET | `/api/v1/products/:id` | Картка + images + listing |
-| PATCH | `/api/v1/products/:id` | Часткове оновлення складу |
+| PATCH | `/api/v1/products/:id` | Часткове оновлення складу (**без** `status`, `soldAt`, `soldPrice` — див. Status #57) |
 | DELETE | `/api/v1/products/:id` | |
 
 `condition`: `NEW` \| `AS_GOOD_AS_NEW` \| `GOOD` \| `FAIR` \| `HAS_GIVEN_IT_ALL`.  
-`status`: `ACTIVE` \| `SOLD` \| `INACTIVE`.
+Складський `status` на картці: `ACTIVE` \| `SOLD` \| `INACTIVE` (змінюється лише ендпоінтами #57, не загальним PATCH).
 
 ## Status (#57)
 
 | Метод | Шлях | Нотатки |
 |-------|------|---------|
-| PATCH | `/api/v1/products/:id/status` | `ACTIVE` / `INACTIVE` (не sold) |
-| POST | `/api/v1/products/:id/sold` | Одна транзакція: product `SOLD` + `soldAt` + усі listing `DEACTIVATED` |
+| PATCH | `/api/v1/products/:id/status` | JSON `{ "status": "ACTIVE" \| "INACTIVE" }`. Лише складський статус; listings не чіпаються. **200** `{ product }` (той самий shape, що GET `/:id`). `SOLD` у body → **400** `VALIDATION_ERROR`. Продукт уже `SOLD` → **409** `PRODUCT_SOLD`. |
+| POST | `/api/v1/products/:id/sold` | Опційно `{ "soldPrice": number }` (EUR, як `price`); порожнє `{}` або без body — `soldPrice` = поточний `price`. Одна транзакція: `status` `SOLD`, `soldAt` (серверний now), усі `product_listings` → `DEACTIVATED` (`external_url` не змінюється). **200** `{ product }`. Повтор → **409** `ALREADY_SOLD`. |
 
 ## Photos (#58)
 
-До 10 файлів. `sortOrder` 0 = обкладинка.
+До 10 файлів на продукт. `sortOrder` 0 = обкладинка (`coverUrl` у списку).
 
 | Метод | Шлях | Нотатки |
 |-------|------|---------|
-| POST | `/api/v1/products/:id/images` | `multipart` → диск `UPLOAD_DIR` |
-| PATCH | `/api/v1/products/:id/images` | reorder `{ ids: string[] }` |
-| PUT | `/api/v1/products/:id/images/:imageId` | замінити файл |
-| DELETE | `/api/v1/products/:id/images/:imageId` | |
+| POST | `/api/v1/products/:id/images` | `multipart/form-data`, поле **`files`** (1–10 файлів за запит). JPEG/PNG/WebP, max 10MB, EXIF знімається. Відповідь `{ product }`. |
+| PATCH | `/api/v1/products/:id/images` | JSON `{ "ids": ["…"] }` — **усі** id фото продукту в новому порядку (перший = обкладинка). |
+| PUT | `/api/v1/products/:id/images/:imageId` | `multipart/form-data`, поле **`file`** — заміна файлу, старий файл на диску видаляється. |
+| DELETE | `/api/v1/products/:id/images/:imageId` | Рядок + файл; `sortOrder` решти зжимається 0…n−1. |
+
+Помилки: `NOT_FOUND` (продукт/фото), `VALIDATION_ERROR` (тип/розмір, ліміт 10, невалідний reorder).
 
 ## Listings (#65)
 
-Один default-акаунт. Клієнт не шле `accountId`.
+Один default-акаунт (`accounts.is_default = true`). Клієнт **не** шле `accountId`, `productId`, `externalItemId`, `lastPostedAt`, `lastEditedAt` у body PUT.
 
-| Метод | Шлях | Нотатки |
-|-------|------|---------|
-| GET | `/api/v1/products/:id/listing` | URL + `status` (`READY_TO_POST` \| `ACTIVE` \| `DEACTIVATED`) |
-| PUT | `/api/v1/products/:id/listing` | upsert `externalUrl?`, `status?`, `shippingEnabled?`, `shippingUpToKg?` |
+Після `POST /products` на default вже є рядок `product_listings` з `status: READY_TO_POST`. PUT = **upsert** за `@@unique([productId, accountId])` лише для default.
+
+### `GET /api/v1/products/:id/listing`
+
+**200**
+
+```json
+{
+  "listing": {
+    "id": "cuid",
+    "status": "READY_TO_POST",
+    "externalUrl": null,
+    "externalItemId": null,
+    "shippingEnabled": false,
+    "shippingUpToKg": null,
+    "accountId": "cuid"
+  }
+}
+```
+
+Та сама форма, що вкладений `product.listing` у картці продукту. `externalItemId` лише read-only (етап 2).
+
+| HTTP | code | Коли |
+|------|------|------|
+| 404 | `NOT_FOUND` | Порожній/невідомий `:id`, продукт не існує, немає default account, немає listing для `(product, default)` |
+| 500 | `INTERNAL` | Немає `DATABASE_URL` |
+
+Повідомлення про відсутній default: `Default account is not configured.` (як у `POST /products`).
+
+### `PUT /api/v1/products/:id/listing`
+
+Body (JSON, camelCase): усі поля опційні, **хоча б одне** обов’язкове.
+
+| Поле | Тип |
+|------|-----|
+| `externalUrl` | URL string або `null` (очистити) |
+| `status` | `READY_TO_POST` \| `ACTIVE` \| `DEACTIVATED` |
+| `shippingEnabled` | `boolean` |
+| `shippingUpToKg` | позитивне ціле або `null` |
+
+Зайві ключі в body → **400** `VALIDATION_ERROR`. Порожній `{}` → **400**.
+
+**200** — той самий envelope, що GET. Якщо рядка listing ще не було (рідко) — **create** через upsert.
+
+| HTTP | code | Коли |
+|------|------|------|
+| 400 | `VALIDATION_ERROR` | Zod |
+| 404 | `NOT_FOUND` | Продукт не знайдено або немає default account |
+| 500 | `INTERNAL` | БД не налаштована |
 
 ## Accounts (#64)
 

@@ -288,7 +288,7 @@
           }
         },
         {
-          "name": "PATCH /products/:id/status",
+          "name": "PATCH /products/:id/status (INACTIVE)",
           "request": {
             "method": "PATCH",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
@@ -296,33 +296,126 @@
               "mode": "raw",
               "raw": "{\n  \"status\": \"INACTIVE\"\n}"
             },
-            "url": "{{baseUrl}}/api/v1/products/replace-me/status"
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}/status"
           }
         },
         {
-          "name": "POST /products/:id/sold",
+          "name": "PATCH /products/:id/status (ACTIVE)",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"status\": \"ACTIVE\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}/status"
+          }
+        },
+        {
+          "name": "POST /products/:id/sold (with soldPrice)",
           "request": {
             "method": "POST",
-            "url": "{{baseUrl}}/api/v1/products/replace-me/sold"
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"soldPrice\": 19.99\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}/sold"
+          }
+        },
+        {
+          "name": "POST /products/:id/sold (empty body)",
+          "request": {
+            "method": "POST",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{}"
+            },
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}/sold"
+          }
+        },
+        {
+          "name": "GET /products/:id (after sold)",
+          "request": {
+            "method": "GET",
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}"
+          }
+        },
+        {
+          "name": "POST /products/:id/images",
+          "request": {
+            "method": "POST",
+            "header": [],
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "files",
+                  "type": "file",
+                  "src": [],
+                  "description": "One or more JPEG/PNG/WebP (field name files)"
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/products/replace-me/images"
+          }
+        },
+        {
+          "name": "PATCH /products/:id/images",
+          "request": {
+            "method": "PATCH",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"ids\": [\"image-id-1\", \"image-id-2\"]\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/products/replace-me/images"
+          }
+        },
+        {
+          "name": "PUT /products/:id/images/:imageId",
+          "request": {
+            "method": "PUT",
+            "body": {
+              "mode": "formdata",
+              "formdata": [
+                {
+                  "key": "file",
+                  "type": "file",
+                  "src": []
+                }
+              ]
+            },
+            "url": "{{baseUrl}}/api/v1/products/replace-me/images/replace-image-id"
+          }
+        },
+        {
+          "name": "DELETE /products/:id/images/:imageId",
+          "request": {
+            "method": "DELETE",
+            "url": "{{baseUrl}}/api/v1/products/replace-me/images/replace-image-id"
           }
         },
         {
           "name": "GET /products/:id/listing",
           "request": {
             "method": "GET",
-            "url": "{{baseUrl}}/api/v1/products/replace-me/listing"
+            "description": "Listing на default account (#65). Після POST product — status READY_TO_POST, externalUrl null.",
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}/listing"
           }
         },
         {
           "name": "PUT /products/:id/listing",
           "request": {
             "method": "PUT",
+            "description": "Upsert listing (default account). Не передавати accountId. Хоча б одне поле в body.",
             "header": [{ "key": "Content-Type", "value": "application/json" }],
             "body": {
               "mode": "raw",
-              "raw": "{\n  \"externalUrl\": \"https://es.wallapop.com/item/example\",\n  \"status\": \"READY_TO_POST\",\n  \"shippingEnabled\": true\n}"
+              "raw": "{\n  \"externalUrl\": \"https://es.wallapop.com/item/example\",\n  \"status\": \"ACTIVE\",\n  \"shippingEnabled\": true,\n  \"shippingUpToKg\": 5\n}"
             },
-            "url": "{{baseUrl}}/api/v1/products/replace-me/listing"
+            "url": "{{baseUrl}}/api/v1/products/{{productId}}/listing"
           }
         },
         {

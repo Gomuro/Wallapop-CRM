@@ -18,10 +18,7 @@ export const productImageUrlSchema = z
   .trim()
   .min(1, "Invalid image URL")
   .refine(
-    (value) =>
-      value.startsWith("/uploads/") ||
-      value.startsWith("data:image/") ||
-      URL.canParse(value),
+    (value) => value.startsWith("/uploads/") || URL.canParse(value),
     "Invalid image URL",
   )
 
@@ -116,6 +113,16 @@ export const warehouseProductCreateSchema = z.object({
 })
 
 export const warehouseProductUpdateSchema = warehouseProductCreateSchema.partial()
+
+export const warehouseProductStatusPatchSchema = z.object({
+  status: z.enum(["ACTIVE", "INACTIVE"], { error: "Choose a status." }),
+})
+
+export const productSoldBodySchema = z
+  .object({
+    soldPrice: moneySchema.optional(),
+  })
+  .default({})
 
 export const productListStatusFilterSchema = z.enum([
   "ALL",
