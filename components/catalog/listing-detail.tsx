@@ -1,7 +1,6 @@
 import { ExternalLinkIcon } from "lucide-react"
 
 import { ListingStatusBadge } from "@/components/catalog/listing-status-badge"
-import { listingStatusLabel } from "@/lib/inventory/format"
 import type { InventoryListing } from "@/lib/inventory/types"
 import { typeSection } from "@/lib/ui/type"
 
@@ -28,9 +27,6 @@ export function ListingDetailSection({
               className="shrink-0"
             />
           </div>
-          <p className="text-xs text-muted-foreground">
-            {listingStatusLabel(listing.status)}
-          </p>
           {listing.externalUrl ? (
             <a
               href={listing.externalUrl}

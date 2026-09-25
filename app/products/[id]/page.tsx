@@ -78,7 +78,7 @@ export default async function ProductDetailPage({
             alt={product.title}
           />
         </div>
-        <aside className="space-y-4 px-4 pt-4 pb-16 md:px-8 md:pb-8 lg:sticky lg:top-28 lg:col-span-6 lg:self-start lg:px-0 lg:pt-0 lg:pb-0">
+        <aside className="space-y-4 px-4 pt-4 pb-[calc(9rem+env(safe-area-inset-bottom))] md:px-8 md:pb-8 lg:sticky lg:top-28 lg:col-span-6 lg:self-start lg:px-0 lg:pt-0 lg:pb-0">
           <div>
             <div className="flex min-w-0 items-baseline justify-between gap-2">
               <p className={cn(typePrice, "text-primary-text")}>
@@ -127,7 +127,7 @@ export default async function ProductDetailPage({
             >
               Editar producto
             </Button>
-            <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 border-t bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:inset-auto md:z-auto md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
+            <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:inset-auto md:z-auto md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
               <SoldSyncButton
                 productId={product.id}
                 disabled={product.status === "SOLD"}

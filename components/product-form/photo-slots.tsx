@@ -392,7 +392,7 @@ export function PhotoSlots({
                   />
                 </div>
                 {index === 0 ? (
-                  <Badge className="pointer-events-none absolute top-1 left-1 z-10 h-5 max-w-[calc(100%-2.5rem)] bg-background px-1.5 text-[10px] font-medium text-foreground shadow-sm ring-1 ring-border">
+                  <Badge className="pointer-events-none absolute bottom-1 left-1 z-10 h-5 max-w-[calc(100%-0.5rem)] bg-background px-1.5 text-[10px] font-medium text-foreground shadow-sm ring-1 ring-border">
                     Foto principal
                   </Badge>
                 ) : null}
