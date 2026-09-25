@@ -2,8 +2,11 @@ import http from "node:http"
 import https from "node:https"
 import { NextRequest, NextResponse } from "next/server"
 
+import { API_TIMEOUT_MS } from "@/lib/api/http"
+
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
+export const maxDuration = 30
 
 export async function GET(
   request: NextRequest,
@@ -26,6 +29,7 @@ export async function GET(
         port: dest.port || (dest.protocol === "https:" ? 443 : 80),
         path: `${dest.pathname}${dest.search}`,
         method: "GET",
+        timeout: API_TIMEOUT_MS,
       },
       (res) => {
         const chunks: Buffer[] = []

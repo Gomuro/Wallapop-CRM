@@ -3,8 +3,11 @@ import https from "node:https"
 import type { IncomingHttpHeaders } from "node:http"
 import { NextRequest, NextResponse } from "next/server"
 
+import { API_TIMEOUT_MS } from "@/lib/api/http"
+
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
+export const maxDuration = 30
 
 const DROP_REQ = new Set([
   "connection",
@@ -83,7 +86,7 @@ function proxy(
               path: `${dest.pathname}${dest.search}`,
               method,
               headers,
-              timeout: 5_000,
+              timeout: API_TIMEOUT_MS,
             },
             (res) => {
               const chunks: Buffer[] = []

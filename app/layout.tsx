@@ -16,6 +16,8 @@ export const metadata: Metadata = {
   description: "Inventario móvil para anuncios de Wallapop",
 }
 
+export const maxDuration = 30
+
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
     <html
