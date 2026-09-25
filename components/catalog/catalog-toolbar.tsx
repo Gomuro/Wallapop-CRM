@@ -94,13 +94,7 @@ export function CatalogToolbar({
   }
 
   return (
-    <header className="sticky top-0 z-30 space-y-3 border-b bg-background px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:top-14 md:px-8">
-      {pending ? (
-        <div
-          className="absolute inset-x-0 bottom-0 h-0.5 animate-pulse bg-primary"
-          aria-hidden="true"
-        />
-      ) : null}
+    <header className="sticky top-0 z-30 border-b bg-background px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:top-14 md:px-8">
       <h1 className="sr-only">Catálogo</h1>
       <div className="flex flex-col gap-3 md:flex-row md:items-center md:justify-between md:gap-4">
         <div className="relative w-full md:max-w-sm md:flex-1">
@@ -182,6 +176,14 @@ export function CatalogToolbar({
           </div>
         </div>
       </div>
+      {pending ? (
+        <div
+          className="pointer-events-none absolute inset-x-0 -bottom-px h-0.5 overflow-hidden"
+          aria-hidden="true"
+        >
+          <div className="h-full w-1/3 animate-indeterminate-bar bg-primary motion-reduce:w-full motion-reduce:animate-none" />
+        </div>
+      ) : null}
     </header>
   )
 }
