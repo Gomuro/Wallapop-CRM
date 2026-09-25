@@ -30,7 +30,7 @@ type ErrorBody = {
 
 export async function parseApiError(response: Response): Promise<ApiError> {
   let code: ApiErrorCode = "INTERNAL"
-  let message = "Something went wrong. Try again."
+  let message = "Algo ha salido mal. Inténtalo de nuevo."
 
   try {
     const body = (await response.json()) as ErrorBody

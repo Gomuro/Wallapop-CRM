@@ -29,7 +29,7 @@ export const productListingApiPutBodySchema = z
   })
   .strict()
   .refine((o) => Object.keys(o).length > 0, {
-    message: "At least one field is required.",
+    message: "Indica al menos un campo.",
   })
 
 export type ProductListingApiPutBody = z.infer<

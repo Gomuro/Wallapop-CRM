@@ -13,16 +13,16 @@ const COPY: Record<
   { title: string; body: string; hint?: string }
 > = {
   config: {
-    title: "API не налаштовано",
+    title: "API no configurada",
     body:
-      "Застосунок не знає адресу сервера складу. Адміністратор має задати NEXT_PUBLIC_API_PROXY + API_UPSTREAM (Vercel) або NEXT_PUBLIC_API_URL і підняти Express на VPS.",
-    hint: "Локально: кореневий .env → NEXT_PUBLIC_API_URL=http://localhost:4000 і npm run server:dev",
+      "La aplicación no tiene la dirección del servidor. El administrador debe definir NEXT_PUBLIC_API_PROXY + API_UPSTREAM (Vercel) o NEXT_PUBLIC_API_URL y arrancar Express en el VPS.",
+    hint: "En local: .env en la raíz → NEXT_PUBLIC_API_URL=http://localhost:4000 y npm run server:dev",
   },
   unreachable: {
-    title: "Сервер складу недоступний",
+    title: "Servidor no disponible",
     body:
-      "Не вдалося зв’язатися з API. Перевірте, чи працює процес server на VPS, мережу та CORS_ORIGIN для цього сайту.",
-    hint: "Спробуйте оновити сторінку через хвилину.",
+      "No se ha podido contactar con la API. Comprueba que el servidor esté en marcha en el VPS, la red y CORS_ORIGIN para este sitio.",
+    hint: "Prueba a actualizar la página en un minuto.",
   },
 }
 
@@ -49,7 +49,7 @@ export function ApiUnavailable({ reason, className }: Props) {
         className="h-11"
         onClick={() => window.location.reload()}
       >
-        Оновити сторінку
+        Actualizar página
       </Button>
     </div>
   )

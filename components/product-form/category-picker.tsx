@@ -66,7 +66,7 @@ export function CategoryPicker({
       {levels.map((options, depth) => (
         <div key={depth} className="space-y-1.5">
           <Label htmlFor={`category-level-${depth}`}>
-            {depth === 0 ? "Category" : "Subcategory"}
+            {depth === 0 ? "Categoría" : "Subcategoría"}
           </Label>
           <Select
             value={selectedPath[depth] ?? ""}
@@ -80,7 +80,7 @@ export function CategoryPicker({
               className="h-11 w-full data-[size=default]:h-11"
               aria-invalid={Boolean(error)}
             >
-              <SelectValue placeholder="Choose…" />
+              <SelectValue placeholder="Elige…" />
             </SelectTrigger>
             <SelectContent>
               {options.map((item) => (

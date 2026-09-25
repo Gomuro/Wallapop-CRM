@@ -62,7 +62,7 @@ export async function apiServerFetch<T>(
     throw new ApiError(
       0,
       "NETWORK",
-      "Не вдалося підключитися до сервера складу.",
+      "No se ha podido conectar con el servidor.",
     )
   }
 

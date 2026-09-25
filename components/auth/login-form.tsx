@@ -28,7 +28,7 @@ export function LoginForm() {
 
     const trimmedEmail = email.trim()
     if (!trimmedEmail || !password) {
-      setError("Введіть email і пароль")
+      setError("Introduce el email y la contraseña.")
       return
     }
 
@@ -48,13 +48,16 @@ export function LoginForm() {
     <div className="mx-auto w-full max-w-sm">
       <div className="mb-8 text-center">
         <p className="text-lg font-semibold tracking-tight">Wallapop CRM</p>
-        <p className="mt-1 text-sm text-muted-foreground">Вхід для оператора складу</p>
+        <p className="mt-1 text-sm text-muted-foreground">
+          Acceso para el operador
+        </p>
       </div>
 
       {!apiReady ? (
         <p className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
-          API не налаштовано для цього середовища. Вхід не працюватиме, поки не
-          задано NEXT_PUBLIC_API_PROXY (Vercel → VPS) або NEXT_PUBLIC_API_URL.
+          La API no está configurada en este entorno. El acceso no funcionará
+          hasta que se defina NEXT_PUBLIC_API_PROXY (Vercel → VPS) o
+          NEXT_PUBLIC_API_URL.
         </p>
       ) : null}
 
@@ -76,7 +79,7 @@ export function LoginForm() {
         </div>
 
         <div className="flex flex-col gap-2">
-          <Label htmlFor="password">Пароль</Label>
+          <Label htmlFor="password">Contraseña</Label>
           <div className="relative">
             <Input
               id="password"
@@ -93,7 +96,7 @@ export function LoginForm() {
               type="button"
               className="absolute top-1/2 right-1 flex size-10 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
               onClick={() => setShowPassword((open) => !open)}
-              aria-label={showPassword ? "Сховати пароль" : "Показати пароль"}
+              aria-label={showPassword ? "Ocultar contraseña" : "Mostrar contraseña"}
               aria-pressed={showPassword}
             >
               {showPassword ? (
@@ -114,7 +117,7 @@ export function LoginForm() {
           className="mt-2 h-12 w-full text-base md:h-10 md:text-sm"
           disabled={pending}
         >
-          {pending ? "Вхід…" : "Увійти"}
+          {pending ? "Entrando…" : "Entrar"}
         </Button>
       </form>
     </div>

@@ -66,11 +66,11 @@ export function ListingFields({
     return (
       <Card className="gap-3 overflow-visible py-3 shadow-none">
         <CardHeader className="px-3">
-          <h2 className={typeSection}>Де висить</h2>
+          <h2 className={typeSection}>Anuncio en Wallapop</h2>
         </CardHeader>
         <CardContent className="px-3">
           <p className="text-sm text-muted-foreground">
-            Default account is not configured. Listing will appear after setup.
+            La cuenta de Wallapop no está configurada. El anuncio aparecerá cuando se complete la configuración.
           </p>
         </CardContent>
       </Card>
@@ -79,16 +79,16 @@ export function ListingFields({
 
   return (
     <Card className="gap-3 overflow-visible py-3 shadow-none">
-      <CardHeader className="px-3">
-        <h2 className={typeSection}>Де висить</h2>
-        <p className="text-xs text-muted-foreground">
-          One Wallapop listing · saves via PUT, not the main item form.
-        </p>
-      </CardHeader>
+        <CardHeader className="px-3">
+          <h2 className={typeSection}>Anuncio en Wallapop</h2>
+          <p className="text-xs text-muted-foreground">
+            Un anuncio de Wallapop · se guarda aparte del producto.
+          </p>
+        </CardHeader>
       <CardContent className="px-3">
         <form action={formAction} noValidate className="space-y-3">
           <div className="space-y-1.5">
-            <Label htmlFor="externalUrl">Wallapop URL</Label>
+            <Label htmlFor="externalUrl">Enlace de Wallapop</Label>
             <Input
               id="externalUrl"
               name="externalUrl"
@@ -109,13 +109,13 @@ export function ListingFields({
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Leave empty to clear the link.
+                Déjalo vacío para quitar el enlace.
               </p>
             )}
           </div>
 
           <div className="space-y-1.5">
-            <Label htmlFor="listingStatus">Listing status</Label>
+            <Label htmlFor="listingStatus">Estado del anuncio</Label>
             <Select
               value={status}
               onValueChange={(value) => value && setStatus(value as ListingStatus)}
@@ -152,7 +152,7 @@ export function ListingFields({
               className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg border bg-background px-4 text-sm font-medium transition-colors hover:bg-muted"
             >
               <ExternalLinkIcon className="size-4 shrink-0" />
-              Open on Wallapop
+              Abrir en Wallapop
             </a>
           ) : null}
 
@@ -163,7 +163,7 @@ export function ListingFields({
           ) : null}
           {state.success ? (
             <p className="text-sm text-muted-foreground" role="status">
-              Listing saved.
+              Anuncio guardado.
             </p>
           ) : null}
 
@@ -175,7 +175,7 @@ export function ListingFields({
             aria-busy={pending}
           >
             {pending ? <LoaderCircleIcon className="animate-spin" /> : null}
-            {pending ? "Saving listing…" : "Save Wallapop listing"}
+            {pending ? "Guardando anuncio…" : "Guardar anuncio"}
           </Button>
         </form>
       </CardContent>

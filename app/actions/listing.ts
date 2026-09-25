@@ -51,7 +51,7 @@ export async function updateProductListingAction(
   const parsed = productListingApiPutBodySchema.safeParse(formToListingBody(formData))
   if (!parsed.success) {
     return {
-      error: "Check the highlighted fields.",
+      error: "Revisa los campos marcados.",
       fieldErrors: firstFieldError(parsed.error),
     }
   }
@@ -70,6 +70,6 @@ export async function updateProductListingAction(
             : undefined,
       }
     }
-    return { error: "Could not save Wallapop listing. Try again." }
+    return { error: "No se pudo guardar el anuncio de Wallapop. Inténtalo de nuevo." }
   }
 }

@@ -39,7 +39,7 @@ export async function uploadProductImages(
   if (!productId) {
     return {
       urls: [],
-      error: "Save the item first, then add photos.",
+      error: "Guarda el producto primero y después añade fotos.",
     }
   }
 
@@ -83,7 +83,7 @@ export async function reorderProductImagesAction(
       error:
         error instanceof ApiError
           ? error.message
-          : "Could not reorder photos.",
+          : "No se pudieron reordenar las fotos.",
     }
   }
 }
@@ -101,7 +101,7 @@ export async function deleteProductImageAction(
   } catch (error) {
     return {
       error:
-        error instanceof ApiError ? error.message : "Could not delete photo.",
+        error instanceof ApiError ? error.message : "No se pudo eliminar la foto.",
     }
   }
 }

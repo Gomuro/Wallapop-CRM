@@ -28,7 +28,7 @@ export default function GlobalError({
         className="text-sm text-muted-foreground underline"
         onClick={() => reset()}
       >
-        Спробувати ще раз
+        Volver a intentar
       </button>
     </div>
   )

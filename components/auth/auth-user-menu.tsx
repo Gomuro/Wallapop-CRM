@@ -50,10 +50,10 @@ export function AuthUserMenu() {
         size="sm"
         onClick={onLogout}
         disabled={loggingOut}
-        aria-label="Вийти"
+        aria-label="Cerrar sesión"
       >
         <LogOutIcon />
-        <span className="hidden lg:inline">Вийти</span>
+        <span className="hidden lg:inline">Cerrar sesión</span>
       </Button>
     </div>
   )

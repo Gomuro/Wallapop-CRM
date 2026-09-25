@@ -14,10 +14,10 @@ export function ListingDetailSection({
 }) {
   return (
     <div>
-      <p className={typeSection}>Де висить</p>
+      <p className={typeSection}>Anuncio en Wallapop</p>
       {!listing ? (
         <p className="mt-1 text-sm text-muted-foreground">
-          Not on Wallapop yet (no default listing).
+          Aún no está en Wallapop.
         </p>
       ) : (
         <div className="mt-2 space-y-2 rounded-lg border px-3 py-2.5">
@@ -42,7 +42,7 @@ export function ListingDetailSection({
               <span className="min-w-0 truncate">{listing.externalUrl}</span>
             </a>
           ) : (
-            <p className="text-sm text-muted-foreground">No public URL yet.</p>
+            <p className="text-sm text-muted-foreground">Todavía no hay enlace público.</p>
           )}
         </div>
       )}

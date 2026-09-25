@@ -7,10 +7,10 @@ export const productImageCreateSchema = z.object({
   storageKey: z.string().trim().min(1).max(500),
   url: z.string().trim().min(1).max(2000),
   sortOrder: z
-    .number({ error: "Enter a sort order." })
+    .number({ error: "Indica el orden." })
     .int()
-    .min(0, "Cover is sort order 0.")
-    .max(PRODUCT_IMAGE_SORT_MAX, "At most 10 photos (sort order 0–9)."),
+    .min(0, "La portada es el orden 0.")
+    .max(PRODUCT_IMAGE_SORT_MAX, "Como máximo 10 fotos (orden 0–9)."),
 })
 
 export const productImageUpdateSchema = productImageCreateSchema
