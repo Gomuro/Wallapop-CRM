@@ -1,20 +1,26 @@
 import type { NextRequest } from "next/server"
 import { NextResponse } from "next/server"
 
-import { SESSION_COOKIE } from "@/lib/api/config"
+import { isApiProxy, SESSION_COOKIE } from "@/lib/api/config"
 
-function apiBase(): string | null {
+function meUrl(request: NextRequest): string | null {
+  if (isApiProxy()) {
+    return new URL("/api/v1/auth/me", request.url).toString()
+  }
   const upstream = process.env.API_UPSTREAM?.trim().replace(/\/$/, "")
-  if (upstream) return upstream
+  if (upstream) return `${upstream}/api/v1/auth/me`
   const base = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "")
-  return base || null
+  return base ? `${base}/api/v1/auth/me` : null
 }
 
-async function sessionValidOnApi(sessionValue: string): Promise<boolean> {
-  const base = apiBase()
-  if (!base) return false
+async function sessionValidOnApi(
+  request: NextRequest,
+  sessionValue: string,
+): Promise<boolean> {
+  const url = meUrl(request)
+  if (!url) return false
   try {
-    const res = await fetch(`${base}/api/v1/auth/me`, {
+    const res = await fetch(url, {
       headers: { Cookie: `${SESSION_COOKIE}=${sessionValue}` },
       cache: "no-store",
     })
@@ -29,7 +35,7 @@ export async function middleware(request: NextRequest) {
   const session = request.cookies.get(SESSION_COOKIE)?.value
 
   if (pathname === "/login") {
-    if (session && (await sessionValidOnApi(session))) {
+    if (session && (await sessionValidOnApi(request, session))) {
       const target = request.nextUrl.searchParams.get("redirect") || "/"
       const safe = target.startsWith("/") ? target : "/"
       return NextResponse.redirect(new URL(safe, request.url))
@@ -45,11 +51,10 @@ export async function middleware(request: NextRequest) {
   }
 
   if (!session) {
-    // Cross-origin: session cookie lives on API host; client SessionGuard enforces auth.
     return NextResponse.next()
   }
 
-  if (!(await sessionValidOnApi(session))) {
+  if (!(await sessionValidOnApi(request, session))) {
     const loginUrl = new URL("/login", request.url)
     loginUrl.searchParams.set("redirect", pathname)
     const response = NextResponse.redirect(loginUrl)

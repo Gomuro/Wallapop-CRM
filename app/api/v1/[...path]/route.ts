@@ -1,74 +1,115 @@
+import http from "node:http"
+import https from "node:https"
+import type { IncomingHttpHeaders } from "node:http"
 import { NextRequest, NextResponse } from "next/server"
 
 export const dynamic = "force-dynamic"
+export const runtime = "nodejs"
 
-const HOP_BY_HOP = new Set([
+const DROP_REQ = new Set([
   "connection",
-  "content-encoding",
   "content-length",
   "host",
   "keep-alive",
-  "proxy-authenticate",
-  "proxy-authorization",
-  "te",
-  "trailer",
   "transfer-encoding",
-  "upgrade",
 ])
 
-async function proxy(
+const DROP_RES = new Set([
+  "connection",
+  "content-encoding",
+  "content-length",
+  "keep-alive",
+  "transfer-encoding",
+])
+
+function headerList(headers: IncomingHttpHeaders, name: string): string[] {
+  const raw = headers[name]
+  if (!raw) return []
+  return Array.isArray(raw) ? raw : [raw]
+}
+
+function proxy(
   request: NextRequest,
   path: string[],
 ): Promise<NextResponse> {
   const upstream = process.env.API_UPSTREAM?.trim().replace(/\/$/, "")
   if (!upstream) {
-    return NextResponse.json(
-      { error: { code: "API_NOT_CONFIGURED", message: "API_UPSTREAM is not set." } },
-      { status: 503 },
+    return Promise.resolve(
+      NextResponse.json(
+        {
+          error: {
+            code: "API_NOT_CONFIGURED",
+            message: "API_UPSTREAM is not set.",
+          },
+        },
+        { status: 503 },
+      ),
     )
   }
 
-  const dest = `${upstream}/api/v1/${path.join("/")}${request.nextUrl.search}`
-  const headers = new Headers()
-  request.headers.forEach((value, key) => {
-    if (!HOP_BY_HOP.has(key.toLowerCase())) headers.set(key, value)
-  })
-
+  const dest = new URL(
+    `${upstream}/api/v1/${path.join("/")}${request.nextUrl.search}`,
+  )
+  const lib = dest.protocol === "https:" ? https : http
   const method = request.method.toUpperCase()
-  const body =
-    method === "GET" || method === "HEAD" ? undefined : await request.arrayBuffer()
 
-  const upstreamRes = await fetch(dest, {
-    method,
-    headers,
-    body,
-    redirect: "manual",
-    cache: "no-store",
-  })
+  return request
+    .arrayBuffer()
+    .then(
+      (buf) =>
+        new Promise<NextResponse>((resolve, reject) => {
+          const payload =
+            method === "GET" || method === "HEAD"
+              ? undefined
+              : Buffer.from(buf)
 
-  const out = new Headers()
-  upstreamRes.headers.forEach((value, key) => {
-    const lower = key.toLowerCase()
-    if (HOP_BY_HOP.has(lower)) return
-    if (lower === "set-cookie") return
-    if (lower.startsWith("access-control-")) return
-    out.set(key, value)
-  })
+          const headers: Record<string, string> = {}
+          request.headers.forEach((value, key) => {
+            if (!DROP_REQ.has(key.toLowerCase())) headers[key] = value
+          })
+          if (payload) headers["content-length"] = String(payload.length)
 
-  const response = new NextResponse(upstreamRes.body, {
-    status: upstreamRes.status,
-    headers: out,
-  })
+          const req = lib.request(
+            {
+              protocol: dest.protocol,
+              hostname: dest.hostname,
+              port: dest.port || (dest.protocol === "https:" ? 443 : 80),
+              path: `${dest.pathname}${dest.search}`,
+              method,
+              headers,
+            },
+            (res) => {
+              const chunks: Buffer[] = []
+              res.on("data", (chunk) =>
+                chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
+              )
+              res.on("end", () => {
+                const body = Buffer.concat(chunks)
+                const out = new Headers()
+                for (const [key, value] of Object.entries(res.headers)) {
+                  const lower = key.toLowerCase()
+                  if (DROP_RES.has(lower)) continue
+                  if (lower === "set-cookie") continue
+                  if (lower.startsWith("access-control-")) continue
+                  if (typeof value === "string") out.set(key, value)
+                }
 
-  const cookies =
-    typeof upstreamRes.headers.getSetCookie === "function"
-      ? upstreamRes.headers.getSetCookie()
-      : []
-  for (const cookie of cookies) {
-    response.headers.append("set-cookie", cookie)
-  }
-
-  return response
+                const response = new NextResponse(body, {
+                  status: res.statusCode ?? 502,
+                  headers: out,
+                })
+                for (const cookie of headerList(res.headers, "set-cookie")) {
+                  response.headers.append("set-cookie", cookie)
+                }
+                resolve(response)
+              })
+            },
+          )
+          req.on("error", reject)
+          if (payload) req.write(payload)
+          req.end()
+        }),
+    )
 }
 
 type RouteCtx = { params: Promise<{ path: string[] }> }
