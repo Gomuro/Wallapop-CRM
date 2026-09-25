@@ -52,7 +52,14 @@
 
 `GET /health` (і `GET /api/health`) — живий процес, без `/api/v1`.
 
-Перевірка без ручного curl: `npm run server:smoke` (API вже слухає). Postman-колекція: `server/postman/`.
+Перевірка без ручного curl:
+
+| Команда | Що робить |
+|---------|-----------|
+| `npm run test:api` | **Автотести** (#61): Vitest + supertest проти `createApp()` in-process, **реальний Postgres** з `server/.env`. Перед першим запуском: `npm run db:up`, `npm run db:migrate:deploy`, `npm run db:seed`. Не потрібен окремий `server:dev`. |
+| `npm run server:smoke` | Швидкий скрипт проти **вже запущеного** API (`API_ORIGIN` або `http://127.0.0.1:$PORT`). |
+
+Postman-колекція: `server/postman/`.
 
 ---
 

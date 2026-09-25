@@ -21,7 +21,8 @@
     "db:categories:fetch": "npx tsx server/prisma/fetch-wallapop-categories.ts",
     "server:dev": "tsx server/src/index.ts",
     "server:start": "tsx server/src/index.ts",
-    "server:smoke": "tsx server/scripts/smoke.ts"
+    "server:smoke": "tsx server/scripts/smoke.ts",
+    "test:api": "vitest run --config server/vitest.config.ts"
   },
   "dependencies": {
     "@base-ui/react": "^1.8.0",
@@ -64,6 +65,9 @@
     "eslint-config-next": "16.3.6",
     "tailwindcss": "^4",
     "tsx": "^4.23.15",
-    "typescript": "^5"
+    "typescript": "^5",
+    "vitest": "^3.2.4",
+    "supertest": "^7.1.4",
+    "@types/supertest": "^6.0.3"
   }
 }
