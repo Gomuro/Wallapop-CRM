@@ -34,38 +34,14 @@ export function CatalogView({
         startTransition={startTransition}
       />
       <PageContainer className="flex-1 py-3">
-        <div className="relative">
-          <div
-            aria-busy={pending || undefined}
-            className={cn(
-              "transition-opacity duration-200 ease-out",
-              pending && "pointer-events-none opacity-50",
-            )}
-          >
-            {children}
-          </div>
-          {pending ? (
-            <div
-              className={cn(
-                "pointer-events-none absolute inset-x-0 top-0 z-10 grid animate-pulse gap-4 bg-background/70 p-0",
-                view === "list"
-                  ? "grid-cols-1"
-                  : "grid-cols-2 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5",
-              )}
-              aria-hidden="true"
-            >
-              {Array.from({ length: view === "list" ? 3 : 4 }, (_, index) => (
-                <div
-                  key={index}
-                  className={
-                    view === "list"
-                      ? "h-24 rounded-xl bg-muted"
-                      : "aspect-square rounded-xl bg-muted"
-                  }
-                />
-              ))}
-            </div>
-          ) : null}
+        <div
+          aria-busy={pending || undefined}
+          className={cn(
+            "transition-opacity duration-200 ease-out",
+            pending && "pointer-events-none opacity-70",
+          )}
+        >
+          {children}
         </div>
         {pending ? (
           <p className="sr-only" aria-live="polite">
