@@ -2,6 +2,7 @@
 
 import { useRouter, useSearchParams } from "next/navigation"
 import { useState } from "react"
+import { EyeIcon, EyeOffIcon } from "lucide-react"
 
 import { login, loginErrorMessage } from "@/lib/api/auth"
 import { isApiConfigured } from "@/lib/api/config"
@@ -16,6 +17,7 @@ export function LoginForm() {
 
   const [email, setEmail] = useState("")
   const [password, setPassword] = useState("")
+  const [showPassword, setShowPassword] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
   const apiReady = isApiConfigured()
@@ -75,17 +77,32 @@ export function LoginForm() {
 
         <div className="flex flex-col gap-2">
           <Label htmlFor="password">Пароль</Label>
-          <Input
-            id="password"
-            name="password"
-            type="password"
-            autoComplete="current-password"
-            className="h-12 text-base md:h-10 md:text-sm"
-            value={password}
-            onChange={(e) => setPassword(e.target.value)}
-            disabled={pending}
-            required
-          />
+          <div className="relative">
+            <Input
+              id="password"
+              name="password"
+              type={showPassword ? "text" : "password"}
+              autoComplete="current-password"
+              className="h-12 pr-12 text-base md:h-10 md:text-sm"
+              value={password}
+              onChange={(e) => setPassword(e.target.value)}
+              disabled={pending}
+              required
+            />
+            <button
+              type="button"
+              className="absolute top-1/2 right-1 flex size-10 -translate-y-1/2 items-center justify-center rounded-md text-muted-foreground hover:text-foreground"
+              onClick={() => setShowPassword((open) => !open)}
+              aria-label={showPassword ? "Сховати пароль" : "Показати пароль"}
+              aria-pressed={showPassword}
+            >
+              {showPassword ? (
+                <EyeOffIcon className="size-5" />
+              ) : (
+                <EyeIcon className="size-5" />
+              )}
+            </button>
+          </div>
         </div>
 
         {error ? (
