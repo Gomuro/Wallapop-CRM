@@ -52,11 +52,13 @@ const createBodySchema = warehouseProductCreateSchema.omit({
   soldPrice: true,
 })
 
-const updateBodySchema = warehouseProductUpdateSchema.omit({
-  soldAt: true,
-  soldPrice: true,
-  status: true,
-})
+const updateBodySchema = warehouseProductUpdateSchema
+  .omit({
+    soldAt: true,
+    soldPrice: true,
+    status: true,
+  })
+  .strict()
 
 function decimalJson(value: { toString(): string } | null | undefined) {
   if (value == null) return null

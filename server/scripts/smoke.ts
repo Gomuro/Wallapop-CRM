@@ -333,6 +333,19 @@ async function main() {
   }
   ok("GET /api/v1/products (coverUrl)")
 
+  const statusOnCard = await request(
+    "PATCH",
+    `/api/v1/products/${productId}`,
+    { json: { status: "INACTIVE" } },
+  )
+  expectStatus(
+    "PATCH /api/v1/products/:id (reject status on card)",
+    statusOnCard.status,
+    400,
+    statusOnCard.body,
+  )
+  ok("PATCH /api/v1/products/:id (reject status on card)")
+
   const inactive = await request(
     "PATCH",
     `/api/v1/products/${productId}/status`,
