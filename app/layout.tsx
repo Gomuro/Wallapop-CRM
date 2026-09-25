@@ -6,7 +6,7 @@ import { AppShell } from "@/components/shell/app-shell"
 import "./globals.css"
 
 const plusJakarta = Plus_Jakarta_Sans({
-  subsets: ["latin", "latin-ext", "cyrillic-ext"],
+  subsets: ["latin", "cyrillic"],
   variable: "--font-plus-jakarta",
   display: "swap",
 })

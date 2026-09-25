@@ -1,7 +1,7 @@
 "use client"
 
 import { usePathname, useRouter } from "next/navigation"
-import { useEffect, useState } from "react"
+import { useEffect, useRef, useState } from "react"
 
 import { ApiUnavailable } from "@/components/api/api-unavailable"
 import { getMe } from "@/lib/api/auth"
@@ -10,7 +10,6 @@ import { isApiConfigured } from "@/lib/api/config"
 import { ApiError } from "@/lib/api/errors"
 
 type GuardState =
-  | { kind: "checking" }
   | { kind: "ready" }
   | { kind: "unavailable"; reason: ApiUnavailableReason }
 
@@ -28,7 +27,9 @@ function failureReason(error: unknown): ApiUnavailableReason {
 export function SessionGuard({ children }: { children: React.ReactNode }) {
   const router = useRouter()
   const pathname = usePathname()
-  const [state, setState] = useState<GuardState>({ kind: "checking" })
+  const pathnameRef = useRef(pathname)
+  pathnameRef.current = pathname
+  const [state, setState] = useState<GuardState>({ kind: "ready" })
 
   useEffect(() => {
     let cancelled = false
@@ -45,7 +46,7 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
       } catch (error) {
         if (cancelled) return
         if (error instanceof ApiError && error.status === 401) {
-          const redirect = encodeURIComponent(pathname || "/")
+          const redirect = encodeURIComponent(pathnameRef.current || "/")
           router.replace(`/login?redirect=${redirect}`)
           return
         }
@@ -53,21 +54,11 @@ export function SessionGuard({ children }: { children: React.ReactNode }) {
       }
     }
 
-    setState({ kind: "checking" })
     void check()
-
     return () => {
       cancelled = true
     }
-  }, [pathname, router])
-
-  if (state.kind === "checking") {
-    return (
-      <div className="flex min-h-dvh items-center justify-center text-sm text-muted-foreground">
-        Перевірка сесії…
-      </div>
-    )
-  }
+  }, [router])
 
   if (state.kind === "unavailable") {
     return <ApiUnavailable reason={state.reason} className="min-h-dvh" />
