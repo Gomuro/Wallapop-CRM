@@ -52,7 +52,7 @@ export default async function ProductDetailPage({
         <aside className="space-y-4 px-4 pt-4 pb-16 md:px-8 md:pb-8 lg:sticky lg:top-28 lg:col-span-6 lg:self-start lg:px-0 lg:pt-0 lg:pb-0">
           <div>
             <div className="flex min-w-0 items-baseline justify-between gap-2">
-              <p className={cn(typePrice, "text-primary")}>
+              <p className={cn(typePrice, "text-primary-text")}>
                 {formatEuro(product.price)}
               </p>
               <p className={cn(typeMeta, "text-muted-foreground")}>{product.sku}</p>
@@ -60,7 +60,22 @@ export default async function ProductDetailPage({
             <p className="mt-1 text-lg font-medium leading-snug">{product.title}</p>
           </div>
           <div className="flex flex-wrap gap-1.5">
-            <Badge>{statusLabel(product.status)}</Badge>
+            <Badge
+              className={
+                product.status === "ACTIVE"
+                  ? "bg-foreground text-background"
+                  : undefined
+              }
+              variant={
+                product.status === "SOLD"
+                  ? "secondary"
+                  : product.status === "INACTIVE"
+                    ? "outline"
+                    : "default"
+              }
+            >
+              {statusLabel(product.status)}
+            </Badge>
             <Badge variant="outline">{product.category}</Badge>
             <Badge variant="outline">{product.condition}</Badge>
             {product.weight != null ? (

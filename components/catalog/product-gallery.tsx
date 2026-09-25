@@ -3,6 +3,7 @@
 import { useEffect, useRef, useState } from "react"
 import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
 
+import { GALLERY_SIZES, ProductImage } from "@/components/catalog/product-image"
 import { cn } from "@/lib/utils"
 
 export function ProductGallery({
@@ -66,13 +67,16 @@ export function ProductGallery({
           <div className="aspect-square w-full shrink-0 border border-dashed border-border bg-muted" />
         ) : (
           images.map((src, index) => (
-            <div key={`${index}-${src}`} className="min-w-0 flex-[0_0_100%] snap-center">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img
+            <div
+              key={`${index}-${src}`}
+              className="relative aspect-square min-w-0 flex-[0_0_100%] snap-center overflow-hidden bg-muted"
+            >
+              <ProductImage
                 src={src}
                 alt={index === 0 ? alt : ""}
-                className="aspect-square w-full bg-muted object-cover"
-                draggable={false}
+                sizes={GALLERY_SIZES}
+                priority={index === 0}
+                className="object-cover"
               />
             </div>
           ))

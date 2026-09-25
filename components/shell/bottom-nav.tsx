@@ -25,12 +25,12 @@ export function BottomNav() {
           )}
         >
           <LayoutGridIcon
-            className={catalogActive ? "text-primary" : "text-muted-foreground"}
+            className={catalogActive ? "text-primary-text" : "text-foreground"}
           />
           <span
             className={cn(
               typeMeta,
-              catalogActive ? "text-primary" : "text-muted-foreground",
+              catalogActive ? "text-primary-text" : "text-foreground",
             )}
           >
             Catalog
@@ -45,12 +45,12 @@ export function BottomNav() {
           )}
         >
           <PlusIcon
-            className={newItemActive ? "text-primary" : "text-muted-foreground"}
+            className={newItemActive ? "text-primary-text" : "text-foreground"}
           />
           <span
             className={cn(
               typeMeta,
-              newItemActive ? "text-primary" : "text-muted-foreground",
+              newItemActive ? "text-primary-text" : "text-foreground",
             )}
           >
             New item

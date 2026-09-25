@@ -13,7 +13,10 @@ export const productImageUrlSchema = z
   .trim()
   .min(1, "Invalid image URL")
   .refine(
-    (value) => value.startsWith("/uploads/") || URL.canParse(value),
+    (value) =>
+      value.startsWith("/uploads/") ||
+      value.startsWith("data:image/") ||
+      URL.canParse(value),
     "Invalid image URL",
   )
 

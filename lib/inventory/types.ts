@@ -30,6 +30,13 @@ export type ProductListQuery = {
   status?: ProductStatus | "ALL"
 }
 
+export type StatusCounts = {
+  ALL: number
+  ACTIVE: number
+  SOLD: number
+  INACTIVE: number
+}
+
 export type MarkSoldResult =
   | { ok: true; product: InventoryProduct }
   | { ok: false; reason: "not-found" | "already-sold" }

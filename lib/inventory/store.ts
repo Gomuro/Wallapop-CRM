@@ -3,6 +3,7 @@ import "server-only"
 import type { Prisma } from "@/lib/generated/prisma/client"
 import { getPrisma } from "@/lib/db"
 import {
+  memoryCountProductsByStatus,
   memoryCreateProduct,
   memoryDeleteProduct,
   memoryGetProduct,
@@ -15,6 +16,7 @@ import type {
   InventoryProduct,
   MarkSoldResult,
   ProductListQuery,
+  StatusCounts,
 } from "@/lib/inventory/types"
 
 const productInclude = {
@@ -132,6 +134,16 @@ function isNotFoundError(error: unknown) {
   )
 }
 
+function productSearchWhere(q: string): Prisma.ProductWhereInput {
+  if (!q) return {}
+  return {
+    OR: [
+      { title: { contains: q, mode: "insensitive" } },
+      { sku: { contains: q, mode: "insensitive" } },
+    ],
+  }
+}
+
 export async function listProducts(
   query: ProductListQuery = {},
 ): Promise<InventoryProduct[]> {
@@ -139,15 +151,9 @@ export async function listProducts(
   const q = query.q?.trim() ?? ""
 
   return withStore(async (prisma) => {
-    const where: Prisma.ProductWhereInput = {}
-    if (status !== "ALL") {
-      where.status = status
-    }
-    if (q) {
-      where.OR = [
-        { title: { contains: q, mode: "insensitive" } },
-        { sku: { contains: q, mode: "insensitive" } },
-      ]
+    const where: Prisma.ProductWhereInput = {
+      ...productSearchWhere(q),
+      ...(status !== "ALL" ? { status } : {}),
     }
 
     const rows = await prisma.product.findMany({
@@ -158,6 +164,27 @@ export async function listProducts(
 
     return rows.map(toInventoryProduct)
   }, () => memoryListProducts({ q, status }))
+}
+
+export async function countProductsByStatus(
+  q?: string,
+): Promise<StatusCounts> {
+  const query = q?.trim() ?? ""
+
+  return withStore(async (prisma) => {
+    const grouped = await prisma.product.groupBy({
+      by: ["status"],
+      where: productSearchWhere(query),
+      _count: { _all: true },
+    })
+
+    const counts: StatusCounts = { ALL: 0, ACTIVE: 0, SOLD: 0, INACTIVE: 0 }
+    for (const row of grouped) {
+      counts[row.status] = row._count._all
+      counts.ALL += row._count._all
+    }
+    return counts
+  }, () => memoryCountProductsByStatus(query))
 }
 
 export async function getProduct(id: string): Promise<InventoryProduct | null> {

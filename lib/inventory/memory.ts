@@ -1,6 +1,10 @@
 import { nanoid } from "nanoid"
 
-import type { InventoryProduct, MarkSoldResult } from "@/lib/inventory/types"
+import type {
+  InventoryProduct,
+  MarkSoldResult,
+  StatusCounts,
+} from "@/lib/inventory/types"
 import type { ProductCreateInput, ProductUpdateInput } from "@/lib/validations"
 
 const images = (ids: number[]) =>
@@ -258,6 +262,25 @@ export function memoryListProducts(query: {
     })
     .sort((a, b) => (a.updatedAt < b.updatedAt ? 1 : -1))
     .map(cloneProduct)
+}
+
+export function memoryCountProductsByStatus(q?: string): StatusCounts {
+  const query = q?.trim().toLowerCase() ?? ""
+  const counts: StatusCounts = { ALL: 0, ACTIVE: 0, SOLD: 0, INACTIVE: 0 }
+
+  for (const product of state().products) {
+    if (
+      query &&
+      !product.title.toLowerCase().includes(query) &&
+      !product.sku.toLowerCase().includes(query)
+    ) {
+      continue
+    }
+    counts[product.status] += 1
+    counts.ALL += 1
+  }
+
+  return counts
 }
 
 export function memoryGetProduct(id: string): InventoryProduct | null {

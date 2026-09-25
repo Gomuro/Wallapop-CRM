@@ -9,7 +9,7 @@ import sharp from "sharp"
 import {
   isAllowedImageType,
   MAX_IMAGE_BYTES,
-  UPLOAD_DIR,
+  shouldWriteUploadToDisk,
   UPLOAD_PUBLIC_PATH,
   type AllowedImageType,
 } from "@/lib/uploads/config"
@@ -20,11 +20,28 @@ const FORMAT_BY_TYPE: Record<AllowedImageType, "jpeg" | "png" | "webp"> = {
   "image/webp": "webp",
 }
 
+const MIME_BY_FORMAT = {
+  jpeg: "image/jpeg",
+  png: "image/png",
+  webp: "image/webp",
+} as const
+
 const EXT_BY_FORMAT = {
   jpeg: "jpg",
   png: "png",
   webp: "webp",
 } as const
+
+const FS_UNAVAILABLE = new Set(["ENOENT", "EROFS", "EACCES", "EPERM"])
+
+function toDataUri(bytes: Buffer, mime: string) {
+  return `data:${mime};base64,${bytes.toString("base64")}`
+}
+
+function isFsUnavailable(error: unknown) {
+  if (!error || typeof error !== "object" || !("code" in error)) return false
+  return FS_UNAVAILABLE.has(String(error.code))
+}
 
 export async function saveStrippedImage(file: File): Promise<string> {
   if (file.size > MAX_IMAGE_BYTES) {
@@ -55,9 +72,26 @@ export async function saveStrippedImage(file: File): Promise<string> {
     pipeline = pipeline.webp({ quality: 85 })
   }
 
+  const bytes = await pipeline.toBuffer()
+  const mime = MIME_BY_FORMAT[target]
+
+  if (!shouldWriteUploadToDisk()) {
+    return toDataUri(bytes, mime)
+  }
+
   const filename = `${nanoid(16)}.${EXT_BY_FORMAT[target]}`
-  await mkdir(UPLOAD_DIR, { recursive: true })
-  await writeFile(path.join(UPLOAD_DIR, filename), await pipeline.toBuffer())
+  try {
+    await mkdir(path.join(process.cwd(), "public", "uploads"), { recursive: true })
+    await writeFile(
+      path.join(process.cwd(), "public", "uploads", filename),
+      bytes,
+    )
+  } catch (error) {
+    if (isFsUnavailable(error)) {
+      return toDataUri(bytes, mime)
+    }
+    throw error
+  }
 
   return `${UPLOAD_PUBLIC_PATH}/${filename}`
 }

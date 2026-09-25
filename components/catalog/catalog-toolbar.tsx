@@ -1,11 +1,12 @@
 "use client"
 
 import { useRouter } from "next/navigation"
-import { useEffect, useState, useTransition } from "react"
-import { LayoutGridIcon, ListIcon, SearchIcon } from "lucide-react"
+import { useEffect, useState, type TransitionStartFunction } from "react"
+import { LayoutGridIcon, ListIcon, SearchIcon, XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
+import type { StatusCounts } from "@/lib/inventory/types"
 import type { ProductStatus } from "@/lib/validations"
 import { typeMeta } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
@@ -30,17 +31,26 @@ function catalogHref(next: {
   return query ? `/?${query}` : "/"
 }
 
+function stripLeadingWhitespace(value: string) {
+  return value.replace(/^\s+/, "")
+}
+
 export function CatalogToolbar({
   q,
   status,
   view,
+  counts,
+  pending,
+  startTransition,
 }: {
   q: string
   status: "ALL" | ProductStatus
   view: "grid" | "list"
+  counts: StatusCounts
+  pending: boolean
+  startTransition: TransitionStartFunction
 }) {
   const router = useRouter()
-  const [pending, startTransition] = useTransition()
   const [draft, setDraft] = useState(q)
   const [syncedQ, setSyncedQ] = useState(q)
   const [requestedQ, setRequestedQ] = useState(q)
@@ -53,27 +63,34 @@ export function CatalogToolbar({
   useEffect(() => {
     const handle = window.setTimeout(() => {
       const nextQ = draft.trim()
+      if (draft !== nextQ) setDraft(nextQ)
       if (nextQ === q) return
       setRequestedQ(nextQ)
       startTransition(() => {
-        router.replace(catalogHref({ q: draft, status, view }))
+        router.replace(catalogHref({ q: nextQ, status, view }))
       })
     }, 250)
     return () => window.clearTimeout(handle)
-  }, [draft, q, router, status, view])
+  }, [draft, q, router, startTransition, status, view])
 
   function go(next: { q?: string; status?: string; view?: "grid" | "list" }) {
     const nextQ = (next.q ?? draft).trim()
+    if (next.q !== undefined && draft !== nextQ) setDraft(nextQ)
     setRequestedQ(nextQ)
     startTransition(() => {
       router.replace(
         catalogHref({
-          q: next.q ?? draft,
+          q: nextQ,
           status: next.status ?? status,
           view: next.view ?? view,
         }),
       )
     })
+  }
+
+  function clearSearch() {
+    setDraft("")
+    go({ q: "" })
   }
 
   return (
@@ -90,63 +107,81 @@ export function CatalogToolbar({
           <SearchIcon className="pointer-events-none absolute top-1/2 left-3 z-10 size-4 -translate-y-1/2 text-muted-foreground" />
           <Input
             value={draft}
-            onChange={(event) => setDraft(event.target.value)}
+            onChange={(event) =>
+              setDraft(stripLeadingWhitespace(event.target.value))
+            }
+            onBlur={() => {
+              const nextQ = draft.trim()
+              if (nextQ !== draft) setDraft(nextQ)
+            }}
             placeholder="Search SKU or title"
-            className="h-11 w-full pr-2.5 !pl-9"
+            className={cn("h-11 w-full !pl-9", draft ? "pr-11" : "pr-2.5")}
             aria-label="Search catalog"
           />
+          {draft ? (
+            <button
+              type="button"
+              aria-label="Clear search"
+              onClick={clearSearch}
+              className="absolute top-1/2 right-1 z-10 flex size-9 -translate-y-1/2 items-center justify-center rounded-full text-muted-foreground hover:bg-accent hover:text-foreground focus-visible:ring-3 focus-visible:ring-ring/50"
+            >
+              <XIcon className="size-4" />
+            </button>
+          ) : null}
         </div>
         <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center md:w-auto">
           <div className="flex min-w-0 gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
             {STATUS_FILTERS.map((filter) => {
               const active = status === filter.value
+              const count = counts[filter.value]
+              const empty = filter.value !== "ALL" && count === 0
               return (
                 <button
                   key={filter.value}
                   type="button"
+                  disabled={empty && !active}
                   onClick={() => go({ status: filter.value })}
+                  aria-pressed={active}
+                  aria-label={`${filter.label}, ${count} items`}
                   className={cn(
                     typeMeta,
-                    "inline-flex h-11 min-w-11 shrink-0 items-center justify-center rounded-full px-3 transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+                    "inline-flex h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-full px-3 font-semibold transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
                     active
-                      ? "bg-primary/15 text-primary"
-                      : "bg-muted text-muted-foreground hover:bg-accent hover:text-accent-foreground",
+                      ? "bg-foreground text-background"
+                      : "bg-muted text-foreground hover:bg-accent hover:text-accent-foreground",
+                    empty && !active && "opacity-40",
                   )}
                 >
                   {filter.label}
+                  <span className="tabular-nums">({count})</span>
                 </button>
               )
             })}
           </div>
           <div className="flex shrink-0 justify-end gap-1.5">
-          <Button
-            variant={view === "grid" ? "secondary" : "ghost"}
-            size="icon"
-            className="size-11"
-            aria-label="Grid view"
-            aria-pressed={view === "grid"}
-            onClick={() => go({ view: "grid" })}
-          >
-            <LayoutGridIcon />
-          </Button>
-          <Button
-            variant={view === "list" ? "secondary" : "ghost"}
-            size="icon"
-            className="size-11"
-            aria-label="List view"
-            aria-pressed={view === "list"}
-            onClick={() => go({ view: "list" })}
-          >
-            <ListIcon />
-          </Button>
+            <Button
+              variant={view === "grid" ? "secondary" : "ghost"}
+              size="icon"
+              className="size-11"
+              aria-label="Grid view"
+              aria-pressed={view === "grid"}
+              onClick={() => go({ view: "grid" })}
+            >
+              <LayoutGridIcon />
+            </Button>
+            <Button
+              variant={view === "list" ? "secondary" : "ghost"}
+              size="icon"
+              className="size-11"
+              aria-label="List view"
+              aria-pressed={view === "list"}
+              onClick={() => go({ view: "list" })}
+            >
+              <ListIcon />
+            </Button>
           </div>
         </div>
       </div>
-      {pending ? (
-        <p className="sr-only" aria-live="polite">
-          Updating catalog
-        </p>
-      ) : null}
     </header>
   )
 }

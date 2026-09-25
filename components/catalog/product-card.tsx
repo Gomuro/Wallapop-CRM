@@ -1,5 +1,9 @@
-import Link from "next/link"
-
+import { CatalogLink } from "@/components/catalog/catalog-link"
+import {
+  CATALOG_GRID_SIZES,
+  CATALOG_LIST_SIZES,
+  ProductImage,
+} from "@/components/catalog/product-image"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { formatEuro, statusLabel } from "@/lib/inventory/format"
@@ -28,7 +32,15 @@ function OverlayStatusBadge({
         className,
       )}
     >
-      <Badge variant={statusVariant(status)} className="max-w-full shrink truncate shadow-none">
+      <Badge
+        variant={statusVariant(status)}
+        className={cn(
+          "max-w-full shrink truncate shadow-none",
+          status === "ACTIVE" && "bg-foreground text-background",
+          status === "SOLD" && "bg-secondary text-secondary-foreground",
+          status === "INACTIVE" && "border-border bg-background text-foreground",
+        )}
+      >
         {statusLabel(status)}
       </Badge>
     </span>
@@ -44,7 +56,7 @@ function PriceSku({
 }) {
   return (
     <div className="flex min-w-0 items-baseline justify-between gap-2">
-      <p className={cn(typePrice, "shrink-0 text-primary")}>
+      <p className={cn(typePrice, "shrink-0 text-primary-text")}>
         {formatEuro(price)}
       </p>
       <p className={cn(typeMeta, "min-w-0 truncate text-right text-muted-foreground")}>
@@ -57,28 +69,31 @@ function PriceSku({
 export function ProductCard({
   product,
   view,
+  priority = false,
 }: {
   product: InventoryProduct
   view: "grid" | "list"
+  priority?: boolean
 }) {
   const cover = product.images[0]
   const accounts = product.listings.filter((listing) => listing.status !== "DEACTIVATED")
 
   if (view === "list") {
     return (
-      <Link
+      <CatalogLink
         href={`/products/${product.id}`}
-        className="group block rounded-xl outline-none transition-[box-shadow,transform] hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.99]"
+        className="group block touch-manipulation rounded-xl outline-none transition-[box-shadow,transform] hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.99]"
       >
         <Card size="sm" className="flex-row items-stretch gap-0 py-0 shadow-none">
           <div className="relative size-24 shrink-0 overflow-hidden bg-muted">
             {cover ? (
-              // eslint-disable-next-line @next/next/no-img-element
-              <img
+              <ProductImage
                 src={cover}
                 alt=""
+                sizes={CATALOG_LIST_SIZES}
+                priority={priority}
                 className={cn(
-                  "size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]",
+                  "object-cover transition-transform duration-300 group-hover:scale-[1.03]",
                   product.status === "SOLD" && "opacity-70",
                 )}
               />
@@ -110,24 +125,25 @@ export function ProductCard({
             ) : null}
           </div>
         </Card>
-      </Link>
+      </CatalogLink>
     )
   }
 
   return (
-    <Link
+    <CatalogLink
       href={`/products/${product.id}`}
-      className="group flex h-full min-h-0 flex-col rounded-xl bg-card outline-none ring-1 ring-border transition-[box-shadow,transform] duration-200 hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.99]"
+      className="group flex h-full min-h-0 flex-col touch-manipulation rounded-xl bg-card outline-none ring-1 ring-border transition-[box-shadow,transform] duration-200 hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.99]"
     >
       <Card className="h-full gap-0 overflow-hidden py-0 shadow-none ring-0">
         <div className="relative aspect-square shrink-0 overflow-hidden bg-muted">
           {cover ? (
-            // eslint-disable-next-line @next/next/no-img-element
-            <img
+            <ProductImage
               src={cover}
               alt=""
+              sizes={CATALOG_GRID_SIZES}
+              priority={priority}
               className={cn(
-                "size-full object-cover transition-transform duration-300 group-hover:scale-[1.03]",
+                "object-cover transition-transform duration-300 group-hover:scale-[1.03]",
                 product.status === "SOLD" && "opacity-70",
               )}
             />
@@ -153,6 +169,6 @@ export function ProductCard({
           </div>
         </div>
       </Card>
-    </Link>
+    </CatalogLink>
   )
 }
