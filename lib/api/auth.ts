@@ -33,8 +33,14 @@ export async function getMe(cookieHeader?: string) {
 
 export function loginErrorMessage(error: unknown): string {
   if (error instanceof ApiError) {
+    if (error.code === "API_NOT_CONFIGURED") {
+      return "API не налаштовано (NEXT_PUBLIC_API_URL). Зверніться до адміністратора."
+    }
     if (error.code === "NETWORK") return error.message
     if (error.status === 401) return "Невірний email або пароль"
+    if (error.status === 404) {
+      return "Сервер складу недоступний або адреса API невірна."
+    }
     return error.message
   }
   return "Не вдалося увійти. Спробуйте ще раз."

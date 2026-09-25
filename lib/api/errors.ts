@@ -8,6 +8,8 @@ export type ApiErrorCode =
   | "PRODUCT_SOLD"
   | "INTERNAL"
   | "NOT_IMPLEMENTED"
+  | "API_NOT_CONFIGURED"
+  | "NETWORK"
   | (string & {})
 
 export class ApiError extends Error {

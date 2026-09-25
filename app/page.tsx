@@ -1,10 +1,14 @@
 import Link from "next/link"
 
+import { ApiUnavailable } from "@/components/api/api-unavailable"
 import { CatalogEmpty } from "@/components/catalog/catalog-empty"
 import { CatalogView } from "@/components/catalog/catalog-view"
 import { ProductCard } from "@/components/catalog/product-card"
 import { Button } from "@/components/ui/button"
+import { apiUnavailableReason } from "@/lib/api/availability"
+import { isApiConfigured } from "@/lib/api/config"
 import { countProductsByStatus, listProducts } from "@/lib/inventory/store"
+import type { InventoryProduct, StatusCounts } from "@/lib/inventory/types"
 import type { ProductStatus } from "@/lib/validations"
 
 function firstParam(value: string | string[] | undefined) {
@@ -27,13 +31,24 @@ export default async function CatalogPage({
       : "ALL"
   const view = firstParam(params.view) === "list" ? "list" : "grid"
 
-  const [products, counts] = await Promise.all([
-    listProducts({
-      q,
-      status: status as ProductStatus | "ALL",
-    }),
-    countProductsByStatus(q),
-  ])
+  if (!isApiConfigured()) {
+    return <ApiUnavailable reason="config" />
+  }
+
+  let products: InventoryProduct[]
+  let counts: StatusCounts
+  try {
+    ;[products, counts] = await Promise.all([
+      listProducts({
+        q,
+        status: status as ProductStatus | "ALL",
+      }),
+      countProductsByStatus(q),
+    ])
+  } catch (error) {
+    const reason = apiUnavailableReason(error) ?? "unreachable"
+    return <ApiUnavailable reason={reason} />
+  }
 
   const filteredEmpty =
     products.length === 0 && (q.length > 0 || status !== "ALL")

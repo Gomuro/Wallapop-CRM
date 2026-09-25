@@ -3,8 +3,26 @@ import "server-only"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 
-import { apiV1Path } from "@/lib/api/config"
+import { apiV1Path, getPublicApiUrl, isApiConfigured } from "@/lib/api/config"
 import { ApiError, parseApiError } from "@/lib/api/errors"
+
+function assertApiConfigured() {
+  if (!isApiConfigured()) {
+    throw new ApiError(
+      503,
+      "API_NOT_CONFIGURED",
+      "NEXT_PUBLIC_API_URL is not set for this deployment.",
+    )
+  }
+  const base = getPublicApiUrl()
+  if (!base.startsWith("http://") && !base.startsWith("https://")) {
+    throw new ApiError(
+      503,
+      "API_NOT_CONFIGURED",
+      "NEXT_PUBLIC_API_URL must be an absolute http(s) URL.",
+    )
+  }
+}
 
 export type ApiServerFetchOptions = RequestInit & {
   /** When true, 401 is thrown instead of redirecting to `/login`. */
@@ -15,6 +33,7 @@ export async function apiServerFetch<T>(
   path: string,
   init?: ApiServerFetchOptions,
 ): Promise<T> {
+  assertApiConfigured()
   const headerList = await headers()
   const cookie = headerList.get("cookie") ?? ""
   const url = apiV1Path(path)
@@ -31,11 +50,20 @@ export async function apiServerFetch<T>(
     mergedHeaders.set("content-type", "application/json")
   }
 
-  const response = await fetch(url, {
-    ...requestInit,
-    headers: mergedHeaders,
-    cache: "no-store",
-  })
+  let response: Response
+  try {
+    response = await fetch(url, {
+      ...requestInit,
+      headers: mergedHeaders,
+      cache: "no-store",
+    })
+  } catch {
+    throw new ApiError(
+      0,
+      "NETWORK",
+      "Не вдалося підключитися до сервера складу.",
+    )
+  }
 
   if (response.status === 401 && !skipAuthRedirect) {
     redirect("/login")

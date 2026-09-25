@@ -4,6 +4,7 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useState } from "react"
 
 import { login, loginErrorMessage } from "@/lib/api/auth"
+import { isApiConfigured } from "@/lib/api/config"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
@@ -17,6 +18,7 @@ export function LoginForm() {
   const [password, setPassword] = useState("")
   const [error, setError] = useState<string | null>(null)
   const [pending, setPending] = useState(false)
+  const apiReady = isApiConfigured()
 
   async function onSubmit(event: React.FormEvent) {
     event.preventDefault()
@@ -46,6 +48,13 @@ export function LoginForm() {
         <p className="text-lg font-semibold tracking-tight">Wallapop CRM</p>
         <p className="mt-1 text-sm text-muted-foreground">Вхід для оператора складу</p>
       </div>
+
+      {!apiReady ? (
+        <p className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
+          API не налаштовано для цього середовища. Вхід не працюватиме, поки не
+          задано NEXT_PUBLIC_API_URL.
+        </p>
+      ) : null}
 
       <form onSubmit={onSubmit} className="flex flex-col gap-4">
         <div className="flex flex-col gap-2">

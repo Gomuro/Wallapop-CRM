@@ -7,6 +7,11 @@ export function getPublicApiUrl(): string {
   return ""
 }
 
+/** Production/preview builds need an explicit API origin (Express on VPS). */
+export function isApiConfigured(): boolean {
+  return Boolean(process.env.NEXT_PUBLIC_API_URL?.trim())
+}
+
 export function apiV1Path(path: string): string {
   const base = getPublicApiUrl()
   const segment = path.startsWith("/") ? path : `/${path}`

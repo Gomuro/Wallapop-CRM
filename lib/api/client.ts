@@ -1,5 +1,23 @@
-import { apiV1Path } from "@/lib/api/config"
+import { apiV1Path, getPublicApiUrl, isApiConfigured } from "@/lib/api/config"
 import { ApiError, parseApiError } from "@/lib/api/errors"
+
+function assertApiConfigured() {
+  if (!isApiConfigured()) {
+    throw new ApiError(
+      503,
+      "API_NOT_CONFIGURED",
+      "NEXT_PUBLIC_API_URL is not set for this deployment.",
+    )
+  }
+  const base = getPublicApiUrl()
+  if (!base.startsWith("http://") && !base.startsWith("https://")) {
+    throw new ApiError(
+      503,
+      "API_NOT_CONFIGURED",
+      "NEXT_PUBLIC_API_URL must be an absolute http(s) URL.",
+    )
+  }
+}
 
 export type ApiFetchOptions = RequestInit & {
   /** Forward session to Express from Next middleware (server-only). */
@@ -17,19 +35,29 @@ export async function apiClientFetch<T>(
   path: string,
   init?: RequestInit,
 ): Promise<T> {
-  const response = await fetch(apiV1Path(path), {
-    credentials: "include",
-    ...init,
-    headers: {
-      accept: "application/json",
-      ...(init?.body instanceof FormData
-        ? {}
-        : init?.body
-          ? { "content-type": "application/json" }
-          : {}),
-      ...init?.headers,
-    },
-  })
+  assertApiConfigured()
+  let response: Response
+  try {
+    response = await fetch(apiV1Path(path), {
+      credentials: "include",
+      ...init,
+      headers: {
+        accept: "application/json",
+        ...(init?.body instanceof FormData
+          ? {}
+          : init?.body
+            ? { "content-type": "application/json" }
+            : {}),
+        ...init?.headers,
+      },
+    })
+  } catch {
+    throw new ApiError(
+      0,
+      "NETWORK",
+      "Не вдалося підключитися до сервера складу.",
+    )
+  }
 
   if (!response.ok) {
     throw await parseApiError(response)
@@ -65,6 +93,7 @@ export async function apiFetch<T>(
     ? "omit"
     : (init.credentials ?? "include")
 
+  assertApiConfigured()
   let response: Response
   try {
     response = await fetch(apiV1Path(path), {
@@ -74,7 +103,11 @@ export async function apiFetch<T>(
       cache: init.cache ?? "no-store",
     })
   } catch {
-    throw new ApiError(0, "NETWORK", "Не вдалося підключитися до сервера")
+    throw new ApiError(
+      0,
+      "NETWORK",
+      "Не вдалося підключитися до сервера складу.",
+    )
   }
 
   if (!response.ok) {
