@@ -2,6 +2,7 @@ import type { NextFunction, Request, Response } from "express"
 import multer from "multer"
 
 import { sendError } from "../lib/http-error"
+import { log, serializeError } from "../lib/log"
 
 export function notFoundHandler(_req: Request, res: Response) {
   sendError(res, 404, "NOT_FOUND", "Not found")
@@ -9,7 +10,7 @@ export function notFoundHandler(_req: Request, res: Response) {
 
 export function errorHandler(
   err: unknown,
-  _req: Request,
+  req: Request,
   res: Response,
   _next: NextFunction,
 ) {
@@ -23,6 +24,10 @@ export function errorHandler(
     sendError(res, 400, "VALIDATION_ERROR", message)
     return
   }
-  console.error(err)
+  log("error", "unhandled", {
+    method: req.method,
+    path: req.originalUrl,
+    err: serializeError(err),
+  })
   sendError(res, 500, "INTERNAL", "Internal server error")
 }

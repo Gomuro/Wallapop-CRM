@@ -113,9 +113,26 @@ function proxy(
             },
           )
           req.on("timeout", () => {
+            console.error(
+              JSON.stringify({
+                t: new Date().toISOString(),
+                msg: "proxy_timeout",
+                method,
+                path: dest.pathname,
+              }),
+            )
             req.destroy()
           })
-          req.on("error", () => {
+          req.on("error", (err) => {
+            console.error(
+              JSON.stringify({
+                t: new Date().toISOString(),
+                msg: "proxy_error",
+                method,
+                path: dest.pathname,
+                err: err.message,
+              }),
+            )
             finish(
               NextResponse.json(
                 {

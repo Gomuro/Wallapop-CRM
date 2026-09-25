@@ -1,5 +1,7 @@
 import type { Request, Response } from "express"
 
+import { log } from "./log"
+
 export type ApiErrorBody = {
   error: {
     code: string
@@ -13,6 +15,16 @@ export function sendError(
   code: string,
   message: string,
 ) {
+  if (status >= 500) {
+    const req = res.req as Request | undefined
+    log("error", "api_error", {
+      method: req?.method,
+      path: req?.originalUrl,
+      status,
+      code,
+      message,
+    })
+  }
   const body: ApiErrorBody = { error: { code, message } }
   return res.status(status).json(body)
 }

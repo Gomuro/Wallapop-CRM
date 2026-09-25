@@ -4,6 +4,7 @@ import express from "express"
 
 import { UPLOAD_DIR, UPLOAD_PUBLIC_PATH } from "../../lib/uploads/config"
 import { errorHandler, notFoundHandler } from "./middleware/error-handler"
+import { requestLogger } from "./middleware/request-logger"
 import { v1 } from "./routes/v1"
 
 function corsOrigin() {
@@ -37,6 +38,7 @@ export function createApp() {
   app.disable("x-powered-by")
   app.use(cors({ origin: corsOrigin(), credentials: true }))
   app.use(cookieParser())
+  app.use(requestLogger)
   app.use(express.json({ limit: "1mb" }))
   app.use(UPLOAD_PUBLIC_PATH, express.static(UPLOAD_DIR))
 

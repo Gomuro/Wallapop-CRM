@@ -21,3 +21,9 @@ Postman: імпорт `server/postman/Wallapop-CRM.postman_collection.json` + `s
 У Cursor: `server/api.http` (розширення REST Client).
 
 `NEXT_PUBLIC_API_URL` — лише в корневому `.env` (Next/Vercel). `PORT` default `4000` у `server/.env`.
+
+## Логи
+
+Кожен запит (крім `/health`) і кожна помилка пишуться в **`server/logs/server.log`** і в вікно, де запущений `npm run server:start`. Паролі й cookie туди не потрапляють.
+
+На VPS після `git pull` треба **перезапустити** процес API, інакше файл не з’явиться. Якщо файл виріс понад 5 МБ, старий зсувається в `server/logs/server.prev.log`.
