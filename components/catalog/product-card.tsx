@@ -6,6 +6,7 @@ import {
 } from "@/components/catalog/product-image"
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
+import { ListingStatusBadge } from "@/components/catalog/listing-status-badge"
 import { formatEuro, statusLabel } from "@/lib/inventory/format"
 import type { InventoryProduct } from "@/lib/inventory/types"
 import type { ProductStatus } from "@/lib/validations"
@@ -76,7 +77,6 @@ export function ProductCard({
   priority?: boolean
 }) {
   const cover = product.images[0]
-  const accounts = product.listings.filter((listing) => listing.status !== "DEACTIVATED")
 
   if (view === "list") {
     return (
@@ -110,19 +110,9 @@ export function ProductCard({
               <PriceSku price={product.price} sku={product.sku} />
               <p className="mt-0.5 line-clamp-2 text-sm leading-snug">{product.title}</p>
             </div>
-            {accounts.length > 0 ? (
-              <div className="mt-2 flex flex-wrap gap-1">
-                {accounts.map((listing) => (
-                  <Badge
-                    key={listing.id}
-                    variant="outline"
-                    className="max-w-full shrink truncate shadow-none"
-                  >
-                    {listing.accountName}
-                  </Badge>
-                ))}
-              </div>
-            ) : null}
+            <div className="mt-2 flex flex-wrap gap-1">
+              <ListingStatusBadge product={product} />
+            </div>
           </div>
         </Card>
       </CatalogLink>
@@ -157,15 +147,7 @@ export function ProductCard({
           <PriceSku price={product.price} sku={product.sku} />
           <p className="line-clamp-2 min-h-10 text-sm leading-snug">{product.title}</p>
           <div className="mt-auto flex min-h-5 flex-wrap content-start gap-1">
-            {accounts.map((listing) => (
-              <Badge
-                key={listing.id}
-                variant="outline"
-                className="max-w-full shrink truncate shadow-none"
-              >
-                {listing.accountName}
-              </Badge>
-            ))}
+            <ListingStatusBadge product={product} />
           </div>
         </div>
       </Card>

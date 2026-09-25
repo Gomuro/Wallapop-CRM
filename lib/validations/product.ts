@@ -34,6 +34,14 @@ export const productPublishImagesSchema = productImagesSchema.min(
   `Añade al menos ${PRODUCT_IMAGE_MIN} fotos.`,
 )
 
+export const productConditionSchema = z.enum([
+  "NEW",
+  "AS_GOOD_AS_NEW",
+  "GOOD",
+  "FAIR",
+  "HAS_GIVEN_IT_ALL",
+])
+
 export const productCreateSchema = z.object({
   sku: z.string().trim().min(1, "Introduce un SKU.").max(64, "El SKU es demasiado largo."),
   title: z
@@ -50,16 +58,8 @@ export const productCreateSchema = z.object({
     .number({ error: "Introduce un precio válido." })
     .finite("Introduce un precio válido.")
     .nonnegative("El precio no puede ser negativo."),
-  category: z
-    .string()
-    .trim()
-    .min(1, "Elige una categoría.")
-    .max(100, "La categoría es demasiado larga."),
-  condition: z
-    .string()
-    .trim()
-    .min(1, "Elige un estado.")
-    .max(100, "El estado es demasiado largo."),
+  categoryId: z.string().trim().min(1, "Elige una categoría."),
+  condition: productConditionSchema,
   weight: z
     .number({ error: "Introduce un peso válido." })
     .finite("Introduce un peso válido.")
@@ -72,14 +72,6 @@ export const productCreateSchema = z.object({
 })
 
 export const productUpdateSchema = productCreateSchema.partial()
-
-export const productConditionSchema = z.enum([
-  "NEW",
-  "AS_GOOD_AS_NEW",
-  "GOOD",
-  "FAIR",
-  "HAS_GIVEN_IT_ALL",
-])
 
 const moneySchema = z
   .number({ error: "Introduce un precio válido." })

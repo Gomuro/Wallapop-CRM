@@ -1,9 +1,18 @@
 "use client"
 
-import { useActionState, useEffect, useState, type ReactNode } from "react"
+import {
+  useActionState,
+  useEffect,
+  useRef,
+  useState,
+  useTransition,
+  type FormEvent,
+  type ReactNode,
+} from "react"
 import { LoaderCircleIcon } from "lucide-react"
 
 import { PhotoSlots } from "@/components/product-form/photo-slots"
+import { CategoryPicker } from "@/components/product-form/category-picker"
 import { Button } from "@/components/ui/button"
 import { Card, CardContent, CardHeader } from "@/components/ui/card"
 import { Input } from "@/components/ui/input"
@@ -17,23 +26,23 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import type { ProductActionState } from "@/app/actions/products"
-import { statusLabel, categoryLabel, conditionLabel } from "@/lib/inventory/format"
-import {
-  PRODUCT_CATEGORIES,
-  PRODUCT_CONDITIONS,
-  type InventoryProduct,
-} from "@/lib/inventory/types"
-import type { ProductStatus } from "@/lib/validations"
+import { statusLabel } from "@/lib/inventory/format"
+import { PRODUCT_CONDITION_OPTIONS } from "@/lib/inventory/conditions"
+import type { InventoryProduct } from "@/lib/inventory/types"
+import type { ApiCategory } from "@/lib/api/types"
+import type { ProductCondition, ProductStatus } from "@/lib/validations"
 import { typeSection } from "@/lib/ui/type"
 
 const STATUS_OPTIONS: ProductStatus[] = ["ACTIVE", "INACTIVE", "SOLD"]
 
 export function ProductForm({
   product,
+  categories,
   action,
   submitLabel,
 }: {
   product?: InventoryProduct
+  categories: ApiCategory[]
   action: (
     state: ProductActionState,
     formData: FormData,
@@ -41,16 +50,15 @@ export function ProductForm({
   submitLabel: string
 }) {
   const [state, formAction, pending] = useActionState(action, {})
-  const [images, setImages] = useState<string[]>(() =>
-    Array.isArray(product?.images)
-      ? product.images.filter(
-          (item): item is string => typeof item === "string" && item.length > 0,
-        )
-      : [],
+  const [isPending, startTransition] = useTransition()
+  const pendingFilesRef = useRef<File[]>([])
+  const [categoryId, setCategoryId] = useState(product?.categoryId ?? "")
+  const [condition, setCondition] = useState<ProductCondition>(
+    product?.conditionCode ?? "GOOD",
   )
-  const [category, setCategory] = useState(product?.category ?? "Electronics")
-  const [condition, setCondition] = useState(product?.condition ?? "Good")
   const [status, setStatus] = useState<ProductStatus>(product?.status ?? "ACTIVE")
+
+  const saving = pending || isPending
 
   useEffect(() => {
     if (!state.error && !state.fieldErrors) return
@@ -62,18 +70,33 @@ export function ProductForm({
     if (target instanceof HTMLElement) target.focus()
   }, [state])
 
+  function onSubmit(event: FormEvent<HTMLFormElement>) {
+    event.preventDefault()
+    const formData = new FormData(event.currentTarget)
+    pendingFilesRef.current.forEach((file) => formData.append("files", file))
+    startTransition(() => {
+      formAction(formData)
+    })
+  }
+
   return (
     <form
-      action={formAction}
+      onSubmit={onSubmit}
+      encType="multipart/form-data"
       noValidate
       className="flex flex-col gap-4 px-4 py-4 md:px-8 lg:grid lg:grid-cols-12 lg:items-start lg:gap-8 lg:py-6"
     >
       <div className="min-w-0 lg:sticky lg:top-28 lg:col-span-7">
         <FormSection title="Fotos">
           <div id="images" tabIndex={-1} className="scroll-mt-28 outline-none">
-            <PhotoSlots images={images} onChange={setImages} />
+            <PhotoSlots
+              productId={product?.id}
+              productImages={product?.productImages}
+              onPendingFilesChange={(files) => {
+                pendingFilesRef.current = files
+              }}
+            />
           </div>
-          <input type="hidden" name="images" value={JSON.stringify(images)} />
           {state.fieldErrors?.images ? (
             <p id="images-error" className="text-xs text-destructive" role="alert">
               {state.fieldErrors.images}
@@ -159,41 +182,21 @@ export function ProductForm({
             aria-describedby={state.fieldErrors?.weight ? "weight-error" : undefined}
           />
         </Field>
-        <Field label="Categoría" htmlFor="category" error={state.fieldErrors?.category}>
-          <Select
-            name="category"
-            value={category}
-            onValueChange={(value) => value && setCategory(value)}
-            items={Object.fromEntries(
-              PRODUCT_CATEGORIES.map((item) => [item, categoryLabel(item)]),
-            )}
-          >
-            <SelectTrigger
-              id="category"
-              className="h-11 w-full data-[size=default]:h-11"
-              aria-invalid={Boolean(state.fieldErrors?.category)}
-              aria-describedby={
-                state.fieldErrors?.category ? "category-error" : undefined
-              }
-            >
-              <SelectValue />
-            </SelectTrigger>
-            <SelectContent>
-              {PRODUCT_CATEGORIES.map((item) => (
-                <SelectItem key={item} value={item}>
-                  {categoryLabel(item)}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </Field>
+        <div id="categoryId" tabIndex={-1} className="scroll-mt-28 outline-none">
+          <CategoryPicker
+            categories={categories}
+            value={categoryId}
+            onChange={setCategoryId}
+            error={state.fieldErrors?.categoryId}
+          />
+        </div>
         <Field label="Estado" htmlFor="condition" error={state.fieldErrors?.condition}>
           <Select
             name="condition"
             value={condition}
-            onValueChange={(value) => value && setCondition(value)}
+            onValueChange={(value) => value && setCondition(value as ProductCondition)}
             items={Object.fromEntries(
-              PRODUCT_CONDITIONS.map((item) => [item, conditionLabel(item)]),
+              PRODUCT_CONDITION_OPTIONS.map((item) => [item.value, item.label]),
             )}
           >
             <SelectTrigger
@@ -207,9 +210,9 @@ export function ProductForm({
               <SelectValue />
             </SelectTrigger>
             <SelectContent>
-              {PRODUCT_CONDITIONS.map((item) => (
-                <SelectItem key={item} value={item}>
-                  {conditionLabel(item)}
+              {PRODUCT_CONDITION_OPTIONS.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
                 </SelectItem>
               ))}
             </SelectContent>
@@ -258,11 +261,11 @@ export function ProductForm({
         type="submit"
         className="h-12 w-full scroll-mb-28"
         size="lg"
-        disabled={pending}
-        aria-busy={pending}
+        disabled={saving}
+        aria-busy={saving}
       >
-        {pending ? <LoaderCircleIcon className="animate-spin" /> : null}
-        {pending ? "Guardando…" : submitLabel}
+        {saving ? <LoaderCircleIcon className="animate-spin" /> : null}
+        {saving ? "Guardando…" : submitLabel}
       </Button>
       </div>
     </form>

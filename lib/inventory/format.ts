@@ -61,3 +61,46 @@ export function categoryLabel(value: string) {
 export function conditionLabel(value: string) {
   return CONDITION_LABELS[value] ?? value
 }
+
+export function isListingActive(
+  listing: { status: ListingStatus } | null | undefined,
+  listingActive?: boolean,
+) {
+  if (listingActive === true) return true
+  if (listingActive === false) return false
+  return listing?.status === "ACTIVE"
+}
+
+/** Short label for catalog card badge (single default listing). */
+export function listingIndicatorShort(
+  listing: { status: ListingStatus } | null | undefined,
+  listingActive?: boolean,
+): string | null {
+  if (!listing) return null
+  if (isListingActive(listing, listingActive)) return "En Wallapop"
+  if (listing.status === "READY_TO_POST") return "Listo para publicar"
+  if (listing.status === "DEACTIVATED") return "Desactivado"
+  return listingStatusLabel(listing.status)
+}
+
+export function listingBadgeVariant(
+  listing: { status: ListingStatus } | null | undefined,
+  listingActive?: boolean,
+): "default" | "outline" | "secondary" {
+  if (isListingActive(listing, listingActive)) return "default"
+  if (listing?.status === "READY_TO_POST") return "secondary"
+  return "outline"
+}
+
+export function apiErrorMessage(code: string, fallback: string) {
+  switch (code) {
+    case "VALIDATION_ERROR":
+      return fallback
+    case "NOT_FOUND":
+      return fallback
+    case "UNAUTHORIZED":
+      return "Inicia sesión para continuar."
+    default:
+      return fallback
+  }
+}

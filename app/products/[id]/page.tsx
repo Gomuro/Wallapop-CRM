@@ -10,7 +10,13 @@ import {
   DeleteProductButton,
   SoldSyncButton,
 } from "@/components/product-form/product-actions"
-import { formatEuro, listingStatusLabel, statusLabel, categoryLabel, conditionLabel } from "@/lib/inventory/format"
+import { ListingDetailSection } from "@/components/catalog/listing-detail"
+import {
+  categoryLabel,
+  conditionLabel,
+  formatEuro,
+  statusLabel,
+} from "@/lib/inventory/format"
 import { getProduct } from "@/lib/inventory/store"
 import { typeMeta, typePrice, typeScreen, typeSection } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
@@ -82,33 +88,10 @@ export default async function ProductDetailPage({
               <Badge variant="secondary">{product.weight} kg</Badge>
             ) : null}
           </div>
-          <div>
-            <p className={typeSection}>Publicado en</p>
-            {product.listings.length === 0 ? (
-              <p className="mt-1 text-sm text-muted-foreground">
-                Todavía no está en ninguna cuenta.
-              </p>
-            ) : (
-              <ul className="mt-2 space-y-1.5">
-                {product.listings.map((listing) => (
-                  <li
-                    key={listing.id}
-                    className="flex min-w-0 items-center justify-between gap-2 rounded-lg border px-3 py-2 text-sm"
-                  >
-                    <span className="min-w-0 truncate">{listing.accountName}</span>
-                    <Badge
-                      className="shrink-0"
-                      variant={
-                        listing.status === "ACTIVE" ? "default" : "outline"
-                      }
-                    >
-                      {listingStatusLabel(listing.status)}
-                    </Badge>
-                  </li>
-                ))}
-              </ul>
-            )}
-          </div>
+          <ListingDetailSection
+            listing={product.listing}
+            listingActive={product.listingActive}
+          />
           <Separator />
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
             {product.description || "Sin descripción."}

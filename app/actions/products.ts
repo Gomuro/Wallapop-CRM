@@ -4,6 +4,8 @@ import { revalidatePath } from "next/cache"
 import { isRedirectError } from "next/dist/client/components/redirect-error"
 import { redirect } from "next/navigation"
 
+import { apiUploadProductImages } from "@/lib/api/images"
+import { ApiError, apiErrorToFieldErrors } from "@/lib/api/errors"
 import {
   createProduct,
   deleteProduct,
@@ -15,6 +17,7 @@ import {
   productCreateSchema,
   productUpdateSchema,
 } from "@/lib/validations/product"
+import type { ProductCondition, ProductStatus } from "@/lib/validations"
 
 export type ProductActionState = {
   error?: string
@@ -30,41 +33,28 @@ function revalidateProductViews(id?: string) {
   }
 }
 
-function parseImages(raw: FormDataEntryValue | null): string[] {
-  if (typeof raw !== "string" || raw.trim() === "") return []
-  try {
-    const parsed: unknown = JSON.parse(raw)
-    if (!Array.isArray(parsed)) return []
-    return parsed.filter((item): item is string => typeof item === "string")
-  } catch {
-    return []
-  }
+function filesFromFormData(formData: FormData) {
+  return formData
+    .getAll("files")
+    .filter((entry): entry is File => entry instanceof File && entry.size > 0)
 }
 
 function formToPayload(formData: FormData) {
   const weightRaw = String(formData.get("weight") ?? "").trim()
   const priceRaw = String(formData.get("price") ?? "").trim()
+  const conditionRaw = String(formData.get("condition") ?? "GOOD").trim()
 
   return {
     sku: String(formData.get("sku") ?? ""),
     title: String(formData.get("title") ?? ""),
     description: String(formData.get("description") ?? ""),
     price: priceRaw === "" ? Number.NaN : Number(priceRaw),
-    category: String(formData.get("category") ?? ""),
-    condition: String(formData.get("condition") ?? ""),
+    categoryId: String(formData.get("categoryId") ?? ""),
+    condition: conditionRaw as ProductCondition,
     weight: weightRaw === "" ? null : Number(weightRaw),
-    images: parseImages(formData.get("images")),
-    status: String(formData.get("status") || "ACTIVE"),
+    images: [],
+    status: String(formData.get("status") || "ACTIVE") as ProductStatus,
   }
-}
-
-function isUniqueSkuError(error: unknown) {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "code" in error &&
-    error.code === "P2002"
-  )
 }
 
 function firstFieldError(error: {
@@ -78,6 +68,14 @@ function firstFieldError(error: {
     }
   }
   return fieldErrors
+}
+
+async function uploadFilesAfterCreate(productId: string, formData: FormData) {
+  const files = filesFromFormData(formData)
+  if (files.length === 0) return
+  const payload = new FormData()
+  files.forEach((file) => payload.append("files", file))
+  await apiUploadProductImages(productId, payload)
 }
 
 export async function createProductAction(
@@ -94,14 +92,18 @@ export async function createProductAction(
 
   try {
     const product = await createProduct(parsed.data)
+    await uploadFilesAfterCreate(product.id, formData)
     revalidateProductViews(product.id)
     redirect(`/products/${product.id}`)
   } catch (error) {
     if (isRedirectError(error)) throw error
-    if (isUniqueSkuError(error)) {
+    if (error instanceof ApiError) {
+      const fieldErrors = apiErrorToFieldErrors(error)
+      const skuTaken =
+        fieldErrors.sku ?? (error.status === 409 ? "Ese SKU ya existe." : undefined)
       return {
-        error: "Ese SKU ya existe.",
-        fieldErrors: { sku: "Ese SKU ya existe." },
+        error: skuTaken ?? error.message,
+        fieldErrors: skuTaken ? { sku: skuTaken, ...fieldErrors } : fieldErrors,
       }
     }
     return { error: "No se pudo guardar el producto. Inténtalo de nuevo." }
@@ -127,7 +129,10 @@ export async function updateProductAction(
   }
 
   try {
-    const product = await updateProduct(id, parsed.data)
+    const product = await updateProduct(id, parsed.data, {
+      status: parsed.data.status,
+      previousStatus: existing.status,
+    })
     if (!product) {
       return { error: "Producto no encontrado." }
     }
@@ -136,10 +141,13 @@ export async function updateProductAction(
     redirect(`/products/${id}`)
   } catch (error) {
     if (isRedirectError(error)) throw error
-    if (isUniqueSkuError(error)) {
+    if (error instanceof ApiError) {
+      const fieldErrors = apiErrorToFieldErrors(error)
+      const skuTaken =
+        fieldErrors.sku ?? (error.status === 409 ? "Ese SKU ya existe." : undefined)
       return {
-        error: "Ese SKU ya existe.",
-        fieldErrors: { sku: "Ese SKU ya existe." },
+        error: skuTaken ?? error.message,
+        fieldErrors: skuTaken ? { sku: skuTaken, ...fieldErrors } : fieldErrors,
       }
     }
     return { error: "No se pudo guardar el producto. Inténtalo de nuevo." }
@@ -159,7 +167,8 @@ export async function markProductSoldAction(
     if (!result.ok) return { error: SOLD_ERRORS[result.reason] }
     revalidateProductViews(id)
     return {}
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiError) return { error: error.message }
     return { error: "No se pudo marcar como vendido." }
   }
 }
@@ -171,7 +180,8 @@ export async function deleteProductAction(
     const removed = await deleteProduct(id)
     if (!removed) return { error: "Producto no encontrado." }
     revalidateProductViews(id)
-  } catch {
+  } catch (error) {
+    if (error instanceof ApiError) return { error: error.message }
     return { error: "No se pudo eliminar el producto." }
   }
   redirect("/")

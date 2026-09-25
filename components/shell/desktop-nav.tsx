@@ -4,6 +4,7 @@ import Link from "next/link"
 import { usePathname } from "next/navigation"
 import { LayoutGridIcon, PlusIcon } from "lucide-react"
 
+import { AuthUserMenu } from "@/components/auth/auth-user-menu"
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -44,6 +45,7 @@ export function DesktopNav() {
           <PlusIcon />
           Subir producto
         </Link>
+        <AuthUserMenu />
       </nav>
     </header>
   )

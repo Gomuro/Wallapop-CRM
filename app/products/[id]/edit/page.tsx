@@ -3,9 +3,10 @@ import { notFound } from "next/navigation"
 import { ChevronLeftIcon } from "lucide-react"
 
 import { updateProductAction } from "@/app/actions/products"
+import { ListingFields } from "@/components/product-form/listing-fields"
 import { ProductForm } from "@/components/product-form/product-form"
 import { Button } from "@/components/ui/button"
-import { getProduct } from "@/lib/inventory/store"
+import { getProduct, listCategoriesFlat } from "@/lib/inventory/store"
 import { typeScreen } from "@/lib/ui/type"
 
 export default async function EditProductPage({
@@ -14,7 +15,10 @@ export default async function EditProductPage({
   params: Promise<{ id: string }>
 }) {
   const { id } = await params
-  const product = await getProduct(id)
+  const [product, categories] = await Promise.all([
+    getProduct(id),
+    listCategoriesFlat(),
+  ])
   if (!product) notFound()
 
   const action = updateProductAction.bind(null, product.id)
@@ -34,12 +38,18 @@ export default async function EditProductPage({
         </Button>
         <h1 className={typeScreen}>Editar producto</h1>
       </header>
-      <ProductForm
-        key={product.id}
-        product={product}
-        action={action}
-        submitLabel="Guardar"
-      />
+      <div className="flex flex-col gap-4">
+        <ProductForm
+          key={product.id}
+          categories={categories}
+          product={product}
+          action={action}
+          submitLabel="Guardar"
+        />
+        <div className="px-4 pb-8 md:px-8 lg:mx-auto lg:max-w-xl lg:px-0">
+          <ListingFields productId={product.id} listing={product.listing} />
+        </div>
+      </div>
     </>
   )
 }
