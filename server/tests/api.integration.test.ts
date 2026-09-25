@@ -30,10 +30,16 @@ describe("API v1 integration (Express + Postgres)", () => {
     if (loggedIn.res.status !== 200) {
       throw new Error(`login failed: ${loggedIn.res.status} ${JSON.stringify(loggedIn.res.body)}`)
     }
-    const setCookie = loggedIn.res.headers["set-cookie"]
-    if (!setCookie?.some((raw) => raw.startsWith("crm_session="))) {
+    const rawSetCookie = loggedIn.res.headers["set-cookie"]
+    const setCookies =
+      rawSetCookie === undefined
+        ? []
+        : Array.isArray(rawSetCookie)
+          ? rawSetCookie
+          : [rawSetCookie]
+    if (!setCookies.some((raw) => raw.startsWith("crm_session="))) {
       throw new Error(
-        `login missing crm_session cookie (check COOKIE_SECURE in test setup): ${JSON.stringify(setCookie)}`,
+        `login missing crm_session cookie (check COOKIE_SECURE in test setup): ${JSON.stringify(setCookies)}`,
       )
     }
     agent = loggedIn.agent
