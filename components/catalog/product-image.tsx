@@ -20,6 +20,7 @@ export function ProductImage({
   sizes: string
   priority?: boolean
 }) {
+  const isUpload = src.startsWith("/uploads/")
   return (
     <Image
       src={src}
@@ -29,7 +30,7 @@ export function ProductImage({
       quality={75}
       priority={priority}
       fetchPriority={priority ? "high" : "auto"}
-      unoptimized={UNOPTIMIZED_SRC.test(src)}
+      unoptimized={isUpload || UNOPTIMIZED_SRC.test(src)}
       className={className}
     />
   )

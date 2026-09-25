@@ -30,11 +30,7 @@ function apiUploadRemotePatterns(): RemotePattern[] {
 }
 
 function apiUpstreamRewrites(): { source: string; destination: string }[] {
-  const upstream = process.env.API_UPSTREAM?.trim().replace(/\/$/, "")
-  if (!upstream) return []
-  return [
-    { source: "/uploads/:path*", destination: `${upstream}/uploads/:path*` },
-  ]
+  return []
 }
 
 const nextConfig: NextConfig = {
