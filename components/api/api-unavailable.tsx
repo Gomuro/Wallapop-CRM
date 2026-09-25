@@ -15,7 +15,7 @@ const COPY: Record<
   config: {
     title: "API не налаштовано",
     body:
-      "Застосунок не знає адресу сервера складу. Адміністратор має задати NEXT_PUBLIC_API_URL (Vercel) і підняти Express на VPS.",
+      "Застосунок не знає адресу сервера складу. Адміністратор має задати NEXT_PUBLIC_API_PROXY + API_UPSTREAM (Vercel) або NEXT_PUBLIC_API_URL і підняти Express на VPS.",
     hint: "Локально: кореневий .env → NEXT_PUBLIC_API_URL=http://localhost:4000 і npm run server:dev",
   },
   unreachable: {

@@ -5,7 +5,9 @@ type RemotePattern = NonNullable<
 >[number]
 
 function apiUploadRemotePatterns(): RemotePattern[] {
-  const raw = process.env.NEXT_PUBLIC_API_URL?.trim()
+  const raw =
+    process.env.NEXT_PUBLIC_API_URL?.trim() ||
+    process.env.API_UPSTREAM?.trim()
   const candidates = raw
     ? [raw]
     : ["http://localhost:4000", "http://127.0.0.1:4000"]
@@ -27,11 +29,23 @@ function apiUploadRemotePatterns(): RemotePattern[] {
   return patterns
 }
 
+function apiUpstreamRewrites(): { source: string; destination: string }[] {
+  const upstream = process.env.API_UPSTREAM?.trim().replace(/\/$/, "")
+  if (!upstream) return []
+  return [
+    { source: "/api/v1/:path*", destination: `${upstream}/api/v1/:path*` },
+    { source: "/uploads/:path*", destination: `${upstream}/uploads/:path*` },
+  ]
+}
+
 const nextConfig: NextConfig = {
   experimental: {
     serverActions: {
       bodySizeLimit: "12mb",
     },
+  },
+  async rewrites() {
+    return apiUpstreamRewrites()
   },
   images: {
     formats: ["image/avif", "image/webp"],

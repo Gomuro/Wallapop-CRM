@@ -3,7 +3,8 @@ import "server-only"
 import { headers } from "next/headers"
 import { redirect } from "next/navigation"
 
-import { apiV1Path, getPublicApiUrl, isApiConfigured } from "@/lib/api/config"
+import { isApiConfigured } from "@/lib/api/config"
+import { getInternalApiUrl, internalApiV1Path } from "@/lib/api/internal"
 import { ApiError, parseApiError } from "@/lib/api/errors"
 
 function assertApiConfigured() {
@@ -14,12 +15,12 @@ function assertApiConfigured() {
       "NEXT_PUBLIC_API_URL is not set for this deployment.",
     )
   }
-  const base = getPublicApiUrl()
+  const base = getInternalApiUrl()
   if (!base.startsWith("http://") && !base.startsWith("https://")) {
     throw new ApiError(
       503,
       "API_NOT_CONFIGURED",
-      "NEXT_PUBLIC_API_URL must be an absolute http(s) URL.",
+      "API_UPSTREAM or NEXT_PUBLIC_API_URL must be an absolute http(s) URL.",
     )
   }
 }
@@ -36,7 +37,7 @@ export async function apiServerFetch<T>(
   assertApiConfigured()
   const headerList = await headers()
   const cookie = headerList.get("cookie") ?? ""
-  const url = apiV1Path(path)
+  const url = internalApiV1Path(path)
 
   const { skipAuthRedirect, ...requestInit } = init ?? {}
   const mergedHeaders = new Headers(requestInit.headers)

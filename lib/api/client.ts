@@ -10,7 +10,7 @@ function assertApiConfigured() {
     )
   }
   const base = getPublicApiUrl()
-  if (!base.startsWith("http://") && !base.startsWith("https://")) {
+  if (base && !base.startsWith("http://") && !base.startsWith("https://")) {
     throw new ApiError(
       503,
       "API_NOT_CONFIGURED",

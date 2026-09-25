@@ -52,7 +52,7 @@ export function LoginForm() {
       {!apiReady ? (
         <p className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
           API не налаштовано для цього середовища. Вхід не працюватиме, поки не
-          задано NEXT_PUBLIC_API_URL.
+          задано NEXT_PUBLIC_API_PROXY (Vercel → VPS) або NEXT_PUBLIC_API_URL.
         </p>
       ) : null}
 

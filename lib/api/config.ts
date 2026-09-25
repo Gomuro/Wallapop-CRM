@@ -1,15 +1,22 @@
 export const SESSION_COOKIE = "crm_session"
 
+/** Browser stays on Vercel HTTPS; Next rewrites `/api/v1` and `/uploads` to the VPS. */
+export function isApiProxy(): boolean {
+  const flag = process.env.NEXT_PUBLIC_API_PROXY?.trim().toLowerCase()
+  return flag === "1" || flag === "true"
+}
+
 export function getPublicApiUrl(): string {
+  if (isApiProxy()) return ""
   const fromEnv = process.env.NEXT_PUBLIC_API_URL?.trim()
   if (fromEnv) return fromEnv.replace(/\/$/, "")
   if (process.env.NODE_ENV === "development") return "http://localhost:4000"
   return ""
 }
 
-/** Production/preview builds need an explicit API origin (Express on VPS). */
+/** Production/preview: explicit API origin, or same-origin proxy via NEXT_PUBLIC_API_PROXY. */
 export function isApiConfigured(): boolean {
-  return Boolean(process.env.NEXT_PUBLIC_API_URL?.trim())
+  return isApiProxy() || Boolean(process.env.NEXT_PUBLIC_API_URL?.trim())
 }
 
 export function apiV1Path(path: string): string {
@@ -25,7 +32,8 @@ export function resolveMediaUrl(url: string | null | undefined): string {
     return url
   }
   if (url.startsWith("/uploads/")) {
-    return `${getPublicApiUrl()}${url}`
+    const base = getPublicApiUrl()
+    return base ? `${base}${url}` : url
   }
   return url
 }

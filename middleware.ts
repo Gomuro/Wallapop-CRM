@@ -4,6 +4,8 @@ import { NextResponse } from "next/server"
 import { SESSION_COOKIE } from "@/lib/api/config"
 
 function apiBase(): string | null {
+  const upstream = process.env.API_UPSTREAM?.trim().replace(/\/$/, "")
+  if (upstream) return upstream
   const base = process.env.NEXT_PUBLIC_API_URL?.replace(/\/$/, "")
   return base || null
 }
