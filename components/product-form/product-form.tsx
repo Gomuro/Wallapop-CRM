@@ -1,7 +1,9 @@
 "use client"
 
+import { useRouter } from "next/navigation"
 import {
   useActionState,
+  useCallback,
   useEffect,
   useRef,
   useState,
@@ -26,6 +28,11 @@ import {
 } from "@/components/ui/select"
 import { Textarea } from "@/components/ui/textarea"
 import type { ProductActionState } from "@/app/actions/products"
+import {
+  OfflineSkuError,
+  rememberOfflineCategories,
+  upsertOfflineProduct,
+} from "@/lib/offline/cache"
 import { statusLabel } from "@/lib/inventory/format"
 import { PRODUCT_CONDITION_OPTIONS } from "@/lib/inventory/conditions"
 import type { InventoryProduct } from "@/lib/inventory/types"
@@ -49,7 +56,30 @@ export function ProductForm({
   ) => Promise<ProductActionState>
   submitLabel: string
 }) {
-  const [state, formAction, pending] = useActionState(action, {})
+  const router = useRouter()
+  const submitAction = useCallback(
+    async (prev: ProductActionState, formData: FormData) => {
+      const result = await action(prev, formData)
+      if (!result.offlineDraft) return result
+      try {
+        rememberOfflineCategories(categories)
+        const saved = upsertOfflineProduct(result.offlineDraft, categories)
+        router.push(`/products/${saved.id}`)
+        router.refresh()
+        return {}
+      } catch (error) {
+        if (error instanceof OfflineSkuError) {
+          return {
+            error: error.message,
+            fieldErrors: { sku: error.message },
+          }
+        }
+        return { error: "No se pudo guardar el producto en este dispositivo." }
+      }
+    },
+    [action, categories, router],
+  )
+  const [state, formAction, pending] = useActionState(submitAction, {})
   const [isPending, startTransition] = useTransition()
   const pendingFilesRef = useRef<File[]>([])
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? "")

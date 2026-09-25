@@ -1,60 +1,58 @@
+"use client"
+
 import Link from "next/link"
-import { notFound } from "next/navigation"
+import { useRouter } from "next/navigation"
 import { ChevronLeftIcon } from "lucide-react"
 
-import { ApiUnavailable } from "@/components/api/api-unavailable"
 import { ProductGallery } from "@/components/catalog/product-gallery"
+import { ListingDetailSection } from "@/components/catalog/listing-detail"
+import { OfflineBanner } from "@/components/offline/offline-banner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
-import {
-  DeleteProductButton,
-  SoldSyncButton,
-} from "@/components/product-form/product-actions"
-import { ListingDetailSection } from "@/components/catalog/listing-detail"
+import { deleteOfflineProduct, markOfflineProductSold } from "@/lib/offline/cache"
+import { useOfflineProduct } from "@/lib/offline/use-offline-cache"
 import {
   categoryLabel,
   conditionLabel,
   formatEuro,
   statusLabel,
 } from "@/lib/inventory/format"
-import { OfflineProductDetail } from "@/components/offline/offline-product-detail"
-import { ProductCacheHydrator } from "@/components/offline/product-cache-hydrator"
-import { apiUnavailableReason, isTransportFailure } from "@/lib/api/availability"
-import { isApiConfigured } from "@/lib/api/config"
-import { getProduct } from "@/lib/inventory/store"
 import { typeMeta, typePrice, typeScreen } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
 
-export default async function ProductDetailPage({
-  params,
-}: {
-  params: Promise<{ id: string }>
-}) {
-  if (!isApiConfigured()) {
-    return <ApiUnavailable reason="config" />
+export function OfflineProductDetail({ id }: { id: string }) {
+  const router = useRouter()
+  const product = useOfflineProduct(id)
+
+  if (product === undefined) {
+    return (
+      <>
+        <OfflineBanner />
+        <p className="px-4 py-8 text-sm text-muted-foreground">Cargando producto…</p>
+      </>
+    )
   }
 
-  const { id } = await params
-  if (id.startsWith("offline_")) {
-    return <OfflineProductDetail id={id} />
+  if (!product) {
+    return (
+      <>
+        <OfflineBanner />
+        <div className="flex flex-col items-center gap-3 px-6 py-16 text-center">
+          <p className="text-sm text-muted-foreground">
+            Este producto no está en la caché de este dispositivo.
+          </p>
+          <Button className="h-11" nativeButton={false} render={<Link href="/" />}>
+            Volver al catálogo
+          </Button>
+        </div>
+      </>
+    )
   }
-
-  let product: Awaited<ReturnType<typeof getProduct>>
-  try {
-    product = await getProduct(id)
-  } catch (error) {
-    if (isTransportFailure(error)) {
-      return <OfflineProductDetail id={id} />
-    }
-    const reason = apiUnavailableReason(error) ?? "unreachable"
-    return <ApiUnavailable reason={reason} />
-  }
-  if (!product) notFound()
 
   return (
     <>
-      <ProductCacheHydrator product={product} />
+      <OfflineBanner />
       <header className="sticky top-0 z-30 flex items-center gap-1 border-b bg-background px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:top-14 md:px-8">
         <Button
           variant="ghost"
@@ -66,17 +64,11 @@ export default async function ProductDetailPage({
         >
           <ChevronLeftIcon />
         </Button>
-        <h1 className={cn(typeScreen, "min-w-0 flex-1 truncate")}>
-          {product.title}
-        </h1>
+        <h1 className={cn(typeScreen, "min-w-0 flex-1 truncate")}>{product.title}</h1>
       </header>
       <div className="lg:grid lg:grid-cols-12 lg:items-start lg:gap-8 lg:px-8 lg:py-6">
         <div className="min-w-0 lg:col-span-6">
-          <ProductGallery
-            key={product.id}
-            images={product.images}
-            alt={product.title}
-          />
+          <ProductGallery images={product.images} alt={product.title} />
         </div>
         <aside className="space-y-4 px-4 pt-4 pb-16 md:px-8 md:pb-8 lg:sticky lg:top-28 lg:col-span-6 lg:self-start lg:px-0 lg:pt-0 lg:pb-0">
           <div>
@@ -91,9 +83,7 @@ export default async function ProductDetailPage({
           <div className="flex flex-wrap gap-1.5">
             <Badge
               className={
-                product.status === "ACTIVE"
-                  ? "bg-foreground text-background"
-                  : undefined
+                product.status === "ACTIVE" ? "bg-foreground text-background" : undefined
               }
               variant={
                 product.status === "SOLD"
@@ -127,13 +117,27 @@ export default async function ProductDetailPage({
             >
               Editar producto
             </Button>
-            <div className="fixed inset-x-0 bottom-[calc(3.5rem+env(safe-area-inset-bottom))] z-30 border-t bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:inset-auto md:z-auto md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
-              <SoldSyncButton
-                productId={product.id}
-                disabled={product.status === "SOLD"}
-              />
-            </div>
-            <DeleteProductButton productId={product.id} />
+            <Button
+              className="h-12 w-full"
+              variant={product.status === "SOLD" ? "secondary" : "default"}
+              disabled={product.status === "SOLD"}
+              onClick={() => {
+                markOfflineProductSold(product.id)
+              }}
+            >
+              {product.status === "SOLD" ? "Vendido" : "Marcar como vendido"}
+            </Button>
+            <Button
+              className="h-12 w-full text-destructive"
+              variant="ghost"
+              onClick={() => {
+                deleteOfflineProduct(product.id)
+                router.push("/")
+                router.refresh()
+              }}
+            >
+              Eliminar
+            </Button>
           </div>
         </aside>
       </div>

@@ -1,5 +1,6 @@
-import { apiV1Path, getPublicApiUrl, isApiConfigured } from "@/lib/api/config"
+import { clientApiV1Path, getPublicApiUrl, isApiConfigured } from "@/lib/api/config"
 import { ApiError, parseApiError } from "@/lib/api/errors"
+import { jsonApiHeaders, withApiTimeout } from "@/lib/api/http"
 
 function assertApiConfigured() {
   if (!isApiConfigured()) {
@@ -38,19 +39,14 @@ export async function apiClientFetch<T>(
   assertApiConfigured()
   let response: Response
   try {
-    response = await fetch(apiV1Path(path), {
-      credentials: "include",
-      ...init,
-      headers: {
-        accept: "application/json",
-        ...(init?.body instanceof FormData
-          ? {}
-          : init?.body
-            ? { "content-type": "application/json" }
-            : {}),
-        ...init?.headers,
-      },
-    })
+    response = await fetch(
+      clientApiV1Path(path),
+      withApiTimeout({
+        credentials: "include",
+        ...init,
+        headers: jsonApiHeaders(init?.headers, init?.body),
+      }),
+    )
   } catch {
     throw new ApiError(
       0,
@@ -71,22 +67,10 @@ export async function apiFetch<T>(
   options: ApiFetchOptions = {},
 ): Promise<{ data: T; response: Response }> {
   const { cookieHeader, ...init } = options
-  const headers = new Headers({
-    accept: "application/json",
-    ...(init.headers as HeadersInit),
-  })
+  const headers = jsonApiHeaders(init.headers, init.body)
 
   if (cookieHeader) {
     headers.set("Cookie", cookieHeader)
-  }
-
-  const hasBody = init.body !== undefined && init.body !== null
-  if (
-    hasBody &&
-    !(init.body instanceof FormData) &&
-    !headers.has("content-type")
-  ) {
-    headers.set("content-type", "application/json")
   }
 
   const credentials: RequestCredentials | undefined = cookieHeader
@@ -96,12 +80,15 @@ export async function apiFetch<T>(
   assertApiConfigured()
   let response: Response
   try {
-    response = await fetch(apiV1Path(path), {
-      ...init,
-      headers,
-      credentials,
-      cache: init.cache ?? "no-store",
-    })
+    response = await fetch(
+      clientApiV1Path(path),
+      withApiTimeout({
+        ...init,
+        headers,
+        credentials,
+        cache: init.cache ?? "no-store",
+      }),
+    )
   } catch {
     throw new ApiError(
       0,

@@ -7,7 +7,9 @@ import { ApiUnavailable } from "@/components/api/api-unavailable"
 import { ListingFields } from "@/components/product-form/listing-fields"
 import { ProductForm } from "@/components/product-form/product-form"
 import { Button } from "@/components/ui/button"
-import { apiUnavailableReason } from "@/lib/api/availability"
+import { CategoryCacheHydrator } from "@/components/offline/category-cache-hydrator"
+import { OfflineEditProduct } from "@/components/offline/offline-edit-product"
+import { apiUnavailableReason, isTransportFailure } from "@/lib/api/availability"
 import { isApiConfigured } from "@/lib/api/config"
 import { getProduct, listCategoriesFlat } from "@/lib/inventory/store"
 import { typeScreen } from "@/lib/ui/type"
@@ -22,6 +24,10 @@ export default async function EditProductPage({
   }
 
   const { id } = await params
+  if (id.startsWith("offline_")) {
+    return <OfflineEditProduct id={id} />
+  }
+
   let product: Awaited<ReturnType<typeof getProduct>>
   let categories: Awaited<ReturnType<typeof listCategoriesFlat>>
   try {
@@ -30,6 +36,9 @@ export default async function EditProductPage({
       listCategoriesFlat(),
     ])
   } catch (error) {
+    if (isTransportFailure(error)) {
+      return <OfflineEditProduct id={id} />
+    }
     const reason = apiUnavailableReason(error) ?? "unreachable"
     return <ApiUnavailable reason={reason} />
   }
@@ -39,6 +48,7 @@ export default async function EditProductPage({
 
   return (
     <>
+      <CategoryCacheHydrator categories={categories} />
       <header className="sticky top-0 z-30 flex items-center gap-1 border-b bg-background px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:top-14 md:px-8">
         <Button
           variant="ghost"

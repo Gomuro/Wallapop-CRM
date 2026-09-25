@@ -1,8 +1,11 @@
 "use client"
 
+import Link from "next/link"
 import { useEffect } from "react"
 
 import { ApiUnavailable } from "@/components/api/api-unavailable"
+import { OfflineBanner } from "@/components/offline/offline-banner"
+import { Button } from "@/components/ui/button"
 import { isApiConfigured } from "@/lib/api/config"
 
 export default function GlobalError({
@@ -21,15 +24,24 @@ export default function GlobalError({
   }
 
   return (
-    <div className="flex min-h-dvh flex-col items-center justify-center gap-4 px-6 text-center">
-      <ApiUnavailable reason="unreachable" className="min-h-0 py-0" />
-      <button
-        type="button"
-        className="text-sm text-muted-foreground underline"
-        onClick={() => reset()}
-      >
-        Volver a intentar
-      </button>
+    <div className="flex flex-col">
+      <OfflineBanner />
+      <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+        <p className="max-w-md text-sm text-muted-foreground">
+          Puedes seguir usando el catálogo guardado en este dispositivo.
+        </p>
+        <Button type="button" className="h-11" onClick={() => reset()}>
+          Volver a intentar
+        </Button>
+        <Button
+          variant="outline"
+          className="h-11"
+          nativeButton={false}
+          render={<Link href="/" />}
+        >
+          Ir al catálogo
+        </Button>
+      </div>
     </div>
   )
 }

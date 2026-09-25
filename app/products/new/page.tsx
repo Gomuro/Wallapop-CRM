@@ -3,9 +3,11 @@ import { ChevronLeftIcon } from "lucide-react"
 
 import { createProductAction } from "@/app/actions/products"
 import { ApiUnavailable } from "@/components/api/api-unavailable"
+import { CategoryCacheHydrator } from "@/components/offline/category-cache-hydrator"
+import { OfflineNewProduct } from "@/components/offline/offline-new-product"
 import { ProductForm } from "@/components/product-form/product-form"
 import { Button } from "@/components/ui/button"
-import { apiUnavailableReason } from "@/lib/api/availability"
+import { apiUnavailableReason, isTransportFailure } from "@/lib/api/availability"
 import { isApiConfigured } from "@/lib/api/config"
 import { listCategoriesFlat } from "@/lib/inventory/store"
 import type { ApiCategory } from "@/lib/api/types"
@@ -20,11 +22,15 @@ export default async function NewProductPage() {
   try {
     categories = await listCategoriesFlat()
   } catch (error) {
+    if (isTransportFailure(error)) {
+      return <OfflineNewProduct />
+    }
     const reason = apiUnavailableReason(error) ?? "unreachable"
     return <ApiUnavailable reason={reason} />
   }
   return (
     <>
+      <CategoryCacheHydrator categories={categories} />
       <header className="sticky top-0 z-30 flex items-center gap-1 border-b bg-background px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:top-14 md:px-8">
         <Button
           variant="ghost"

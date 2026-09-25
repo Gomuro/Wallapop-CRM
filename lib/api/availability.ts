@@ -26,3 +26,12 @@ export function apiUnavailableReason(
 export function isApiUnavailableError(error: unknown): boolean {
   return apiUnavailableReason(error) !== null
 }
+
+/** Network, timeout, CORS, or upstream outage. Validation and auth errors are excluded. */
+export function isTransportFailure(error: unknown): boolean {
+  if (!(error instanceof ApiError)) return false
+  if (error.code === "NETWORK") return true
+  if (error.status === 0 || error.status === 404 || error.status === 408) return true
+  if (error.status >= 500) return true
+  return false
+}

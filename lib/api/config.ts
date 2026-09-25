@@ -25,6 +25,25 @@ export function apiV1Path(path: string): string {
   return `${base}/api/v1${segment}`
 }
 
+/**
+ * Browser calls stay on HTTPS. An `http://` VPS URL from an https page is mixed
+ * content and the browser drops the request, so those calls go through `/api/v1`.
+ */
+export function getClientApiBase(): string {
+  const base = getPublicApiUrl()
+  if (typeof window === "undefined") return base
+  if (window.location.protocol === "https:" && base.startsWith("http://")) {
+    return ""
+  }
+  return base
+}
+
+export function clientApiV1Path(path: string): string {
+  const base = getClientApiBase()
+  const segment = path.startsWith("/") ? path : `/${path}`
+  return `${base}/api/v1${segment}`
+}
+
 /** Absolute URL for `/uploads/…` paths served by Express. */
 export function resolveMediaUrl(url: string | null | undefined): string {
   if (!url) return ""

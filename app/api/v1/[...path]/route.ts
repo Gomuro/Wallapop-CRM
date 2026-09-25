@@ -57,7 +57,13 @@ function proxy(
     .arrayBuffer()
     .then(
       (buf) =>
-        new Promise<NextResponse>((resolve, reject) => {
+        new Promise<NextResponse>((resolve) => {
+          let settled = false
+          const finish = (response: NextResponse) => {
+            if (settled) return
+            settled = true
+            resolve(response)
+          }
           const payload =
             method === "GET" || method === "HEAD"
               ? undefined
@@ -77,6 +83,7 @@ function proxy(
               path: `${dest.pathname}${dest.search}`,
               method,
               headers,
+              timeout: 5_000,
             },
             (res) => {
               const chunks: Buffer[] = []
@@ -101,11 +108,26 @@ function proxy(
                 for (const cookie of headerList(res.headers, "set-cookie")) {
                   response.headers.append("set-cookie", cookie)
                 }
-                resolve(response)
+                finish(response)
               })
             },
           )
-          req.on("error", reject)
+          req.on("timeout", () => {
+            req.destroy()
+          })
+          req.on("error", () => {
+            finish(
+              NextResponse.json(
+                {
+                  error: {
+                    code: "NETWORK",
+                    message: "No se ha podido conectar con el servidor.",
+                  },
+                },
+                { status: 502 },
+              ),
+            )
+          })
           if (payload) req.write(payload)
           req.end()
         }),

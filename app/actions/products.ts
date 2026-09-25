@@ -4,8 +4,10 @@ import { revalidatePath } from "next/cache"
 import { isRedirectError } from "next/dist/client/components/redirect-error"
 import { redirect } from "next/navigation"
 
+import { isTransportFailure } from "@/lib/api/availability"
 import { apiUploadProductImages } from "@/lib/api/images"
 import { ApiError, apiErrorToFieldErrors } from "@/lib/api/errors"
+import type { OfflineProductDraft } from "@/lib/offline/types"
 import {
   createProduct,
   deleteProduct,
@@ -22,6 +24,7 @@ import type { ProductCondition, ProductStatus } from "@/lib/validations"
 export type ProductActionState = {
   error?: string
   fieldErrors?: Record<string, string>
+  offlineDraft?: OfflineProductDraft
 }
 
 function revalidateProductViews(id?: string) {
@@ -90,13 +93,25 @@ export async function createProductAction(
     }
   }
 
+  let product: Awaited<ReturnType<typeof createProduct>>
   try {
-    const product = await createProduct(parsed.data)
-    await uploadFilesAfterCreate(product.id, formData)
-    revalidateProductViews(product.id)
-    redirect(`/products/${product.id}`)
+    product = await createProduct(parsed.data)
   } catch (error) {
     if (isRedirectError(error)) throw error
+    if (isTransportFailure(error)) {
+      return {
+        offlineDraft: {
+          sku: parsed.data.sku,
+          title: parsed.data.title,
+          description: parsed.data.description,
+          price: parsed.data.price,
+          categoryId: parsed.data.categoryId,
+          condition: parsed.data.condition,
+          weight: parsed.data.weight,
+          status: parsed.data.status,
+        },
+      }
+    }
     if (error instanceof ApiError) {
       const fieldErrors = apiErrorToFieldErrors(error)
       const skuTaken =
@@ -108,6 +123,15 @@ export async function createProductAction(
     }
     return { error: "No se pudo guardar el producto. Inténtalo de nuevo." }
   }
+
+  try {
+    await uploadFilesAfterCreate(product.id, formData)
+  } catch (error) {
+    if (isRedirectError(error)) throw error
+  }
+
+  revalidateProductViews(product.id)
+  redirect(`/products/${product.id}`)
 }
 
 export async function updateProductAction(
@@ -115,17 +139,55 @@ export async function updateProductAction(
   _prev: ProductActionState,
   formData: FormData,
 ): Promise<ProductActionState> {
-  const existing = await getProduct(id)
-  if (!existing) {
-    return { error: "Producto no encontrado." }
-  }
-
   const parsed = productUpdateSchema.safeParse(formToPayload(formData))
   if (!parsed.success) {
     return {
       error: "Revisa los campos marcados.",
       fieldErrors: firstFieldError(parsed.error),
     }
+  }
+
+  const offlineFromForm = (): ProductActionState | null => {
+    if (
+      !parsed.data.sku ||
+      !parsed.data.title ||
+      parsed.data.price == null ||
+      !parsed.data.categoryId ||
+      !parsed.data.condition ||
+      !parsed.data.status
+    ) {
+      return null
+    }
+    return {
+      offlineDraft: {
+        id,
+        sku: parsed.data.sku,
+        title: parsed.data.title,
+        description: parsed.data.description ?? "",
+        price: parsed.data.price,
+        categoryId: parsed.data.categoryId,
+        condition: parsed.data.condition,
+        weight: parsed.data.weight,
+        status: parsed.data.status,
+      },
+    }
+  }
+
+  let existing: Awaited<ReturnType<typeof getProduct>>
+  try {
+    existing = await getProduct(id)
+  } catch (error) {
+    if (isTransportFailure(error)) {
+      return (
+        offlineFromForm() ?? {
+          error: "No se pudo guardar el producto. Inténtalo de nuevo.",
+        }
+      )
+    }
+    throw error
+  }
+  if (!existing) {
+    return { error: "Producto no encontrado." }
   }
 
   try {
@@ -141,6 +203,23 @@ export async function updateProductAction(
     redirect(`/products/${id}`)
   } catch (error) {
     if (isRedirectError(error)) throw error
+    if (isTransportFailure(error)) {
+      return {
+        offlineDraft: {
+          id,
+          sku: parsed.data.sku ?? existing.sku,
+          title: parsed.data.title ?? existing.title,
+          description: parsed.data.description ?? existing.description,
+          price: parsed.data.price ?? existing.price,
+          categoryId: parsed.data.categoryId ?? existing.categoryId,
+          condition: parsed.data.condition ?? existing.conditionCode,
+          weight:
+            parsed.data.weight === undefined ? existing.weight : parsed.data.weight,
+          status: parsed.data.status ?? existing.status,
+          images: existing.images,
+        },
+      }
+    }
     if (error instanceof ApiError) {
       const fieldErrors = apiErrorToFieldErrors(error)
       const skuTaken =

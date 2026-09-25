@@ -6,6 +6,7 @@ import { redirect } from "next/navigation"
 import { isApiConfigured } from "@/lib/api/config"
 import { getInternalApiUrl, internalApiV1Path } from "@/lib/api/internal"
 import { ApiError, parseApiError } from "@/lib/api/errors"
+import { jsonApiHeaders, withApiTimeout } from "@/lib/api/http"
 
 function assertApiConfigured() {
   if (!isApiConfigured()) {
@@ -40,24 +41,19 @@ export async function apiServerFetch<T>(
   const url = internalApiV1Path(path)
 
   const { skipAuthRedirect, ...requestInit } = init ?? {}
-  const mergedHeaders = new Headers(requestInit.headers)
-  mergedHeaders.set("accept", "application/json")
+  const mergedHeaders = jsonApiHeaders(requestInit.headers, requestInit.body)
   mergedHeaders.set("cookie", cookie)
-  if (
-    requestInit.body != null &&
-    !(requestInit.body instanceof FormData) &&
-    !mergedHeaders.has("content-type")
-  ) {
-    mergedHeaders.set("content-type", "application/json")
-  }
 
   let response: Response
   try {
-    response = await fetch(url, {
-      ...requestInit,
-      headers: mergedHeaders,
-      cache: "no-store",
-    })
+    response = await fetch(
+      url,
+      withApiTimeout({
+        ...requestInit,
+        headers: mergedHeaders,
+        cache: "no-store",
+      }),
+    )
   } catch {
     throw new ApiError(
       0,
