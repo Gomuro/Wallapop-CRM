@@ -4,10 +4,8 @@ import { revalidatePath } from "next/cache"
 import { isRedirectError } from "next/dist/client/components/redirect-error"
 import { redirect } from "next/navigation"
 
-import { isTransportFailure } from "@/lib/api/availability"
 import { apiUploadProductImages } from "@/lib/api/images"
 import { ApiError, apiErrorToFieldErrors } from "@/lib/api/errors"
-import type { OfflineProductDraft } from "@/lib/offline/types"
 import {
   createProduct,
   deleteProduct,
@@ -24,7 +22,6 @@ import type { ProductCondition, ProductStatus } from "@/lib/validations"
 export type ProductActionState = {
   error?: string
   fieldErrors?: Record<string, string>
-  offlineDraft?: OfflineProductDraft
 }
 
 function revalidateProductViews(id?: string) {
@@ -73,6 +70,19 @@ function firstFieldError(error: {
   return fieldErrors
 }
 
+function transportOrUnknownError(error: unknown): ProductActionState {
+  if (error instanceof ApiError) {
+    const fieldErrors = apiErrorToFieldErrors(error)
+    const skuTaken =
+      fieldErrors.sku ?? (error.status === 409 ? "Ese SKU ya existe." : undefined)
+    return {
+      error: skuTaken ?? error.message,
+      fieldErrors: skuTaken ? { sku: skuTaken, ...fieldErrors } : fieldErrors,
+    }
+  }
+  return { error: "No se pudo guardar el producto. Inténtalo de nuevo." }
+}
+
 async function uploadFilesAfterCreate(productId: string, formData: FormData) {
   const files = filesFromFormData(formData)
   if (files.length === 0) return
@@ -98,36 +108,18 @@ export async function createProductAction(
     product = await createProduct(parsed.data)
   } catch (error) {
     if (isRedirectError(error)) throw error
-    if (isTransportFailure(error)) {
-      return {
-        offlineDraft: {
-          sku: parsed.data.sku,
-          title: parsed.data.title,
-          description: parsed.data.description,
-          price: parsed.data.price,
-          categoryId: parsed.data.categoryId,
-          condition: parsed.data.condition,
-          weight: parsed.data.weight,
-          status: parsed.data.status,
-        },
-      }
-    }
-    if (error instanceof ApiError) {
-      const fieldErrors = apiErrorToFieldErrors(error)
-      const skuTaken =
-        fieldErrors.sku ?? (error.status === 409 ? "Ese SKU ya existe." : undefined)
-      return {
-        error: skuTaken ?? error.message,
-        fieldErrors: skuTaken ? { sku: skuTaken, ...fieldErrors } : fieldErrors,
-      }
-    }
-    return { error: "No se pudo guardar el producto. Inténtalo de nuevo." }
+    return transportOrUnknownError(error)
   }
 
   try {
     await uploadFilesAfterCreate(product.id, formData)
   } catch (error) {
     if (isRedirectError(error)) throw error
+    revalidateProductViews(product.id)
+    return {
+      error:
+        "El producto se creó, pero no se pudieron subir las fotos. Ábrelo y súbelas de nuevo.",
+    }
   }
 
   revalidateProductViews(product.id)
@@ -147,44 +139,12 @@ export async function updateProductAction(
     }
   }
 
-  const offlineFromForm = (): ProductActionState | null => {
-    if (
-      !parsed.data.sku ||
-      !parsed.data.title ||
-      parsed.data.price == null ||
-      !parsed.data.categoryId ||
-      !parsed.data.condition ||
-      !parsed.data.status
-    ) {
-      return null
-    }
-    return {
-      offlineDraft: {
-        id,
-        sku: parsed.data.sku,
-        title: parsed.data.title,
-        description: parsed.data.description ?? "",
-        price: parsed.data.price,
-        categoryId: parsed.data.categoryId,
-        condition: parsed.data.condition,
-        weight: parsed.data.weight,
-        status: parsed.data.status,
-      },
-    }
-  }
-
   let existing: Awaited<ReturnType<typeof getProduct>>
   try {
     existing = await getProduct(id)
   } catch (error) {
-    if (isTransportFailure(error)) {
-      return (
-        offlineFromForm() ?? {
-          error: "No se pudo guardar el producto. Inténtalo de nuevo.",
-        }
-      )
-    }
-    throw error
+    if (isRedirectError(error)) throw error
+    return transportOrUnknownError(error)
   }
   if (!existing) {
     return { error: "Producto no encontrado." }
@@ -203,33 +163,7 @@ export async function updateProductAction(
     redirect(`/products/${id}`)
   } catch (error) {
     if (isRedirectError(error)) throw error
-    if (isTransportFailure(error)) {
-      return {
-        offlineDraft: {
-          id,
-          sku: parsed.data.sku ?? existing.sku,
-          title: parsed.data.title ?? existing.title,
-          description: parsed.data.description ?? existing.description,
-          price: parsed.data.price ?? existing.price,
-          categoryId: parsed.data.categoryId ?? existing.categoryId,
-          condition: parsed.data.condition ?? existing.conditionCode,
-          weight:
-            parsed.data.weight === undefined ? existing.weight : parsed.data.weight,
-          status: parsed.data.status ?? existing.status,
-          images: existing.images,
-        },
-      }
-    }
-    if (error instanceof ApiError) {
-      const fieldErrors = apiErrorToFieldErrors(error)
-      const skuTaken =
-        fieldErrors.sku ?? (error.status === 409 ? "Ese SKU ya existe." : undefined)
-      return {
-        error: skuTaken ?? error.message,
-        fieldErrors: skuTaken ? { sku: skuTaken, ...fieldErrors } : fieldErrors,
-      }
-    }
-    return { error: "No se pudo guardar el producto. Inténtalo de nuevo." }
+    return transportOrUnknownError(error)
   }
 }
 

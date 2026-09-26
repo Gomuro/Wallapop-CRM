@@ -3,10 +3,9 @@ import { ChevronLeftIcon } from "lucide-react"
 
 import { createProductAction } from "@/app/actions/products"
 import { ApiUnavailable } from "@/components/api/api-unavailable"
-import { OfflineNewProduct } from "@/components/offline/offline-new-product"
 import { ProductForm } from "@/components/product-form/product-form"
 import { Button } from "@/components/ui/button"
-import { apiUnavailableReason, isTransportFailure } from "@/lib/api/availability"
+import { apiUnavailableReason } from "@/lib/api/availability"
 import { isApiConfigured } from "@/lib/api/config"
 import { listCategoryRoots } from "@/lib/inventory/store"
 import type { ApiCategory } from "@/lib/api/types"
@@ -21,9 +20,6 @@ export default async function NewProductPage() {
   try {
     roots = await listCategoryRoots()
   } catch (error) {
-    if (isTransportFailure(error)) {
-      return <OfflineNewProduct />
-    }
     const reason = apiUnavailableReason(error) ?? "unreachable"
     return <ApiUnavailable reason={reason} />
   }

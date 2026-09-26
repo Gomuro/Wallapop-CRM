@@ -7,8 +7,7 @@ import { ApiUnavailable } from "@/components/api/api-unavailable"
 import { ListingFields } from "@/components/product-form/listing-fields"
 import { ProductForm } from "@/components/product-form/product-form"
 import { Button } from "@/components/ui/button"
-import { OfflineEditProduct } from "@/components/offline/offline-edit-product"
-import { apiUnavailableReason, isTransportFailure } from "@/lib/api/availability"
+import { apiUnavailableReason } from "@/lib/api/availability"
 import { isApiConfigured } from "@/lib/api/config"
 import { getProduct } from "@/lib/inventory/store"
 import { typeScreen } from "@/lib/ui/type"
@@ -24,16 +23,13 @@ export default async function EditProductPage({
 
   const { id } = await params
   if (id.startsWith("offline_")) {
-    return <OfflineEditProduct id={id} />
+    notFound()
   }
 
   let product: Awaited<ReturnType<typeof getProduct>>
   try {
     product = await getProduct(id)
   } catch (error) {
-    if (isTransportFailure(error)) {
-      return <OfflineEditProduct id={id} />
-    }
     const reason = apiUnavailableReason(error) ?? "unreachable"
     return <ApiUnavailable reason={reason} />
   }

@@ -18,9 +18,8 @@ import {
   formatEuro,
   statusLabel,
 } from "@/lib/inventory/format"
-import { OfflineProductDetail } from "@/components/offline/offline-product-detail"
 import { ProductCacheHydrator } from "@/components/offline/product-cache-hydrator"
-import { apiUnavailableReason, isTransportFailure } from "@/lib/api/availability"
+import { apiUnavailableReason } from "@/lib/api/availability"
 import { isApiConfigured } from "@/lib/api/config"
 import { getProduct } from "@/lib/inventory/store"
 import { typeMeta, typePrice, typeScreen } from "@/lib/ui/type"
@@ -37,16 +36,13 @@ export default async function ProductDetailPage({
 
   const { id } = await params
   if (id.startsWith("offline_")) {
-    return <OfflineProductDetail id={id} />
+    notFound()
   }
 
   let product: Awaited<ReturnType<typeof getProduct>>
   try {
     product = await getProduct(id)
   } catch (error) {
-    if (isTransportFailure(error)) {
-      return <OfflineProductDetail id={id} />
-    }
     const reason = apiUnavailableReason(error) ?? "unreachable"
     return <ApiUnavailable reason={reason} />
   }

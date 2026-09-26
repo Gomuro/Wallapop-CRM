@@ -1,8 +1,12 @@
 export const dynamic = "force-dynamic"
 
 import { ApiUnavailable } from "@/components/api/api-unavailable"
-import { OfflineCatalog } from "@/components/offline/offline-catalog"
-import { apiUnavailableReason, isTransportFailure } from "@/lib/api/availability"
+import { CatalogEmpty } from "@/components/catalog/catalog-empty"
+import { CatalogView } from "@/components/catalog/catalog-view"
+import { ProductCard } from "@/components/catalog/product-card"
+import { Button } from "@/components/ui/button"
+import Link from "next/link"
+import { apiUnavailableReason } from "@/lib/api/availability"
 import { isApiConfigured } from "@/lib/api/config"
 import { countProductsByStatus, listProducts } from "@/lib/inventory/store"
 import type { InventoryProduct, StatusCounts } from "@/lib/inventory/types"
@@ -32,15 +36,8 @@ export default async function CatalogPage({
     return <ApiUnavailable reason="config" />
   }
 
-  const emptyCounts: StatusCounts = {
-    ALL: 0,
-    ACTIVE: 0,
-    SOLD: 0,
-    INACTIVE: 0,
-  }
-  let products: InventoryProduct[] = []
-  let counts: StatusCounts = emptyCounts
-  let offline = false
+  let products: InventoryProduct[]
+  let counts: StatusCounts
   try {
     ;[products, counts] = await Promise.all([
       listProducts({
@@ -50,21 +47,53 @@ export default async function CatalogPage({
       countProductsByStatus(q),
     ])
   } catch (error) {
-    if (!isTransportFailure(error)) {
-      const reason = apiUnavailableReason(error) ?? "unreachable"
-      return <ApiUnavailable reason={reason} />
-    }
-    offline = true
+    const reason = apiUnavailableReason(error) ?? "unreachable"
+    return <ApiUnavailable reason={reason} />
   }
 
+  const filteredEmpty =
+    products.length === 0 && (q.length > 0 || status !== "ALL")
+
   return (
-    <OfflineCatalog
-      offline={offline}
-      serverProducts={offline ? [] : products}
-      serverCounts={offline ? emptyCounts : counts}
-      q={q}
-      status={status}
-      view={view}
-    />
+    <CatalogView q={q} status={status} view={view} counts={counts}>
+      {products.length === 0 ? (
+        filteredEmpty ? (
+          <CatalogEmpty view={view} />
+        ) : (
+          <div className="flex flex-col items-center gap-3 px-1 py-16 text-center">
+            <p className="text-sm text-muted-foreground">Aún no hay productos.</p>
+            <Button
+              className="h-11"
+              nativeButton={false}
+              render={<Link href="/products/new" />}
+            >
+              + Subir producto
+            </Button>
+          </div>
+        )
+      ) : view === "grid" ? (
+        <div className="grid auto-rows-fr grid-cols-2 items-stretch gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+          {products.map((product, index) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              view="grid"
+              priority={index === 0}
+            />
+          ))}
+        </div>
+      ) : (
+        <div className="flex flex-col gap-2">
+          {products.map((product, index) => (
+            <ProductCard
+              key={product.id}
+              product={product}
+              view="list"
+              priority={index === 0}
+            />
+          ))}
+        </div>
+      )}
+    </CatalogView>
   )
 }
