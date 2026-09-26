@@ -34,6 +34,7 @@ import type { ApiCategory } from "@/lib/api/types"
 import type { ProductCondition, ProductStatus } from "@/lib/validations"
 import { typeSection } from "@/lib/ui/type"
 import {
+  clearAllDraftData,
   clearDraftFields,
   clearDraftPhotos,
   loadDraftFields,
@@ -50,6 +51,7 @@ export function ProductForm({
   initialRoots,
   action,
   submitLabel,
+  restoreDraft = false,
 }: {
   product?: InventoryProduct
   categories?: ApiCategory[]
@@ -59,54 +61,66 @@ export function ProductForm({
     formData: FormData,
   ) => Promise<ProductActionState>
   submitLabel: string
+  restoreDraft?: boolean
 }) {
   const isNew = !product
   const isSubmittingRef = useRef(false)
+  const formRef = useRef<HTMLFormElement>(null)
+  const [resetKey, setResetKey] = useState(0)
   const pendingFilesRef = useRef<File[]>([])
   const [draft, setDraft] = useState<ReturnType<typeof loadDraftFields>>(null)
-  const [draftReady, setDraftReady] = useState(!isNew)
+  const [draftReady, setDraftReady] = useState(!isNew || !restoreDraft)
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? "")
   const [condition, setCondition] = useState<ProductCondition>(
     product?.conditionCode ?? "GOOD",
   )
   const [status, setStatus] = useState<ProductStatus>(product?.status ?? "ACTIVE")
 
+  const resetFormState = useCallback(() => {
+    formRef.current?.reset()
+    pendingFilesRef.current = []
+    setDraft(null)
+    setCategoryId("")
+    setCondition("GOOD")
+    setStatus("ACTIVE")
+    setResetKey((prev) => prev + 1)
+    isSubmittingRef.current = false
+    void clearAllDraftData()
+  }, [])
+
   const submitAction = useCallback(
     async (prev: ProductActionState, formData: FormData) => {
       isSubmittingRef.current = true
-      const snapshot = isNew ? loadDraftFields() : null
+      const snapshot = isNew && restoreDraft ? loadDraftFields() : null
       if (isNew) {
-        clearDraftFields()
-        await clearDraftPhotos()
+        await clearAllDraftData()
       }
       try {
         const result = await action(prev, formData)
         if (result.error || result.fieldErrors) {
           isSubmittingRef.current = false
           if (snapshot) saveDraftFields(snapshot)
-          if (pendingFilesRef.current.length > 0) {
+          if (restoreDraft && pendingFilesRef.current.length > 0) {
             void saveDraftPhotos(pendingFilesRef.current)
           }
         } else {
-          clearDraftFields()
-          await clearDraftPhotos()
+          resetFormState()
         }
         return result
       } catch (error) {
         if (isNextRedirect(error)) {
-          clearDraftFields()
-          void clearDraftPhotos()
+          resetFormState()
           throw error
         }
         isSubmittingRef.current = false
         if (snapshot) saveDraftFields(snapshot)
-        if (pendingFilesRef.current.length > 0) {
+        if (restoreDraft && pendingFilesRef.current.length > 0) {
           void saveDraftPhotos(pendingFilesRef.current)
         }
         return { error: actionFailureMessage(error) }
       }
     },
-    [action, isNew],
+    [action, isNew, resetFormState, restoreDraft],
   )
   const [state, formAction, pending] = useActionState(submitAction, {})
   const [isPending, startTransition] = useTransition()
@@ -115,6 +129,12 @@ export function ProductForm({
 
   useEffect(() => {
     if (!isNew) return
+    if (!restoreDraft) {
+      void clearAllDraftData()
+      setDraft(null)
+      setDraftReady(true)
+      return
+    }
     const saved = loadDraftFields()
     // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate draft from client-only sessionStorage on mount
     setDraft(saved)
@@ -125,10 +145,10 @@ export function ProductForm({
       void clearDraftPhotos()
     }
     setDraftReady(true)
-  }, [isNew])
+  }, [isNew, restoreDraft])
 
   useEffect(() => {
-    if (!isNew || !draftReady || isSubmittingRef.current) return
+    if (!isNew || !restoreDraft || !draftReady || isSubmittingRef.current) return
     const current = loadDraftFields()
     if (!current && !categoryId) return
     saveDraftFields({
@@ -141,7 +161,7 @@ export function ProductForm({
       condition,
       status,
     })
-  }, [categoryId, condition, draftReady, isNew, status])
+  }, [categoryId, condition, draftReady, isNew, restoreDraft, status])
 
   useEffect(() => {
     if (!state.error && !state.fieldErrors) return
@@ -154,7 +174,7 @@ export function ProductForm({
   }, [state])
 
   function persistFromForm(form: HTMLFormElement) {
-    if (!isNew || isSubmittingRef.current) return
+    if (!isNew || !restoreDraft || isSubmittingRef.current) return
     const formData = new FormData(form)
     saveDraftFields({
       title: String(formData.get("title") ?? ""),
@@ -171,7 +191,7 @@ export function ProductForm({
   const handlePendingFilesChange = useCallback(
     (files: File[]) => {
       pendingFilesRef.current = files
-      if (isNew && !isSubmittingRef.current) {
+      if (isNew && restoreDraft && !isSubmittingRef.current) {
         void saveDraftPhotos(files)
         if (files.length > 0) {
           const current = loadDraftFields() ?? {
@@ -188,12 +208,15 @@ export function ProductForm({
         }
       }
     },
-    [categoryId, condition, isNew, status],
+    [categoryId, condition, isNew, restoreDraft, status],
   )
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
     isSubmittingRef.current = true
+    if (restoreDraft) {
+      persistFromForm(event.currentTarget)
+    }
     const formData = new FormData(event.currentTarget)
     pendingFilesRef.current.forEach((file) => formData.append("files", file))
     startTransition(() => {
@@ -209,19 +232,21 @@ export function ProductForm({
 
   return (
     <form
+      ref={formRef}
       onSubmit={onSubmit}
       onChange={(event) => persistFromForm(event.currentTarget)}
       encType="multipart/form-data"
       noValidate
-      className="flex flex-col gap-4 px-4 py-4 md:px-8 lg:grid lg:grid-cols-12 lg:items-start lg:gap-8 lg:py-6"
+      className="flex flex-col gap-4 px-4 py-4 pb-28 md:px-8 md:pb-8 lg:grid lg:grid-cols-12 lg:items-start lg:gap-8 lg:py-6"
     >
       <div className="min-w-0 lg:sticky lg:top-28 lg:col-span-7">
         <FormSection title="Fotos">
           <div id="images" tabIndex={-1} className="scroll-mt-28 outline-none">
             <PhotoSlots
+              key={`photo-slots-${resetKey}`}
               productId={product?.id}
               productImages={product?.productImages}
-              restoreDraft={!product && Boolean(draft)}
+              restoreDraft={restoreDraft && Boolean(draft)}
               onPendingFilesChange={handlePendingFilesChange}
             />
           </div>

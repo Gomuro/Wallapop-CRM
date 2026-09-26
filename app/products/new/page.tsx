@@ -11,10 +11,20 @@ import { listCategoryRoots } from "@/lib/inventory/store"
 import type { ApiCategory } from "@/lib/api/types"
 import { typeScreen } from "@/lib/ui/type"
 
-export default async function NewProductPage() {
+type NewProductPageProps = {
+  searchParams?: Promise<{ draft?: string }>
+}
+
+export default async function NewProductPage({
+  searchParams,
+}: NewProductPageProps) {
   if (!isApiConfigured()) {
     return <ApiUnavailable reason="config" />
   }
+
+  const resolvedParams = searchParams ? await searchParams : undefined
+  const restoreDraft =
+    resolvedParams?.draft === "1" || resolvedParams?.draft === "true"
 
   let roots: ApiCategory[]
   try {
@@ -25,7 +35,7 @@ export default async function NewProductPage() {
   }
   return (
     <>
-      <header className="sticky top-0 z-30 flex items-center gap-1 border-b bg-background px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:top-14 md:px-8">
+      <header className="sticky top-0 z-30 flex items-center gap-1 border-b bg-background px-4 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:top-14 md:px-8">
         <Button
           variant="ghost"
           size="icon"
@@ -42,6 +52,7 @@ export default async function NewProductPage() {
         initialRoots={roots}
         action={createProductAction}
         submitLabel="Publicar"
+        restoreDraft={restoreDraft}
       />
     </>
   )

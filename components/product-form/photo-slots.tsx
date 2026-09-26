@@ -22,7 +22,14 @@ import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
 import { typeMeta } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
 
-const ACCEPTED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
+const ACCEPTED_TYPES = [
+  "image/jpeg",
+  "image/jpg",
+  "image/png",
+  "image/webp",
+  "image/heic",
+  "image/heif",
+]
 const DRAG_THRESHOLD_PX = 8
 const PRESS_DELAY_MS = 150
 
@@ -167,12 +174,12 @@ export function PhotoSlots({
     const incoming = Array.from(fileList)
     const valid = incoming.filter(
       (file) =>
-        ACCEPTED_TYPES.includes(file.type) ||
-        /\.(jpe?g|png|webp)$/i.test(file.name),
+        ACCEPTED_TYPES.includes(file.type?.toLowerCase()) ||
+        /\.(jpe?g|png|webp|heic|heif)$/i.test(file.name),
     )
     const rejectedType = incoming.length - valid.length
     if (valid.length === 0) {
-      setError("Usa JPEG, PNG o WebP.")
+      setError("Usa fotos en formato JPEG, PNG, WebP o HEIC.")
       return
     }
 
@@ -190,9 +197,11 @@ export function PhotoSlots({
     let compressed: File[]
     try {
       compressed = await compressImageFiles(accepted)
-    } catch {
+    } catch (err) {
       setUploading(false)
-      setError("No se pudieron procesar las fotos. Prueba con otra imagen.")
+      const message =
+        err instanceof Error ? err.message : "No se pudieron procesar las fotos."
+      setError(message)
       return
     }
 
@@ -402,7 +411,7 @@ export function PhotoSlots({
       <input
         ref={inputRef}
         type="file"
-        accept="image/jpeg,image/png,image/webp"
+        accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,image/*"
         multiple
         tabIndex={-1}
         aria-label="Subir fotos"
@@ -506,7 +515,7 @@ export function PhotoSlots({
       </div>
       <div className="flex flex-wrap items-center justify-between gap-2">
         <p className={cn(typeMeta, "text-muted-foreground")}>
-          Toca + para subir. Arrastra para ordenar. Se comprimen al añadir (máx. 1600px).
+          Toca + para subir. Arrastra para ordenar. Se comprimen al añadir (máx. 1400px).
         </p>
         {!productId && safeImages.length > 1 ? (
           <button

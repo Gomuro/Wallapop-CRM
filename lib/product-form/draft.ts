@@ -39,9 +39,17 @@ export function clearDraftFields() {
   if (typeof window === "undefined") return
   try {
     sessionStorage.removeItem(TEXT_KEY)
+    localStorage.removeItem(TEXT_KEY)
+    sessionStorage.removeItem("wallapop-crm.product-draft")
+    localStorage.removeItem("wallapop-crm.product-draft")
   } catch {
     // ignore
   }
+}
+
+export async function clearAllDraftData() {
+  clearDraftFields()
+  await clearDraftPhotos()
 }
 
 function openDb(): Promise<IDBDatabase | null> {

@@ -5,34 +5,54 @@ import {
   compressImageFile,
   compressImageFiles,
   fitSize,
+  isHeicFile,
   outputName,
 } from "./compress"
 
-test("outputName converts filenames to .webp", () => {
+test("outputName converts filenames matching mimeType", () => {
   const f1 = new File(["dummy"], "photo.jpg", { type: "image/jpeg" })
-  assert.equal(outputName(f1), "photo.webp")
+  assert.equal(outputName(f1, "image/webp"), "photo.webp")
+  assert.equal(outputName(f1, "image/jpeg"), "photo.jpg")
 
   const f2 = new File(["dummy"], "sample.png", { type: "image/png" })
-  assert.equal(outputName(f2), "sample.webp")
+  assert.equal(outputName(f2, "image/webp"), "sample.webp")
+  assert.equal(outputName(f2, "image/jpeg"), "sample.jpg")
 
-  const f3 = new File(["dummy"], "test.image.jpeg", { type: "image/jpeg" })
-  assert.equal(outputName(f3), "test.image.webp")
+  const f3 = new File(["dummy"], "test.image.heic", { type: "image/heic" })
+  assert.equal(outputName(f3, "image/jpeg"), "test.image.jpg")
 })
 
-test("fitSize scales dimensions exceeding MAX_EDGE (1600px)", () => {
+test("fitSize scales dimensions exceeding MAX_EDGE (1400px)", () => {
   const small = fitSize(800, 600)
   assert.deepEqual(small, { width: 800, height: 600 })
 
-  const exact = fitSize(1600, 1200)
-  assert.deepEqual(exact, { width: 1600, height: 1200 })
+  const exact = fitSize(1400, 1050)
+  assert.deepEqual(exact, { width: 1400, height: 1050 })
 
-  const oversizedLandscape = fitSize(4000, 3000)
-  assert.equal(oversizedLandscape.width, 1600)
-  assert.equal(oversizedLandscape.height, 1200)
+  const oversizedLandscape = fitSize(4032, 3024)
+  assert.equal(oversizedLandscape.width, 1400)
+  assert.equal(oversizedLandscape.height, 1050)
 
-  const oversizedPortrait = fitSize(3000, 4000)
-  assert.equal(oversizedPortrait.width, 1200)
-  assert.equal(oversizedPortrait.height, 1600)
+  const oversizedPortrait = fitSize(3024, 4032)
+  assert.equal(oversizedPortrait.width, 1050)
+  assert.equal(oversizedPortrait.height, 1400)
+})
+
+test("isHeicFile detects HEIC MIME types and extensions", () => {
+  const heicMime = new File(["dummy"], "photo.bin", { type: "image/heic" })
+  assert.equal(isHeicFile(heicMime), true)
+
+  const heifMime = new File(["dummy"], "photo.bin", { type: "image/heif" })
+  assert.equal(isHeicFile(heifMime), true)
+
+  const heicExt = new File(["dummy"], "IMG_1234.HEIC", { type: "" })
+  assert.equal(isHeicFile(heicExt), true)
+
+  const heifExt = new File(["dummy"], "photo.heif", { type: "application/octet-stream" })
+  assert.equal(isHeicFile(heifExt), true)
+
+  const regular = new File(["dummy"], "photo.jpg", { type: "image/jpeg" })
+  assert.equal(isHeicFile(regular), false)
 })
 
 test("SSR / Node environment gracefully returns original file", async () => {
