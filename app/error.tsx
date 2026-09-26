@@ -3,12 +3,10 @@
 import Link from "next/link"
 import { useEffect } from "react"
 
-import { ApiUnavailable } from "@/components/api/api-unavailable"
-import { OfflineBanner } from "@/components/offline/offline-banner"
 import { Button } from "@/components/ui/button"
-import { isApiConfigured } from "@/lib/api/config"
+import { typeScreen } from "@/lib/ui/type"
 
-export default function GlobalError({
+export default function AppError({
   error,
   reset,
 }: {
@@ -19,29 +17,29 @@ export default function GlobalError({
     console.error(error)
   }, [error])
 
-  if (!isApiConfigured()) {
-    return <ApiUnavailable reason="config" className="min-h-dvh" />
-  }
-
   return (
-    <div className="flex flex-col">
-      <OfflineBanner />
-      <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
-        <p className="max-w-md text-sm text-muted-foreground">
-          Puedes seguir usando el catálogo guardado en este dispositivo.
+    <div className="flex flex-col items-center gap-3 px-6 py-10 text-center">
+      <h1 className={typeScreen}>No se ha podido mostrar esta pantalla</h1>
+      <p className="max-w-md text-sm text-muted-foreground">
+        El almacén responde. Ha fallado la interfaz, no el servidor. Prueba de
+        nuevo o vuelve al catálogo.
+      </p>
+      {error.digest ? (
+        <p className="font-mono text-[11px] text-muted-foreground/80">
+          {error.digest}
         </p>
-        <Button type="button" className="h-11" onClick={() => reset()}>
-          Volver a intentar
-        </Button>
-        <Button
-          variant="outline"
-          className="h-11"
-          nativeButton={false}
-          render={<Link href="/" />}
-        >
-          Ir al catálogo
-        </Button>
-      </div>
+      ) : null}
+      <Button type="button" className="h-11" onClick={() => reset()}>
+        Volver a intentar
+      </Button>
+      <Button
+        variant="outline"
+        className="h-11"
+        nativeButton={false}
+        render={<Link href="/" />}
+      >
+        Ir al catálogo
+      </Button>
     </div>
   )
 }
