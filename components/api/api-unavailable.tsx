@@ -1,5 +1,7 @@
 "use client"
 
+import Link from "next/link"
+
 import { Button } from "@/components/ui/button"
 import type { ApiUnavailableReason } from "@/lib/api/availability"
 
@@ -43,6 +45,15 @@ export function ApiUnavailable({ reason, className }: Props) {
           <p className="text-xs text-muted-foreground/80">{copy.hint}</p>
         ) : null}
       </div>
+      <Button
+        type="button"
+        variant="outline"
+        className="h-11"
+        nativeButton={false}
+        render={<Link href="/" />}
+      >
+        Volver al catálogo
+      </Button>
       <Button
         type="button"
         variant="outline"

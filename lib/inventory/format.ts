@@ -18,6 +18,8 @@ export function statusLabel(status: ProductStatus) {
       return "Vendido"
     case "INACTIVE":
       return "Inactivo"
+    default:
+      return "En venta"
   }
 }
 

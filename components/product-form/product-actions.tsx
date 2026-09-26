@@ -8,6 +8,7 @@ import {
   deleteProductAction,
   markProductSoldAction,
 } from "@/app/actions/products"
+import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
 import { Button } from "@/components/ui/button"
 import {
   Dialog,
@@ -30,15 +31,6 @@ import {
   DrawerTrigger,
 } from "@/components/ui/drawer"
 import { useIsMd } from "@/lib/ui/media"
-
-function isNextRedirect(error: unknown) {
-  return (
-    typeof error === "object" &&
-    error !== null &&
-    "digest" in error &&
-    String(error.digest).startsWith("NEXT_REDIRECT")
-  )
-}
 
 function ConfirmFrame({
   open,
@@ -152,14 +144,19 @@ export function SoldSyncButton({
   function confirmSold() {
     setError(null)
     startTransition(async () => {
-      const result = await markProductSoldAction(productId)
-      if (result.error) {
-        setError(result.error)
-        return
+      try {
+        const result = await markProductSoldAction(productId)
+        if (result.error) {
+          setError(result.error)
+          return
+        }
+        setSold(true)
+        setOpen(false)
+        router.refresh()
+      } catch (caught) {
+        if (isNextRedirect(caught)) throw caught
+        setError(actionFailureMessage(caught))
       }
-      setSold(true)
-      setOpen(false)
-      router.refresh()
     })
   }
 
@@ -221,7 +218,7 @@ export function DeleteProductButton({ productId }: { productId: string }) {
                 if (result?.error) setError(result.error)
               } catch (caught) {
                 if (isNextRedirect(caught)) throw caught
-                setError("No se pudo eliminar el producto.")
+                setError(actionFailureMessage(caught))
               }
             })
           }}

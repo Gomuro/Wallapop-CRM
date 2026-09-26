@@ -3,6 +3,7 @@ import { notFound } from "next/navigation"
 import { ChevronLeftIcon } from "lucide-react"
 
 import { ApiUnavailable } from "@/components/api/api-unavailable"
+import { ProductLoadError } from "@/components/catalog/product-load-error"
 import { ProductGallery } from "@/components/catalog/product-gallery"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
@@ -43,8 +44,10 @@ export default async function ProductDetailPage({
   try {
     product = await getProduct(id)
   } catch (error) {
-    const reason = apiUnavailableReason(error) ?? "unreachable"
-    return <ApiUnavailable reason={reason} />
+    if (apiUnavailableReason(error) === "config") {
+      return <ApiUnavailable reason="config" />
+    }
+    return <ProductLoadError />
   }
   if (!product) notFound()
 

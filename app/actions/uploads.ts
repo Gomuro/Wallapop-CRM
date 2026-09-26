@@ -50,9 +50,9 @@ export async function uploadProductImages(
     revalidatePath(`/products/${productId}`)
     revalidatePath(`/products/${productId}/edit`)
     revalidatePath("/")
-    const sorted = product.images
-      .slice()
-      .sort((a, b) => a.sortOrder - b.sortOrder)
+    const sorted = Array.isArray(product.images)
+      ? product.images.slice().sort((a, b) => a.sortOrder - b.sortOrder)
+      : []
     return {
       urls: sorted.map((image) => resolveMediaUrl(image.url)),
       imageIds: sorted.map((image) => image.id),

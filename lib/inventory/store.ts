@@ -126,7 +126,12 @@ export async function getProduct(id: string): Promise<InventoryProduct | null> {
     )
   } catch (error) {
     if (error instanceof ApiError && error.code === "NOT_FOUND") return null
-    throw error
+    if (error instanceof ApiError) throw error
+    throw new ApiError(
+      502,
+      "INTERNAL",
+      "El servidor devolvió un producto no válido.",
+    )
   }
 }
 

@@ -4,6 +4,7 @@ import { ChevronLeftIcon } from "lucide-react"
 
 import { updateProductAction } from "@/app/actions/products"
 import { ApiUnavailable } from "@/components/api/api-unavailable"
+import { ProductLoadError } from "@/components/catalog/product-load-error"
 import { ListingFields } from "@/components/product-form/listing-fields"
 import { ProductForm } from "@/components/product-form/product-form"
 import { Button } from "@/components/ui/button"
@@ -30,8 +31,10 @@ export default async function EditProductPage({
   try {
     product = await getProduct(id)
   } catch (error) {
-    const reason = apiUnavailableReason(error) ?? "unreachable"
-    return <ApiUnavailable reason={reason} />
+    if (apiUnavailableReason(error) === "config") {
+      return <ApiUnavailable reason="config" />
+    }
+    return <ProductLoadError />
   }
   if (!product) notFound()
 

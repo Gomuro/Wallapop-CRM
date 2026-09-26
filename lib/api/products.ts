@@ -1,6 +1,7 @@
 import "server-only"
 
 import { apiServerFetch } from "@/lib/api/server"
+import { ApiError } from "@/lib/api/errors"
 import type {
   ApiProduct,
   ApiProductListResponse,
@@ -32,14 +33,34 @@ export async function apiListProducts(
     q: query.q,
     categoryId: query.categoryId,
   })
-  return apiServerFetch<ApiProductListResponse>(`/products${qs}`)
+  const response = await apiServerFetch<Partial<ApiProductListResponse>>(
+    `/products${qs}`,
+  )
+  return {
+    products: Array.isArray(response?.products) ? response.products : [],
+    page: typeof response?.page === "number" ? response.page : 1,
+    pageSize: typeof response?.pageSize === "number" ? response.pageSize : 50,
+    total: typeof response?.total === "number" ? response.total : 0,
+    totalPages: typeof response?.totalPages === "number" ? response.totalPages : 0,
+  }
+}
+
+function unwrapApiProduct(body: { product?: ApiProduct } | undefined): ApiProduct {
+  if (!body?.product || typeof body.product !== "object" || !body.product.id) {
+    throw new ApiError(
+      502,
+      "INTERNAL",
+      "El servidor devolvió un producto no válido.",
+    )
+  }
+  return body.product
 }
 
 export async function apiGetProduct(id: string): Promise<ApiProduct> {
-  const { product } = await apiServerFetch<{ product: ApiProduct }>(
+  const body = await apiServerFetch<{ product?: ApiProduct }>(
     `/products/${id}`,
   )
-  return product
+  return unwrapApiProduct(body)
 }
 
 type ApiProductCreateBody = Omit<
@@ -50,12 +71,11 @@ type ApiProductCreateBody = Omit<
 export async function apiCreateProduct(
   body: ApiProductCreateBody,
 ): Promise<ApiProduct> {
-  const { product } = await apiServerFetch<{ product: ApiProduct }>(
-    "/products",
-    {
+  const product = unwrapApiProduct(
+    await apiServerFetch<{ product?: ApiProduct }>("/products", {
       method: "POST",
       body: JSON.stringify(body),
-    },
+    }),
   )
   return product
 }
@@ -64,39 +84,33 @@ export async function apiPatchProduct(
   id: string,
   body: WarehouseProductUpdateInput,
 ): Promise<ApiProduct> {
-  const { product } = await apiServerFetch<{ product: ApiProduct }>(
-    `/products/${id}`,
-    {
+  return unwrapApiProduct(
+    await apiServerFetch<{ product?: ApiProduct }>(`/products/${id}`, {
       method: "PATCH",
       body: JSON.stringify(body),
-    },
+    }),
   )
-  return product
 }
 
 export async function apiPatchProductStatus(
   id: string,
   status: Exclude<ProductStatus, "SOLD">,
 ): Promise<ApiProduct> {
-  const { product } = await apiServerFetch<{ product: ApiProduct }>(
-    `/products/${id}/status`,
-    {
+  return unwrapApiProduct(
+    await apiServerFetch<{ product?: ApiProduct }>(`/products/${id}/status`, {
       method: "PATCH",
       body: JSON.stringify({ status }),
-    },
+    }),
   )
-  return product
 }
 
 export async function apiMarkProductSold(id: string): Promise<ApiProduct> {
-  const { product } = await apiServerFetch<{ product: ApiProduct }>(
-    `/products/${id}/sold`,
-    {
+  return unwrapApiProduct(
+    await apiServerFetch<{ product?: ApiProduct }>(`/products/${id}/sold`, {
       method: "POST",
       body: JSON.stringify({}),
-    },
+    }),
   )
-  return product
 }
 
 export async function apiDeleteProduct(id: string): Promise<void> {

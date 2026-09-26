@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { SessionGuard } from "@/components/auth/session-guard"
 import { BottomNav } from "@/components/shell/bottom-nav"
 import { DesktopNav } from "@/components/shell/desktop-nav"
+import { StorageCleanup } from "@/components/offline/storage-cleanup"
 
 export function AppShell({ children }: { children: React.ReactNode }) {
   const pathname = usePathname()
@@ -16,6 +17,7 @@ export function AppShell({ children }: { children: React.ReactNode }) {
 
   return (
     <SessionGuard>
+      <StorageCleanup />
       <div className="min-h-dvh w-full md:bg-muted/40">
         <div className="mx-auto flex min-h-dvh w-full max-w-6xl flex-col bg-background md:shadow-sm">
           <DesktopNav />

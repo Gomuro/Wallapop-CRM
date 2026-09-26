@@ -17,10 +17,12 @@ import { Badge } from "@/components/ui/badge"
 import type { InventoryProductImage } from "@/lib/inventory/types"
 import { PRODUCT_IMAGE_MAX } from "@/lib/validations/product"
 import { loadDraftPhotos } from "@/lib/product-form/draft"
+import { compressImageFiles } from "@/lib/images/compress"
+import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
 import { typeMeta } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
 
-const ACCEPTED_TYPES = ["image/jpeg", "image/png", "image/webp"]
+const ACCEPTED_TYPES = ["image/jpeg", "image/jpg", "image/png", "image/webp"]
 const DRAG_THRESHOLD_PX = 8
 const PRESS_DELAY_MS = 150
 
@@ -90,10 +92,14 @@ export function PhotoSlots({
   useEffect(() => {
     if (productId || !restoreDraft) return
     let cancelled = false
-    void loadDraftPhotos().then((files) => {
+    void loadDraftPhotos().then(async (files) => {
       if (cancelled || files.length === 0) return
+      const compressed = await compressImageFiles(
+        files.slice(0, PRODUCT_IMAGE_MAX),
+      )
+      if (cancelled) return
       setSlots(
-        files.slice(0, PRODUCT_IMAGE_MAX).map((file) => ({
+        compressed.map((file) => ({
           url: URL.createObjectURL(file),
           file,
         })),
@@ -131,14 +137,23 @@ export function PhotoSlots({
     if (!productId) return
     const ids = next.map((slot) => slot.id).filter(Boolean) as string[]
     if (ids.length !== next.length) return
-    const result = await reorderProductImagesAction(productId, ids)
-    if (result.error) setError(result.error)
+    try {
+      const result = await reorderProductImagesAction(productId, ids)
+      if (result.error) setError(result.error)
+    } catch (error) {
+      if (isNextRedirect(error)) throw error
+      setError(actionFailureMessage(error))
+    }
   }
 
   async function addFiles(fileList: FileList | null, atIndex?: number) {
     if (!fileList?.length || uploading) return
     const incoming = Array.from(fileList)
-    const valid = incoming.filter((file) => ACCEPTED_TYPES.includes(file.type))
+    const valid = incoming.filter(
+      (file) =>
+        ACCEPTED_TYPES.includes(file.type) ||
+        /\.(jpe?g|png|webp)$/i.test(file.name),
+    )
     const rejectedType = incoming.length - valid.length
     if (valid.length === 0) {
       setError("Usa JPEG, PNG o WebP.")
@@ -154,11 +169,20 @@ export function PhotoSlots({
     const accepted = valid.slice(0, room)
     const skipped = valid.length - accepted.length
 
+    setUploading(true)
+    setError(null)
+    let compressed: File[]
+    try {
+      compressed = await compressImageFiles(accepted)
+    } catch {
+      setUploading(false)
+      setError("No se pudieron procesar las fotos. Prueba con otra imagen.")
+      return
+    }
+
     if (productId) {
       const formData = new FormData()
-      accepted.forEach((file) => formData.append("files", file))
-      setUploading(true)
-      setError(null)
+      compressed.forEach((file) => formData.append("files", file))
       try {
         const result = await uploadProductImages(formData, productId)
         if (result.error || result.urls.length === 0) {
@@ -176,13 +200,15 @@ export function PhotoSlots({
           next.push(...uploaded)
         }
         commit(next.slice(0, PRODUCT_IMAGE_MAX))
-      } catch {
-        setError("No se pudo guardar la imagen.")
+      } catch (error) {
+        if (isNextRedirect(error)) throw error
+        setError(actionFailureMessage(error))
+        return
       } finally {
         setUploading(false)
       }
     } else {
-      const added: SlotImage[] = accepted.map((file) => ({
+      const added: SlotImage[] = compressed.map((file) => ({
         url: URL.createObjectURL(file),
         file,
       }))
@@ -195,6 +221,7 @@ export function PhotoSlots({
         next.push(...added)
       }
       commit(next.slice(0, PRODUCT_IMAGE_MAX))
+      setUploading(false)
     }
 
     const notes: string[] = []
@@ -214,11 +241,18 @@ export function PhotoSlots({
     if (!target) return
     if (productId && target.id) {
       setUploading(true)
-      const result = await deleteProductImageAction(productId, target.id)
-      setUploading(false)
-      if (result.error) {
-        setError(result.error)
+      try {
+        const result = await deleteProductImageAction(productId, target.id)
+        if (result.error) {
+          setError(result.error)
+          return
+        }
+      } catch (error) {
+        if (isNextRedirect(error)) throw error
+        setError(actionFailureMessage(error))
         return
+      } finally {
+        setUploading(false)
       }
     }
     if (target.url.startsWith("blob:")) URL.revokeObjectURL(target.url)
@@ -455,7 +489,7 @@ export function PhotoSlots({
         ))}
       </div>
       <p className={cn(typeMeta, "text-muted-foreground")}>
-        Toca + para subir. Arrastra para ordenar. JPEG/PNG/WebP, máx 10MB.
+        Toca + para subir. Arrastra para ordenar. Se comprimen al añadir (máx. 1600px).
       </p>
       {error ? (
         <p className="text-xs text-destructive" role="alert">

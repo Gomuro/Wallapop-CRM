@@ -122,17 +122,75 @@ export function getOfflineCategoriesServerSnapshot(): string {
   return JSON.stringify(OFFLINE_CATEGORIES)
 }
 
+function isDataUrl(value: string) {
+  return value.startsWith("data:")
+}
+
+function sanitizeCachedProduct(product: InventoryProduct): InventoryProduct {
+  const images = Array.isArray(product.images)
+    ? product.images.filter(
+        (url) => typeof url === "string" && url.length > 0 && !isDataUrl(url),
+      )
+    : []
+  const productImages = Array.isArray(product.productImages)
+    ? product.productImages.filter(
+        (image) =>
+          image &&
+          typeof image.url === "string" &&
+          image.url.length > 0 &&
+          !isDataUrl(image.url),
+      )
+    : []
+  return { ...product, images, productImages }
+}
+
+export function purgeBloatedOfflineMedia() {
+  if (typeof window === "undefined") return
+  try {
+    const products = readOfflineProducts().map(sanitizeCachedProduct)
+    writeOfflineProducts(products)
+  } catch {
+    // quota / private mode
+  }
+
+  for (const storage of [window.localStorage, window.sessionStorage]) {
+    const toRemove: string[] = []
+    try {
+      for (let index = 0; index < storage.length; index += 1) {
+        const key = storage.key(index)
+        if (!key || key === PRODUCTS_KEY || key === CATEGORIES_KEY) continue
+        const value = storage.getItem(key) ?? ""
+        if (value.includes("data:image") && value.length > 50_000) {
+          toRemove.push(key)
+        }
+      }
+    } catch {
+      continue
+    }
+    for (const key of toRemove) {
+      try {
+        storage.removeItem(key)
+      } catch {
+        // ignore
+      }
+    }
+  }
+}
+
 export function readOfflineProducts(): InventoryProduct[] {
   if (memory.products) return memory.products
   const stored = readJson<InventoryProduct[]>(PRODUCTS_KEY)
-  memory.products = Array.isArray(stored) ? stored : []
+  memory.products = Array.isArray(stored)
+    ? stored.map(sanitizeCachedProduct)
+    : []
   return memory.products
 }
 
 export function writeOfflineProducts(products: InventoryProduct[]) {
-  memory.products = products
-  productsSnapshot = JSON.stringify(products)
-  writeJson(PRODUCTS_KEY, products)
+  const sanitized = products.map(sanitizeCachedProduct)
+  memory.products = sanitized
+  productsSnapshot = JSON.stringify(sanitized)
+  writeJson(PRODUCTS_KEY, sanitized)
   notifyCache()
 }
 

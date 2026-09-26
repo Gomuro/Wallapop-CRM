@@ -20,6 +20,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { listingStatusLabel } from "@/lib/inventory/format"
+import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
 import type { InventoryListing } from "@/lib/inventory/types"
 import type { ListingStatus } from "@/lib/validations"
 import { typeSection } from "@/lib/ui/type"
@@ -38,8 +39,19 @@ export function ListingFields({
   listing: InventoryListing | null
 }) {
   const router = useRouter()
-  const action = updateProductListingAction.bind(null, productId)
-  const [state, formAction, pending] = useActionState(action, {} as ListingActionState)
+  const boundAction = updateProductListingAction.bind(null, productId)
+  const submitAction = async (
+    prev: ListingActionState,
+    formData: FormData,
+  ): Promise<ListingActionState> => {
+    try {
+      return await boundAction(prev, formData)
+    } catch (error) {
+      if (isNextRedirect(error)) throw error
+      return { error: actionFailureMessage(error) }
+    }
+  }
+  const [state, formAction, pending] = useActionState(submitAction, {} as ListingActionState)
   const [status, setStatus] = useState<ListingStatus>(
     listing?.status ?? "READY_TO_POST",
   )

@@ -40,6 +40,7 @@ import {
   saveDraftFields,
   saveDraftPhotos,
 } from "@/lib/product-form/draft"
+import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
 
 const STATUS_OPTIONS: ProductStatus[] = ["ACTIVE", "INACTIVE", "SOLD"]
 
@@ -67,11 +68,17 @@ export function ProductForm({
         clearDraftFields()
         await clearDraftPhotos()
       }
-      const result = await action(prev, formData)
-      if (result.error || result.fieldErrors) {
+      try {
+        const result = await action(prev, formData)
+        if (result.error || result.fieldErrors) {
+          if (snapshot) saveDraftFields(snapshot)
+        }
+        return result
+      } catch (error) {
+        if (isNextRedirect(error)) throw error
         if (snapshot) saveDraftFields(snapshot)
+        return { error: actionFailureMessage(error) }
       }
-      return result
     },
     [action, isNew],
   )

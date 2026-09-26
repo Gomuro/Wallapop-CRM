@@ -10,6 +10,7 @@ export type ApiErrorCode =
   | "NOT_IMPLEMENTED"
   | "API_NOT_CONFIGURED"
   | "NETWORK"
+  | "PAYLOAD_TOO_LARGE"
   | (string & {})
 
 export class ApiError extends Error {
@@ -22,25 +23,6 @@ export class ApiError extends Error {
     this.status = status
     this.code = code
   }
-}
-
-type ErrorBody = {
-  error?: { code?: string; message?: string }
-}
-
-export async function parseApiError(response: Response): Promise<ApiError> {
-  let code: ApiErrorCode = "INTERNAL"
-  let message = "Algo ha salido mal. Inténtalo de nuevo."
-
-  try {
-    const body = (await response.json()) as ErrorBody
-    if (body.error?.code) code = body.error.code as ApiErrorCode
-    if (body.error?.message) message = body.error.message
-  } catch {
-    message = response.statusText || message
-  }
-
-  return new ApiError(response.status, code, message)
 }
 
 export function apiErrorToFieldErrors(error: ApiError): Record<string, string> {

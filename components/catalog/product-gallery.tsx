@@ -16,7 +16,15 @@ export function ProductGallery({
   const scrollerRef = useRef<HTMLDivElement>(null)
   const frame = useRef(0)
   const [active, setActive] = useState(0)
-  const count = images.length
+  const safeImages = Array.isArray(images)
+    ? images.filter(
+        (src) =>
+          typeof src === "string" &&
+          src.length > 0 &&
+          !(src.startsWith("data:") && src.length > 8_000),
+      )
+    : []
+  const count = safeImages.length
 
   useEffect(() => () => cancelAnimationFrame(frame.current), [])
 
@@ -66,7 +74,7 @@ export function ProductGallery({
         {count === 0 ? (
           <div className="aspect-square w-full shrink-0 border border-dashed border-border bg-muted" />
         ) : (
-          images.map((src, index) => (
+          safeImages.map((src, index) => (
             <div
               key={`${index}-${src}`}
               className="relative aspect-square min-w-0 flex-[0_0_100%] snap-center overflow-hidden bg-muted"
@@ -104,7 +112,7 @@ export function ProductGallery({
           </button>
           <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-4">
             <div className="pointer-events-auto flex max-w-full flex-wrap justify-center gap-1 rounded-full bg-background/90 px-1.5 py-1 shadow-sm ring-1 ring-border backdrop-blur-sm">
-              {images.map((_, index) => (
+              {safeImages.map((_, index) => (
                 <button
                   key={index}
                   type="button"

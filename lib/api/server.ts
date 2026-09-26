@@ -5,8 +5,9 @@ import { redirect } from "next/navigation"
 
 import { isApiConfigured } from "@/lib/api/config"
 import { getInternalApiUrl, internalApiV1Path } from "@/lib/api/internal"
-import { ApiError, parseApiError } from "@/lib/api/errors"
+import { ApiError } from "@/lib/api/errors"
 import { jsonApiHeaders, withApiTimeout } from "@/lib/api/http"
+import { parseApiError, parseJsonResponse } from "@/lib/api/parse-response"
 
 function assertApiConfigured() {
   if (!isApiConfigured()) {
@@ -70,13 +71,16 @@ export async function apiServerFetch<T>(
     throw await parseApiError(response)
   }
 
-  if (response.status === 204) {
-    return undefined as T
+  try {
+    return (await parseJsonResponse<T>(response)) as T
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    throw new ApiError(
+      response.status,
+      "INTERNAL",
+      "El servidor devolvió una respuesta no válida.",
+    )
   }
-
-  const text = await response.text()
-  if (!text) return undefined as T
-  return JSON.parse(text) as T
 }
 
 export async function apiServerFetchSafe<T>(

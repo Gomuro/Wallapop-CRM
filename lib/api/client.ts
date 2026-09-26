@@ -1,6 +1,7 @@
 import { clientApiV1Path, getPublicApiUrl, isApiConfigured } from "@/lib/api/config"
-import { ApiError, parseApiError } from "@/lib/api/errors"
+import { ApiError } from "@/lib/api/errors"
 import { jsonApiHeaders, withApiTimeout } from "@/lib/api/http"
+import { parseApiError, parseJsonResponse } from "@/lib/api/parse-response"
 
 function assertApiConfigured() {
   if (!isApiConfigured()) {
@@ -23,13 +24,6 @@ function assertApiConfigured() {
 export type ApiFetchOptions = RequestInit & {
   /** Forward session to Express from Next middleware (server-only). */
   cookieHeader?: string
-}
-
-async function readJson<T>(response: Response): Promise<T | undefined> {
-  if (response.status === 204) return undefined
-  const text = await response.text()
-  if (!text) return undefined
-  return JSON.parse(text) as T
 }
 
 export async function apiClientFetch<T>(
@@ -59,7 +53,16 @@ export async function apiClientFetch<T>(
     throw await parseApiError(response)
   }
 
-  return (await readJson<T>(response)) as T
+  try {
+    return (await parseJsonResponse<T>(response)) as T
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    throw new ApiError(
+      response.status,
+      "INTERNAL",
+      "El servidor devolvió una respuesta no válida.",
+    )
+  }
 }
 
 export async function apiFetch<T>(
@@ -101,8 +104,17 @@ export async function apiFetch<T>(
     throw await parseApiError(response)
   }
 
-  const data = (await readJson<T>(response)) as T
-  return { data, response }
+  try {
+    const data = (await parseJsonResponse<T>(response)) as T
+    return { data, response }
+  } catch (error) {
+    if (error instanceof ApiError) throw error
+    throw new ApiError(
+      response.status,
+      "INTERNAL",
+      "El servidor devolvió una respuesta no válida.",
+    )
+  }
 }
 
 export { ApiError }
