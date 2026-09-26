@@ -260,6 +260,9 @@ export function ProductForm({
 
       <div className="flex min-w-0 flex-col gap-3 lg:col-span-5">
         <FormSection title="Detalles del producto">
+        {product?.sku ? (
+          <input type="hidden" name="sku" value={product.sku} />
+        ) : null}
         <Field label="Título" htmlFor="title" error={state.fieldErrors?.title}>
           <Input
             id="title"
@@ -268,16 +271,6 @@ export function ProductForm({
             className="h-11 scroll-mt-28"
             aria-invalid={Boolean(state.fieldErrors?.title)}
             aria-describedby={state.fieldErrors?.title ? "title-error" : undefined}
-          />
-        </Field>
-        <Field label="SKU" htmlFor="sku" error={state.fieldErrors?.sku}>
-          <Input
-            id="sku"
-            name="sku"
-            defaultValue={product?.sku ?? draft?.sku}
-            className="h-11 scroll-mt-28 tabular-nums"
-            aria-invalid={Boolean(state.fieldErrors?.sku)}
-            aria-describedby={state.fieldErrors?.sku ? "sku-error" : undefined}
           />
         </Field>
         <Field

@@ -39,13 +39,18 @@ function filesFromFormData(formData: FormData) {
     .filter((entry): entry is File => entry instanceof File && entry.size > 0)
 }
 
-function formToPayload(formData: FormData) {
+function generateFallbackSku(): string {
+  return `WP-${Date.now().toString().slice(-6)}`
+}
+
+function formToPayload(formData: FormData, fallbackSku?: string) {
   const weightRaw = String(formData.get("weight") ?? "").trim()
   const priceRaw = String(formData.get("price") ?? "").trim()
   const conditionRaw = String(formData.get("condition") ?? "GOOD").trim()
+  const rawSku = String(formData.get("sku") ?? "").trim()
 
   return {
-    sku: String(formData.get("sku") ?? ""),
+    sku: rawSku || fallbackSku || generateFallbackSku(),
     title: String(formData.get("title") ?? ""),
     description: String(formData.get("description") ?? ""),
     price: priceRaw === "" ? Number.NaN : Number(priceRaw),
@@ -131,14 +136,6 @@ export async function updateProductAction(
   _prev: ProductActionState,
   formData: FormData,
 ): Promise<ProductActionState> {
-  const parsed = productUpdateSchema.safeParse(formToPayload(formData))
-  if (!parsed.success) {
-    return {
-      error: "Revisa los campos marcados.",
-      fieldErrors: firstFieldError(parsed.error),
-    }
-  }
-
   let existing: Awaited<ReturnType<typeof getProduct>>
   try {
     existing = await getProduct(id)
@@ -148,6 +145,16 @@ export async function updateProductAction(
   }
   if (!existing) {
     return { error: "Producto no encontrado." }
+  }
+
+  const parsed = productUpdateSchema.safeParse(
+    formToPayload(formData, existing.sku),
+  )
+  if (!parsed.success) {
+    return {
+      error: "Revisa los campos marcados.",
+      fieldErrors: firstFieldError(parsed.error),
+    }
   }
 
   try {

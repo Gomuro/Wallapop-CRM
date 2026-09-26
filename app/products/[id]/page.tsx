@@ -79,12 +79,9 @@ export default async function ProductDetailPage({
         </div>
         <aside className="space-y-4 px-4 pt-4 pb-[calc(9rem+env(safe-area-inset-bottom))] md:px-8 md:pb-8 lg:sticky lg:top-28 lg:col-span-6 lg:self-start lg:px-0 lg:pt-0 lg:pb-0">
           <div>
-            <div className="flex min-w-0 items-baseline justify-between gap-2">
-              <p className={cn(typePrice, "text-primary-text")}>
-                {formatEuro(product.price)}
-              </p>
-              <p className={cn(typeMeta, "text-muted-foreground")}>{product.sku}</p>
-            </div>
+            <p className={cn(typePrice, "text-primary-text")}>
+              {formatEuro(product.price)}
+            </p>
             <p className="mt-1 text-lg font-medium leading-snug">{product.title}</p>
           </div>
           <div className="flex flex-wrap gap-1.5">

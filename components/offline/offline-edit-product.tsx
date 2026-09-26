@@ -16,13 +16,18 @@ import { typeScreen } from "@/lib/ui/type"
 import type { ProductCondition, ProductStatus } from "@/lib/validations"
 import { productUpdateSchema } from "@/lib/validations/product"
 
-function payloadFromForm(formData: FormData) {
+function generateFallbackSku(): string {
+  return `WP-${Date.now().toString().slice(-6)}`
+}
+
+function payloadFromForm(formData: FormData, fallbackSku?: string) {
   const weightRaw = String(formData.get("weight") ?? "").trim()
   const priceRaw = String(formData.get("price") ?? "").trim()
   const conditionRaw = String(formData.get("condition") ?? "GOOD").trim()
+  const rawSku = String(formData.get("sku") ?? "").trim()
 
   return {
-    sku: String(formData.get("sku") ?? ""),
+    sku: rawSku || fallbackSku || generateFallbackSku(),
     title: String(formData.get("title") ?? ""),
     description: String(formData.get("description") ?? ""),
     price: priceRaw === "" ? Number.NaN : Number(priceRaw),
@@ -70,7 +75,9 @@ export function OfflineEditProduct({
       const current = getOfflineProduct(id)
       if (!current) return { error: "Producto no encontrado." }
 
-      const parsed = productUpdateSchema.safeParse(payloadFromForm(formData))
+      const parsed = productUpdateSchema.safeParse(
+        payloadFromForm(formData, current.sku),
+      )
       if (!parsed.success) {
         return {
           error: "Revisa los campos marcados.",

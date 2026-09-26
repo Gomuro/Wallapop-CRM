@@ -48,20 +48,11 @@ function OverlayStatusBadge({
   )
 }
 
-function PriceSku({
-  price,
-  sku,
-}: {
-  price: number
-  sku: string
-}) {
+function Price({ price }: { price: number }) {
   return (
     <div className="flex min-w-0 items-baseline justify-between gap-2">
       <p className={cn(typePrice, "shrink-0 text-primary-text")}>
         {formatEuro(price)}
-      </p>
-      <p className={cn(typeMeta, "min-w-0 truncate text-right text-muted-foreground")}>
-        {sku}
       </p>
     </div>
   )
@@ -107,7 +98,7 @@ export function ProductCard({
           </div>
           <div className="flex min-w-0 flex-1 flex-col justify-between p-3">
             <div className="min-w-0">
-              <PriceSku price={product.price} sku={product.sku} />
+              <Price price={product.price} />
               <p className="mt-0.5 line-clamp-2 text-sm leading-snug">{product.title}</p>
             </div>
             <div className="mt-2 flex flex-wrap gap-1">
@@ -144,7 +135,7 @@ export function ProductCard({
           />
         </div>
         <div className="flex flex-1 flex-col gap-1 p-2.5">
-          <PriceSku price={product.price} sku={product.sku} />
+          <Price price={product.price} />
           <p className="line-clamp-2 min-h-10 text-sm leading-snug">{product.title}</p>
           <div className="mt-auto flex min-h-5 flex-wrap content-start gap-1">
             <ListingStatusBadge product={product} />

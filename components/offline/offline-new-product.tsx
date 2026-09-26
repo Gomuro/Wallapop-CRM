@@ -16,13 +16,18 @@ import { typeScreen } from "@/lib/ui/type"
 import type { ProductCondition, ProductStatus } from "@/lib/validations"
 import { productCreateSchema } from "@/lib/validations/product"
 
+function generateFallbackSku(): string {
+  return `WP-${Date.now().toString().slice(-6)}`
+}
+
 function payloadFromForm(formData: FormData) {
   const weightRaw = String(formData.get("weight") ?? "").trim()
   const priceRaw = String(formData.get("price") ?? "").trim()
   const conditionRaw = String(formData.get("condition") ?? "GOOD").trim()
+  const rawSku = String(formData.get("sku") ?? "").trim()
 
   return {
-    sku: String(formData.get("sku") ?? ""),
+    sku: rawSku || generateFallbackSku(),
     title: String(formData.get("title") ?? ""),
     description: String(formData.get("description") ?? ""),
     price: priceRaw === "" ? Number.NaN : Number(priceRaw),

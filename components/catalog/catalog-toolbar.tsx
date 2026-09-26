@@ -108,9 +108,9 @@ export function CatalogToolbar({
               const nextQ = draft.trim()
               if (nextQ !== draft) setDraft(nextQ)
             }}
-            placeholder="Buscar por SKU o título..."
+            placeholder="Buscar por título..."
             className={cn("h-11 w-full !pl-9", draft ? "pr-11" : "pr-2.5")}
-            aria-label="Buscar por SKU o título"
+            aria-label="Buscar por título"
           />
           {draft ? (
             <button
