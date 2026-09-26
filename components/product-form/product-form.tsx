@@ -61,29 +61,7 @@ export function ProductForm({
   submitLabel: string
 }) {
   const isNew = !product
-  const submitAction = useCallback(
-    async (prev: ProductActionState, formData: FormData) => {
-      const snapshot = isNew ? loadDraftFields() : null
-      if (isNew) {
-        clearDraftFields()
-        await clearDraftPhotos()
-      }
-      try {
-        const result = await action(prev, formData)
-        if (result.error || result.fieldErrors) {
-          if (snapshot) saveDraftFields(snapshot)
-        }
-        return result
-      } catch (error) {
-        if (isNextRedirect(error)) throw error
-        if (snapshot) saveDraftFields(snapshot)
-        return { error: actionFailureMessage(error) }
-      }
-    },
-    [action, isNew],
-  )
-  const [state, formAction, pending] = useActionState(submitAction, {})
-  const [isPending, startTransition] = useTransition()
+  const isSubmittingRef = useRef(false)
   const pendingFilesRef = useRef<File[]>([])
   const [draft, setDraft] = useState<ReturnType<typeof loadDraftFields>>(null)
   const [draftReady, setDraftReady] = useState(!isNew)
@@ -93,21 +71,66 @@ export function ProductForm({
   )
   const [status, setStatus] = useState<ProductStatus>(product?.status ?? "ACTIVE")
 
+  const submitAction = useCallback(
+    async (prev: ProductActionState, formData: FormData) => {
+      isSubmittingRef.current = true
+      const snapshot = isNew ? loadDraftFields() : null
+      if (isNew) {
+        clearDraftFields()
+        await clearDraftPhotos()
+      }
+      try {
+        const result = await action(prev, formData)
+        if (result.error || result.fieldErrors) {
+          isSubmittingRef.current = false
+          if (snapshot) saveDraftFields(snapshot)
+          if (pendingFilesRef.current.length > 0) {
+            void saveDraftPhotos(pendingFilesRef.current)
+          }
+        } else {
+          clearDraftFields()
+          await clearDraftPhotos()
+        }
+        return result
+      } catch (error) {
+        if (isNextRedirect(error)) {
+          clearDraftFields()
+          void clearDraftPhotos()
+          throw error
+        }
+        isSubmittingRef.current = false
+        if (snapshot) saveDraftFields(snapshot)
+        if (pendingFilesRef.current.length > 0) {
+          void saveDraftPhotos(pendingFilesRef.current)
+        }
+        return { error: actionFailureMessage(error) }
+      }
+    },
+    [action, isNew],
+  )
+  const [state, formAction, pending] = useActionState(submitAction, {})
+  const [isPending, startTransition] = useTransition()
+
   const saving = pending || isPending
 
   useEffect(() => {
     if (!isNew) return
     const saved = loadDraftFields()
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- hydrate draft from client-only sessionStorage on mount
     setDraft(saved)
     if (saved?.categoryId) setCategoryId(saved.categoryId)
     if (saved?.condition) setCondition(saved.condition as ProductCondition)
     if (saved?.status) setStatus(saved.status as ProductStatus)
+    if (!saved) {
+      void clearDraftPhotos()
+    }
     setDraftReady(true)
   }, [isNew])
 
   useEffect(() => {
-    if (!isNew || !draftReady) return
+    if (!isNew || !draftReady || isSubmittingRef.current) return
     const current = loadDraftFields()
+    if (!current && !categoryId) return
     saveDraftFields({
       title: current?.title ?? "",
       sku: current?.sku ?? "",
@@ -131,7 +154,7 @@ export function ProductForm({
   }, [state])
 
   function persistFromForm(form: HTMLFormElement) {
-    if (!isNew) return
+    if (!isNew || isSubmittingRef.current) return
     const formData = new FormData(form)
     saveDraftFields({
       title: String(formData.get("title") ?? ""),
@@ -145,9 +168,32 @@ export function ProductForm({
     })
   }
 
+  const handlePendingFilesChange = useCallback(
+    (files: File[]) => {
+      pendingFilesRef.current = files
+      if (isNew && !isSubmittingRef.current) {
+        void saveDraftPhotos(files)
+        if (files.length > 0) {
+          const current = loadDraftFields() ?? {
+            title: "",
+            sku: "",
+            description: "",
+            price: "",
+            weight: "",
+            categoryId,
+            condition,
+            status,
+          }
+          saveDraftFields(current)
+        }
+      }
+    },
+    [categoryId, condition, isNew, status],
+  )
+
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
-    persistFromForm(event.currentTarget)
+    isSubmittingRef.current = true
     const formData = new FormData(event.currentTarget)
     pendingFilesRef.current.forEach((file) => formData.append("files", file))
     startTransition(() => {
@@ -175,11 +221,8 @@ export function ProductForm({
             <PhotoSlots
               productId={product?.id}
               productImages={product?.productImages}
-              restoreDraft={!product}
-              onPendingFilesChange={(files) => {
-                pendingFilesRef.current = files
-                if (isNew) void saveDraftPhotos(files)
-              }}
+              restoreDraft={!product && Boolean(draft)}
+              onPendingFilesChange={handlePendingFilesChange}
             />
           </div>
           {state.fieldErrors?.images ? (

@@ -80,6 +80,7 @@ export function PhotoSlots({
 
   useEffect(() => {
     if (productId) {
+      // eslint-disable-next-line react-hooks/set-state-in-effect -- sync slot state when server updates product images
       setSlots(
         productImages
           .slice()
@@ -110,10 +111,25 @@ export function PhotoSlots({
     }
   }, [productId, restoreDraft])
 
+  const onPendingFilesChangeRef = useRef(onPendingFilesChange)
   useEffect(() => {
-    if (productId || !onPendingFilesChange) return
-    onPendingFilesChange(slots.map((slot) => slot.file).filter(Boolean) as File[])
-  }, [slots, productId, onPendingFilesChange])
+    onPendingFilesChangeRef.current = onPendingFilesChange
+  })
+
+  useEffect(() => {
+    if (productId) return
+    onPendingFilesChangeRef.current?.(
+      slots.map((slot) => slot.file).filter(Boolean) as File[],
+    )
+  }, [slots, productId])
+
+  function clearAll() {
+    slots.forEach((s) => {
+      if (s.url.startsWith("blob:")) URL.revokeObjectURL(s.url)
+    })
+    setSlots([])
+    setError(null)
+  }
 
   const safeImages = slots
   const gridSlots = Array.from(
@@ -488,9 +504,20 @@ export function PhotoSlots({
           </div>
         ))}
       </div>
-      <p className={cn(typeMeta, "text-muted-foreground")}>
-        Toca + para subir. Arrastra para ordenar. Se comprimen al añadir (máx. 1600px).
-      </p>
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <p className={cn(typeMeta, "text-muted-foreground")}>
+          Toca + para subir. Arrastra para ordenar. Se comprimen al añadir (máx. 1600px).
+        </p>
+        {!productId && safeImages.length > 1 ? (
+          <button
+            type="button"
+            onClick={clearAll}
+            className="text-xs font-medium text-destructive hover:underline"
+          >
+            Eliminar todas ({safeImages.length})
+          </button>
+        ) : null}
+      </div>
       {error ? (
         <p className="text-xs text-destructive" role="alert">
           {error}
