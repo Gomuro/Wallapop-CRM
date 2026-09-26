@@ -1,15 +1,15 @@
 const MAX_EDGE = 1600
-const JPEG_QUALITY = 0.82
-const RETRY_QUALITIES = [0.7, 0.55]
-const SKIP_UNDER_BYTES = 350_000
+const WEBP_QUALITY = 0.85
+const RETRY_QUALITIES = [0.72, 0.58]
+const SKIP_WEBP_UNDER_BYTES = 500 * 1024
 const TARGET_MAX_BYTES = 2_500_000
 
-function outputName(file: File): string {
+export function outputName(file: File): string {
   const base = file.name.replace(/\.[^.]+$/, "") || "photo"
-  return `${base}.jpg`
+  return `${base}.webp`
 }
 
-function fitSize(width: number, height: number): { width: number; height: number } {
+export function fitSize(width: number, height: number): { width: number; height: number } {
   const edge = Math.max(width, height)
   if (edge <= MAX_EDGE) return { width, height }
   const scale = MAX_EDGE / edge
@@ -28,7 +28,7 @@ function canvasToBlob(
     canvas instanceof OffscreenCanvas &&
     typeof canvas.convertToBlob === "function"
   ) {
-    return canvas.convertToBlob({ type: "image/jpeg", quality })
+    return canvas.convertToBlob({ type: "image/webp", quality })
   }
   return new Promise((resolve, reject) => {
     ;(canvas as HTMLCanvasElement).toBlob(
@@ -36,7 +36,7 @@ function canvasToBlob(
         if (blob) resolve(blob)
         else reject(new Error("toBlob"))
       },
-      "image/jpeg",
+      "image/webp",
       quality,
     )
   })
@@ -90,7 +90,7 @@ function makeCanvas(width: number, height: number): HTMLCanvasElement | Offscree
   return canvas
 }
 
-async function encodeJpeg(
+async function encodeWebp(
   source: CanvasImageSource,
   width: number,
   height: number,
@@ -102,7 +102,7 @@ async function encodeJpeg(
   if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high"
   ctx.drawImage(source, 0, 0, width, height)
 
-  let blob = await canvasToBlob(canvas, JPEG_QUALITY)
+  let blob = await canvasToBlob(canvas, WEBP_QUALITY)
   for (const quality of RETRY_QUALITIES) {
     if (blob.size <= TARGET_MAX_BYTES) break
     blob = await canvasToBlob(canvas, quality)
@@ -112,21 +112,21 @@ async function encodeJpeg(
 
 export async function compressImageFile(file: File): Promise<File> {
   if (typeof window === "undefined") return file
-  if (file.size > 0 && file.size <= SKIP_UNDER_BYTES && file.type === "image/jpeg") {
+
+  const isWebp =
+    file.type.toLowerCase() === "image/webp" || /\.webp$/i.test(file.name)
+  if (isWebp && file.size > 0 && file.size < SKIP_WEBP_UNDER_BYTES) {
     return file
   }
 
   try {
     const decoded = await decodeImage(file)
     const { width, height } = fitSize(decoded.width, decoded.height)
-    const blob = await encodeJpeg(decoded.source, width, height)
+    const blob = await encodeWebp(decoded.source, width, height)
     decoded.close?.()
     if (blob.size <= 0) return file
-    if (blob.size >= file.size && width === decoded.width && height === decoded.height) {
-      return file
-    }
     return new File([blob], outputName(file), {
-      type: "image/jpeg",
+      type: "image/webp",
       lastModified: Date.now(),
     })
   } catch {
