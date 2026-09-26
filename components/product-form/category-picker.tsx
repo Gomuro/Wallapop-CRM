@@ -1,7 +1,8 @@
 "use client"
 
-import { useEffect, useMemo, useState } from "react"
+import { Component, useEffect, useMemo, useRef, useState, type ReactNode } from "react"
 
+import { Button } from "@/components/ui/button"
 import { Label } from "@/components/ui/label"
 import {
   Select,
@@ -35,19 +36,76 @@ function selectItems(options: ApiCategory[]) {
   return Object.fromEntries(options.map((item) => [item.id, item.nameEs]))
 }
 
-export function CategoryPicker({
-  categories,
-  initialRoots,
-  value,
-  onChange,
-  error,
-}: {
+type CategoryPickerProps = {
   categories?: ApiCategory[]
   initialRoots?: ApiCategory[]
   value: string
   onChange: (categoryId: string) => void
   error?: string
-}) {
+}
+
+class CategoryErrorBoundary extends Component<
+  { children: ReactNode; onReset?: () => void },
+  { hasError: boolean; error: Error | null }
+> {
+  constructor(props: { children: ReactNode; onReset?: () => void }) {
+    super(props)
+    this.state = { hasError: false, error: null }
+  }
+
+  static getDerivedStateFromError(error: Error) {
+    return { hasError: true, error }
+  }
+
+  componentDidCatch(error: Error, info: unknown) {
+    console.error("CategoryPicker error:", error, info)
+  }
+
+  render() {
+    if (this.state.hasError) {
+      return (
+        <div className="space-y-2 rounded-lg border border-destructive/40 bg-destructive/5 p-3 text-sm">
+          <p className="font-medium text-destructive">
+            No se ha podido mostrar el selector de categorías.
+          </p>
+          {this.state.error?.message ? (
+            <p className="font-mono text-xs text-muted-foreground">
+              {this.state.error.message}
+            </p>
+          ) : null}
+          <Button
+            type="button"
+            variant="outline"
+            size="sm"
+            onClick={() => {
+              this.setState({ hasError: false, error: null })
+              this.props.onReset?.()
+            }}
+          >
+            Reintentar
+          </Button>
+        </div>
+      )
+    }
+    return this.props.children
+  }
+}
+
+export function CategoryPicker(props: CategoryPickerProps) {
+  return (
+    <CategoryErrorBoundary>
+      <CategoryPickerContent {...props} />
+    </CategoryErrorBoundary>
+  )
+}
+
+function CategoryPickerContent({
+  categories,
+  initialRoots,
+  value,
+  onChange,
+  error,
+}: CategoryPickerProps) {
   const localTree =
     categories && categories.length > 0 ? categories : null
 
@@ -145,45 +203,60 @@ function RemoteCategoryPicker({
   )
   const [selectedPath, setSelectedPath] = useState<string[]>([])
   const [loadError, setLoadError] = useState<string | null>(null)
+  const lastInternalValueRef = useRef<string>("")
 
   useEffect(() => {
     let cancelled = false
     const leafId = value
-    const roots = initialRoots
+
+    // If the leaf matches what was chosen internally by user interaction,
+    // do not rebuild (rebuilding remounts Selects, re-fetches redundant data, and crashes mobile browsers).
+    if (leafId && leafId === lastInternalValueRef.current) {
+      return
+    }
+
+    if (!leafId) {
+      lastInternalValueRef.current = ""
+      if (!initialRoots || initialRoots.length === 0) {
+        void fetchChildren(null)
+          .then((fetched) => {
+            if (!cancelled) setLevels([fetched])
+          })
+          .catch(() => {
+            if (!cancelled) {
+              setLoadError("No se ha podido cargar el árbol de categorías.")
+            }
+          })
+      }
+      return
+    }
 
     async function prepare() {
       try {
-        if (leafId) {
-          const chain: ApiCategory[] = []
-          let current: string | null = leafId
-          const seen = new Set<string>()
-          while (current && !seen.has(current)) {
-            seen.add(current)
-            const node = await fetchCategory(current)
-            chain.unshift(node)
-            current = node.parentId
-          }
-          if (cancelled) return
-          const nextLevels: ApiCategory[][] = []
-          for (let i = 0; i < chain.length; i += 1) {
-            const parentId = i === 0 ? null : chain[i - 1]?.id ?? null
-            nextLevels.push(await fetchChildren(parentId))
-          }
-          const last = chain[chain.length - 1]
-          if (last && !last.isLeaf) {
-            const kids = await fetchChildren(last.id)
-            if (kids.length > 0) nextLevels.push(kids)
-          }
-          if (cancelled) return
-          setLevels(nextLevels)
-          setSelectedPath(chain.map((item) => item.id))
-          return
+        const chain: ApiCategory[] = []
+        let current: string | null = leafId
+        const seen = new Set<string>()
+        while (current && !seen.has(current)) {
+          seen.add(current)
+          const node = await fetchCategory(current)
+          chain.unshift(node)
+          current = node.parentId
         }
-
-        if (roots && roots.length > 0) return
-        const fetched = await fetchChildren(null)
         if (cancelled) return
-        setLevels([fetched])
+        const nextLevels: ApiCategory[][] = []
+        for (let i = 0; i < chain.length; i += 1) {
+          const parentId = i === 0 ? null : chain[i - 1]?.id ?? null
+          nextLevels.push(await fetchChildren(parentId))
+        }
+        const last = chain[chain.length - 1]
+        if (last && !last.isLeaf) {
+          const kids = await fetchChildren(last.id)
+          if (kids.length > 0) nextLevels.push(kids)
+        }
+        if (cancelled) return
+        lastInternalValueRef.current = leafId
+        setLevels(nextLevels)
+        setSelectedPath(chain.map((item) => item.id))
       } catch {
         if (!cancelled) {
           setLoadError("No se ha podido cargar el árbol de categorías.")
@@ -205,14 +278,17 @@ function RemoteCategoryPicker({
     if (!node) return
     if (node.isLeaf) {
       setLevels(levels.slice(0, depth + 1))
+      lastInternalValueRef.current = categoryId
       onChange(categoryId)
       return
     }
+    lastInternalValueRef.current = ""
     onChange("")
     try {
       const kids = await fetchChildren(categoryId)
       if (kids.length === 0) {
         setLevels(levels.slice(0, depth + 1))
+        lastInternalValueRef.current = categoryId
         onChange(categoryId)
         return
       }
@@ -249,38 +325,72 @@ function LevelSelects({
   return (
     <div className="space-y-2">
       <input type="hidden" name="categoryId" value={value} />
-      {levels.map((options, depth) => (
-        <div key={depth} className="space-y-1.5">
-          <Label htmlFor={`category-level-${depth}`}>
-            {depth === 0 ? "Categoría" : "Subcategoría"}
-          </Label>
-          <Select
-            value={selectedPath[depth] ?? null}
-            onValueChange={(id) => id && onPick(depth, id)}
-            items={selectItems(options)}
-          >
-            <SelectTrigger
-              id={`category-level-${depth}`}
-              className="h-11 w-full data-[size=default]:h-11"
-              aria-invalid={Boolean(error)}
-            >
-              <SelectValue placeholder="Elige…" />
-            </SelectTrigger>
-            <SelectContent>
-              {options.map((item) => (
-                <SelectItem key={item.id} value={item.id}>
-                  {item.nameEs}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      ))}
+      {levels.map((options, depth) => {
+        const selected = selectedPath[depth] ?? null
+        const safeValue =
+          selected && options.some((item) => item.id === selected)
+            ? selected
+            : null
+        return (
+          <LevelSelect
+            key={depth}
+            depth={depth}
+            options={options}
+            value={safeValue}
+            onPick={onPick}
+            error={error}
+          />
+        )
+      })}
       {error ? (
         <p className="text-xs text-destructive" role="alert">
           {error}
         </p>
       ) : null}
+    </div>
+  )
+}
+
+function LevelSelect({
+  depth,
+  options,
+  value,
+  onPick,
+  error,
+}: {
+  depth: number
+  options: ApiCategory[]
+  value: string | null
+  onPick: (depth: number, categoryId: string) => void
+  error?: string
+}) {
+  const items = useMemo(() => selectItems(options), [options])
+
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor={`category-level-${depth}`}>
+        {depth === 0 ? "Categoría" : "Subcategoría"}
+      </Label>
+      <Select
+        value={value}
+        onValueChange={(id) => id && onPick(depth, id)}
+        items={items}
+      >
+        <SelectTrigger
+          id={`category-level-${depth}`}
+          className="h-11 w-full data-[size=default]:h-11"
+          aria-invalid={Boolean(error)}
+        >
+          <SelectValue placeholder="Elige…" />
+        </SelectTrigger>
+        <SelectContent alignItemWithTrigger={false}>
+          {options.map((item) => (
+            <SelectItem key={item.id} value={item.id}>
+              {item.nameEs}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
     </div>
   )
 }

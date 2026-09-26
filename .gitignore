@@ -60,6 +60,7 @@ blob-report/
 docs/
 prototype/
 references/
+tmp/
 
 # Uploaded product photos (keep folder)
 public/uploads/*
