@@ -1,6 +1,6 @@
 "use client"
 
-import { useMemo, useState } from "react"
+import { useEffect, useMemo, useState } from "react"
 
 import { Label } from "@/components/ui/label"
 import {
@@ -10,10 +10,69 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { childrenOf, categoryBreadcrumb } from "@/lib/categories/tree"
+import { apiClientFetch } from "@/lib/api/client"
 import type { ApiCategory } from "@/lib/api/types"
+import { childrenOf, categoryBreadcrumb } from "@/lib/categories/tree"
+
+async function fetchChildren(parentId: string | null): Promise<ApiCategory[]> {
+  const query = parentId
+    ? `?parentId=${encodeURIComponent(parentId)}`
+    : "?parentId=root"
+  const { categories } = await apiClientFetch<{ categories: ApiCategory[] }>(
+    `/categories${query}`,
+  )
+  return categories
+}
+
+async function fetchCategory(id: string): Promise<ApiCategory> {
+  const { category } = await apiClientFetch<{ category: ApiCategory }>(
+    `/categories/${id}`,
+  )
+  return category
+}
+
+function selectItems(options: ApiCategory[]) {
+  return Object.fromEntries(options.map((item) => [item.id, item.nameEs]))
+}
 
 export function CategoryPicker({
+  categories,
+  initialRoots,
+  value,
+  onChange,
+  error,
+}: {
+  categories?: ApiCategory[]
+  initialRoots?: ApiCategory[]
+  value: string
+  onChange: (categoryId: string) => void
+  error?: string
+}) {
+  const localTree =
+    categories && categories.length > 0 ? categories : null
+
+  if (localTree) {
+    return (
+      <LocalCategoryPicker
+        categories={localTree}
+        value={value}
+        onChange={onChange}
+        error={error}
+      />
+    )
+  }
+
+  return (
+    <RemoteCategoryPicker
+      initialRoots={initialRoots}
+      value={value}
+      onChange={onChange}
+      error={error}
+    />
+  )
+}
+
+function LocalCategoryPicker({
   categories,
   value,
   onChange,
@@ -28,7 +87,6 @@ export function CategoryPicker({
     () => (value ? categoryBreadcrumb(categories, value) : []),
     [categories, value],
   )
-
   const [selectedPath, setSelectedPath] = useState<string[]>(() =>
     breadcrumb.map((item) => item.id),
   )
@@ -61,6 +119,134 @@ export function CategoryPicker({
   }
 
   return (
+    <LevelSelects
+      levels={levels}
+      selectedPath={selectedPath}
+      onPick={pickLevel}
+      error={error}
+      value={value}
+    />
+  )
+}
+
+function RemoteCategoryPicker({
+  initialRoots,
+  value,
+  onChange,
+  error,
+}: {
+  initialRoots?: ApiCategory[]
+  value: string
+  onChange: (categoryId: string) => void
+  error?: string
+}) {
+  const [levels, setLevels] = useState<ApiCategory[][]>(() =>
+    initialRoots && initialRoots.length > 0 ? [initialRoots] : [],
+  )
+  const [selectedPath, setSelectedPath] = useState<string[]>([])
+  const [loadError, setLoadError] = useState<string | null>(null)
+
+  useEffect(() => {
+    let cancelled = false
+    const leafId = value
+    const roots = initialRoots
+
+    async function prepare() {
+      try {
+        if (leafId) {
+          const chain: ApiCategory[] = []
+          let current: string | null = leafId
+          const seen = new Set<string>()
+          while (current && !seen.has(current)) {
+            seen.add(current)
+            const node = await fetchCategory(current)
+            chain.unshift(node)
+            current = node.parentId
+          }
+          if (cancelled) return
+          const nextLevels: ApiCategory[][] = []
+          for (let i = 0; i < chain.length; i += 1) {
+            const parentId = i === 0 ? null : chain[i - 1]?.id ?? null
+            nextLevels.push(await fetchChildren(parentId))
+          }
+          const last = chain[chain.length - 1]
+          if (last && !last.isLeaf) {
+            const kids = await fetchChildren(last.id)
+            if (kids.length > 0) nextLevels.push(kids)
+          }
+          if (cancelled) return
+          setLevels(nextLevels)
+          setSelectedPath(chain.map((item) => item.id))
+          return
+        }
+
+        if (roots && roots.length > 0) return
+        const fetched = await fetchChildren(null)
+        if (cancelled) return
+        setLevels([fetched])
+      } catch {
+        if (!cancelled) {
+          setLoadError("No se ha podido cargar el árbol de categorías.")
+        }
+      }
+    }
+
+    void prepare()
+    return () => {
+      cancelled = true
+    }
+  }, [initialRoots, value])
+
+  async function pickLevel(depth: number, categoryId: string) {
+    const nextPath = selectedPath.slice(0, depth)
+    nextPath[depth] = categoryId
+    setSelectedPath(nextPath)
+    const node = levels[depth]?.find((item) => item.id === categoryId)
+    if (!node) return
+    if (node.isLeaf) {
+      setLevels(levels.slice(0, depth + 1))
+      onChange(categoryId)
+      return
+    }
+    onChange("")
+    try {
+      const kids = await fetchChildren(categoryId)
+      if (kids.length === 0) {
+        setLevels(levels.slice(0, depth + 1))
+        onChange(categoryId)
+        return
+      }
+      setLevels([...levels.slice(0, depth + 1), kids])
+    } catch {
+      setLoadError("No se ha podido cargar el árbol de categorías.")
+    }
+  }
+
+  return (
+    <LevelSelects
+      levels={levels}
+      selectedPath={selectedPath}
+      onPick={(depth, id) => void pickLevel(depth, id)}
+      error={error ?? loadError ?? undefined}
+      value={value}
+    />
+  )
+}
+
+function LevelSelects({
+  levels,
+  selectedPath,
+  onPick,
+  error,
+  value,
+}: {
+  levels: ApiCategory[][]
+  selectedPath: string[]
+  onPick: (depth: number, categoryId: string) => void
+  error?: string
+  value: string
+}) {
+  return (
     <div className="space-y-2">
       <input type="hidden" name="categoryId" value={value} />
       {levels.map((options, depth) => (
@@ -69,11 +255,9 @@ export function CategoryPicker({
             {depth === 0 ? "Categoría" : "Subcategoría"}
           </Label>
           <Select
-            value={selectedPath[depth] ?? ""}
-            onValueChange={(id) => id && pickLevel(depth, id)}
-            items={Object.fromEntries(
-              options.map((item) => [item.id, item.nameEs]),
-            )}
+            value={selectedPath[depth] ?? null}
+            onValueChange={(id) => id && onPick(depth, id)}
+            items={selectItems(options)}
           >
             <SelectTrigger
               id={`category-level-${depth}`}
@@ -93,7 +277,9 @@ export function CategoryPicker({
         </div>
       ))}
       {error ? (
-        <p className="text-xs text-destructive" role="alert">{error}</p>
+        <p className="text-xs text-destructive" role="alert">
+          {error}
+        </p>
       ) : null}
     </div>
   )

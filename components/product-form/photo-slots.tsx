@@ -16,6 +16,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import type { InventoryProductImage } from "@/lib/inventory/types"
 import { PRODUCT_IMAGE_MAX } from "@/lib/validations/product"
+import { loadDraftPhotos } from "@/lib/product-form/draft"
 import { typeMeta } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
 
@@ -51,10 +52,12 @@ type DragSession = {
 export function PhotoSlots({
   productId,
   productImages = [],
+  restoreDraft = false,
   onPendingFilesChange,
 }: {
   productId?: string
   productImages?: InventoryProductImage[]
+  restoreDraft?: boolean
   onPendingFilesChange?: (files: File[]) => void
 }) {
   const inputRef = useRef<HTMLInputElement>(null)
@@ -83,6 +86,23 @@ export function PhotoSlots({
       )
     }
   }, [productId, productImages])
+
+  useEffect(() => {
+    if (productId || !restoreDraft) return
+    let cancelled = false
+    void loadDraftPhotos().then((files) => {
+      if (cancelled || files.length === 0) return
+      setSlots(
+        files.slice(0, PRODUCT_IMAGE_MAX).map((file) => ({
+          url: URL.createObjectURL(file),
+          file,
+        })),
+      )
+    })
+    return () => {
+      cancelled = true
+    }
+  }, [productId, restoreDraft])
 
   useEffect(() => {
     if (productId || !onPendingFilesChange) return

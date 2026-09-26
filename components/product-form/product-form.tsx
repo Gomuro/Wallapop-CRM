@@ -39,17 +39,26 @@ import type { InventoryProduct } from "@/lib/inventory/types"
 import type { ApiCategory } from "@/lib/api/types"
 import type { ProductCondition, ProductStatus } from "@/lib/validations"
 import { typeSection } from "@/lib/ui/type"
+import {
+  clearDraftFields,
+  clearDraftPhotos,
+  loadDraftFields,
+  saveDraftFields,
+  saveDraftPhotos,
+} from "@/lib/product-form/draft"
 
 const STATUS_OPTIONS: ProductStatus[] = ["ACTIVE", "INACTIVE", "SOLD"]
 
 export function ProductForm({
   product,
   categories,
+  initialRoots,
   action,
   submitLabel,
 }: {
   product?: InventoryProduct
-  categories: ApiCategory[]
+  categories?: ApiCategory[]
+  initialRoots?: ApiCategory[]
   action: (
     state: ProductActionState,
     formData: FormData,
@@ -57,13 +66,24 @@ export function ProductForm({
   submitLabel: string
 }) {
   const router = useRouter()
+  const isNew = !product
   const submitAction = useCallback(
     async (prev: ProductActionState, formData: FormData) => {
+      const snapshot = isNew ? loadDraftFields() : null
+      if (isNew) {
+        clearDraftFields()
+        await clearDraftPhotos()
+      }
       const result = await action(prev, formData)
+      if (result.error || result.fieldErrors) {
+        if (snapshot) saveDraftFields(snapshot)
+        return result
+      }
       if (!result.offlineDraft) return result
       try {
-        rememberOfflineCategories(categories)
-        const saved = upsertOfflineProduct(result.offlineDraft, categories)
+        const tree = categories?.length ? categories : undefined
+        if (tree) rememberOfflineCategories(tree)
+        const saved = upsertOfflineProduct(result.offlineDraft, tree)
         router.push(`/products/${saved.id}`)
         router.refresh()
         return {}
@@ -77,11 +97,13 @@ export function ProductForm({
         return { error: "No se pudo guardar el producto en este dispositivo." }
       }
     },
-    [action, categories, router],
+    [action, categories, isNew, router],
   )
   const [state, formAction, pending] = useActionState(submitAction, {})
   const [isPending, startTransition] = useTransition()
   const pendingFilesRef = useRef<File[]>([])
+  const [draft, setDraft] = useState<ReturnType<typeof loadDraftFields>>(null)
+  const [draftReady, setDraftReady] = useState(!isNew)
   const [categoryId, setCategoryId] = useState(product?.categoryId ?? "")
   const [condition, setCondition] = useState<ProductCondition>(
     product?.conditionCode ?? "GOOD",
@@ -89,6 +111,31 @@ export function ProductForm({
   const [status, setStatus] = useState<ProductStatus>(product?.status ?? "ACTIVE")
 
   const saving = pending || isPending
+
+  useEffect(() => {
+    if (!isNew) return
+    const saved = loadDraftFields()
+    setDraft(saved)
+    if (saved?.categoryId) setCategoryId(saved.categoryId)
+    if (saved?.condition) setCondition(saved.condition as ProductCondition)
+    if (saved?.status) setStatus(saved.status as ProductStatus)
+    setDraftReady(true)
+  }, [isNew])
+
+  useEffect(() => {
+    if (!isNew || !draftReady) return
+    const current = loadDraftFields()
+    saveDraftFields({
+      title: current?.title ?? "",
+      sku: current?.sku ?? "",
+      description: current?.description ?? "",
+      price: current?.price ?? "",
+      weight: current?.weight ?? "",
+      categoryId,
+      condition,
+      status,
+    })
+  }, [categoryId, condition, draftReady, isNew, status])
 
   useEffect(() => {
     if (!state.error && !state.fieldErrors) return
@@ -100,8 +147,24 @@ export function ProductForm({
     if (target instanceof HTMLElement) target.focus()
   }, [state])
 
+  function persistFromForm(form: HTMLFormElement) {
+    if (!isNew) return
+    const formData = new FormData(form)
+    saveDraftFields({
+      title: String(formData.get("title") ?? ""),
+      sku: String(formData.get("sku") ?? ""),
+      description: String(formData.get("description") ?? ""),
+      price: String(formData.get("price") ?? ""),
+      weight: String(formData.get("weight") ?? ""),
+      categoryId,
+      condition,
+      status,
+    })
+  }
+
   function onSubmit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault()
+    persistFromForm(event.currentTarget)
     const formData = new FormData(event.currentTarget)
     pendingFilesRef.current.forEach((file) => formData.append("files", file))
     startTransition(() => {
@@ -109,9 +172,16 @@ export function ProductForm({
     })
   }
 
+  if (!draftReady) {
+    return (
+      <p className="px-4 py-8 text-sm text-muted-foreground">Cargando formulario…</p>
+    )
+  }
+
   return (
     <form
       onSubmit={onSubmit}
+      onChange={(event) => persistFromForm(event.currentTarget)}
       encType="multipart/form-data"
       noValidate
       className="flex flex-col gap-4 px-4 py-4 md:px-8 lg:grid lg:grid-cols-12 lg:items-start lg:gap-8 lg:py-6"
@@ -122,8 +192,10 @@ export function ProductForm({
             <PhotoSlots
               productId={product?.id}
               productImages={product?.productImages}
+              restoreDraft={!product}
               onPendingFilesChange={(files) => {
                 pendingFilesRef.current = files
+                if (isNew) void saveDraftPhotos(files)
               }}
             />
           </div>
@@ -141,7 +213,7 @@ export function ProductForm({
           <Input
             id="title"
             name="title"
-            defaultValue={product?.title}
+            defaultValue={product?.title ?? draft?.title}
             className="h-11 scroll-mt-28"
             aria-invalid={Boolean(state.fieldErrors?.title)}
             aria-describedby={state.fieldErrors?.title ? "title-error" : undefined}
@@ -151,7 +223,7 @@ export function ProductForm({
           <Input
             id="sku"
             name="sku"
-            defaultValue={product?.sku}
+            defaultValue={product?.sku ?? draft?.sku}
             className="h-11 scroll-mt-28 tabular-nums"
             aria-invalid={Boolean(state.fieldErrors?.sku)}
             aria-describedby={state.fieldErrors?.sku ? "sku-error" : undefined}
@@ -166,7 +238,7 @@ export function ProductForm({
             id="description"
             name="description"
             rows={5}
-            defaultValue={product?.description}
+            defaultValue={product?.description ?? draft?.description}
             className="scroll-mt-28"
             aria-invalid={Boolean(state.fieldErrors?.description)}
             aria-describedby={
@@ -185,7 +257,7 @@ export function ProductForm({
             min="0"
             step="0.01"
             inputMode="decimal"
-            defaultValue={product?.price}
+            defaultValue={product?.price ?? draft?.price}
             className="h-11 scroll-mt-28 tabular-nums"
             aria-invalid={Boolean(state.fieldErrors?.price)}
             aria-describedby={state.fieldErrors?.price ? "price-error" : undefined}
@@ -206,7 +278,7 @@ export function ProductForm({
             min="0"
             step="0.01"
             inputMode="decimal"
-            defaultValue={product?.weight ?? ""}
+            defaultValue={product?.weight ?? draft?.weight ?? ""}
             className="h-11 scroll-mt-28 tabular-nums"
             aria-invalid={Boolean(state.fieldErrors?.weight)}
             aria-describedby={state.fieldErrors?.weight ? "weight-error" : undefined}
@@ -215,6 +287,7 @@ export function ProductForm({
         <div id="categoryId" tabIndex={-1} className="scroll-mt-28 outline-none">
           <CategoryPicker
             categories={categories}
+            initialRoots={initialRoots}
             value={categoryId}
             onChange={setCategoryId}
             error={state.fieldErrors?.categoryId}

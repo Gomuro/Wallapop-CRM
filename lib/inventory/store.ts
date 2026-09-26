@@ -34,6 +34,10 @@ export async function listCategoriesFlat(): Promise<ApiCategory[]> {
   return apiListCategories()
 }
 
+export async function listCategoryRoots(): Promise<ApiCategory[]> {
+  return apiListCategories("root")
+}
+
 function warehouseCreateBody(input: ProductCreateInput) {
   return {
     sku: input.sku,
