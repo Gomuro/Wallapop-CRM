@@ -27,6 +27,7 @@
 | `UPLOAD_DIR` | Файли фото на диску цього процесу |
 | `CORS_ORIGIN` | Origin Next (локально `http://localhost:3000`, проді — Vercel). Кілька через кому |
 | `API_ORIGIN` | Опційно для `npm run server:smoke`, якщо не `http://127.0.0.1:$PORT` |
+| `WALLAPOP_PUBLISH_DRY_RUN` | Publish MVP (planned): `true` = стоп перед кліком Publicar. Див. [Publish — planned](#publish--planned-phase-0-lock) |
 
 ## Помилки
 
@@ -309,4 +310,56 @@ Wallapop часто показує **consentmanager** `#cmpbox` (GDPR welcome) �
 #### Поза скоупом (кнопки є, логін не робимо)
 
 Google / Apple / Facebook SSO на onboarding — окремі `walla-button`; email-шлях вище.
+
+## Publish — planned (Phase 0 lock)
+
+**Статус:** контракт і домовленості зафіксовані; хендлера / `publishWallapopInBrowser` ще **немає**. Research: `Desk/clients/dmytro-filyk-wallapop/tmp/autopost-research/PUBLISH-FLOW-RESEARCH.md`.
+
+### Locked decisions
+
+1. **Gate:** publish лише якщо in-memory Wallapop session `status === "ACTIVE"`. Інакше **409** (як для 2FA out-of-order, напр. `NOT_ACTIVE` / аналог існуючих account-помилок).
+2. **Navigation:** у publish-flow **заборонено** `page.goto` на вже відкритому Wallapop-табі. Дозволено: `location.assign`, UI-кліки, нова вкладка через CDP при recover.
+3. **Dry-run default:** перший інкремент коду зупиняється **перед** кліком `Publicar`. Env `WALLAPOP_PUBLISH_DRY_RUN=true` (default у `.env.example`). Реальний publish лише коли `WALLAPOP_PUBLISH_DRY_RUN=false`.
+4. **MVP scope:** один CDP-акаунт (існуючий `WALLAPOP_CDP_*`); лише consumer-goods («Algo que ya no necesito»). Multi-account / bulk / mobile app — out of scope.
+5. **Data path (Фаза 1+):** CRM Product `title` → Resumen ≤50; images з `UPLOAD_DIR`; після AI-fill обов’язкові: Estado, Precio, Material fallback `Otro`; envío Estándar якщо не габарит; Pro «Añadir más unidades» — skip.
+
+### Flow (research)
+
+- Entry: `https://es.wallapop.com/app/catalog/upload` → категорія **consumer-goods** («Algo que ya no necesito»).
+- **STOP** (не клікати в dry-run): `Publicar` / `Publicar anuncio` / `Crear producto` / `Subir anuncio`.
+
+### Draft endpoint (not implemented)
+
+| Метод | Шлях | Нотатки |
+|-------|------|---------|
+| POST | `/api/v1/products/:id/publish` | Auth cookie. Потребує session `ACTIVE` → інакше **409**. Тіло поки не потрібне (dry-run керується env). |
+
+**200** (shape-чернетка):
+
+```json
+{
+  "ok": true,
+  "dryRun": true,
+  "listing": null,
+  "error": null,
+  "step": "before_publicar"
+}
+```
+
+| Поле | Коли |
+|------|------|
+| `ok` | успіх dry-run / live |
+| `dryRun` | `true` якщо зупинились перед Publicar |
+| `listing` | після live publish — оновлений listing (або `null` у dry-run) |
+| `error` | короткий код/текст при частковому фейлі |
+| `step` | останній успішний крок флоу (напр. `before_publicar`) |
+
+Помилки (очікувані): **401** `UNAUTHORIZED`; **404** `NOT_FOUND` (продукт); **409** session не `ACTIVE`; **400** / **500** — валідація / браузерний фейл (коди уточняться у Фазі 1).
+
+### Checklist — готово до Фази 1
+
+- [ ] CDP Chrome з `ACTIVE` сесією піднімається як зараз (connect flow).
+- [ ] Research `PUBLISH-FLOW-RESEARCH.md` доступний команді.
+- [ ] Env `WALLAPOP_PUBLISH_DRY_RUN` задокументований (`.env.example` + ця секція).
+- [ ] Наступний крок: **Фаза 1 = browser publish + dry-run stop** (UI у тому ж PR не обов’язковий).
 
