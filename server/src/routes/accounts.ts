@@ -1,7 +1,19 @@
 import type { Request, Response } from "express"
+import { ZodError } from "zod"
 
+import {
+  wallapop2faSchema,
+  wallapopConnectSchema,
+} from "../../../lib/validations/account"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
+import {
+  connectWallapopSession,
+  disconnectWallapopSession,
+  getWallapopSessionSnapshot,
+  submitWallapopSession2fa,
+  type WallapopSessionSnapshot,
+} from "../lib/wallapop-session"
 
 function toAccountJson(row: {
   id: string
@@ -25,6 +37,15 @@ function toAccountJson(row: {
   }
 }
 
+function toSessionJson(session: WallapopSessionSnapshot) {
+  return {
+    status: session.status,
+    requires2FA: session.requires2FA,
+    email: session.email,
+    ...(session.error ? { error: session.error } : {}),
+  }
+}
+
 export async function getDefaultAccount(_req: Request, res: Response) {
   const prisma = getPrisma()
   if (!prisma) {
@@ -42,4 +63,71 @@ export async function getDefaultAccount(_req: Request, res: Response) {
   }
 
   res.json({ account: toAccountJson(account) })
+}
+
+export async function getAccountConnectionStatus(_req: Request, res: Response) {
+  res.json(toSessionJson(await getWallapopSessionSnapshot()))
+}
+
+export async function connectAccount(req: Request, res: Response) {
+  let body: { email: string; password: string; proxy: string | null }
+  try {
+    body = wallapopConnectSchema.parse(req.body)
+  } catch (error) {
+    if (error instanceof ZodError) {
+      sendError(
+        res,
+        400,
+        "VALIDATION_ERROR",
+        error.issues[0]?.message ?? "Invalid body.",
+      )
+      return
+    }
+    throw error
+  }
+
+  const result = await connectWallapopSession({
+    email: body.email,
+    password: body.password,
+    proxy: body.proxy,
+  })
+
+  if (!result.ok) {
+    sendError(res, 400, "CONNECT_FAILED", result.message)
+    return
+  }
+
+  res.json(toSessionJson(result.session))
+}
+
+export async function connectAccount2fa(req: Request, res: Response) {
+  let body: { code: string }
+  try {
+    body = wallapop2faSchema.parse(req.body)
+  } catch (error) {
+    if (error instanceof ZodError) {
+      sendError(
+        res,
+        400,
+        "VALIDATION_ERROR",
+        error.issues[0]?.message ?? "Invalid body.",
+      )
+      return
+    }
+    throw error
+  }
+
+  const result = await submitWallapopSession2fa(body.code)
+  if (!result.ok) {
+    const status = result.code === "NOT_AUTHENTICATING" ? 409 : 400
+    sendError(res, status, result.code, result.message)
+    return
+  }
+
+  res.json(toSessionJson(result.session))
+}
+
+export async function disconnectAccount(_req: Request, res: Response) {
+  const session = await disconnectWallapopSession()
+  res.json(toSessionJson(session))
 }

@@ -10,11 +10,21 @@ API-процес Wallapop CRM. **Express** + TypeScript. Один git з UI (`ap
 
 ```bash
 npm run db:up
+npx playwright install chromium
 npm run server:dev
 npm run server:smoke
 ```
 
 `server:smoke` сам логіниться seed-юзером з `.env` і перевіряє health / 401 / login / me / 501 / logout.
+
+Підключення Wallapop (`POST /api/v1/accounts/connect`):
+1. Чіпляється до Chrome на CDP (`WALLAPOP_CDP_URL`, default `http://127.0.0.1:9222`), якщо вже відкритий.
+2. Якщо ні — **сам** запускає Google Chrome (headed) з тим самим профілем, що ярлик «Chrome CDP»:
+   `WALLAPOP_CHROME_USER_DATA_DIR` або `%USERPROFILE%\ChromeCDP-Persistent`, порт `9222`.
+3. Відкриває сторінку Wallapop (поки **без** автологіну). Disconnect лише від’єднує Playwright.
+
+**Профілі (запам’ятати):** 1 Wallapop-акаунт = 1 окремий Chrome `--user-data-dir` (cookies / історія / fingerprint). Не шарити профіль між акаунтами — інакше сильний детект. Деталі й план multi-account: [API.md → Accounts → Браузерні профілі](./API.md#браузерні-профілі-обовязково--1-акаунт--1-chrome-user-data-dir).
+
 
 Postman: імпорт `server/postman/Wallapop-CRM.postman_collection.json` + `server/postman/local.postman_environment.json`, environment **Wallapop CRM · local**, папка **Smoke** → Runner. Cookie `crm_session` після Login кладеться в jar сама.
 

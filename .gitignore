@@ -61,6 +61,7 @@ docs/
 prototype/
 references/
 tmp/
+profiles/
 
 # Uploaded product photos (keep folder)
 public/uploads/*

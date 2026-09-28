@@ -5,7 +5,13 @@ import {
   uploadReplaceImage,
 } from "../middleware/upload"
 import { notImplemented } from "../lib/http-error"
-import { getDefaultAccount } from "./accounts"
+import {
+  connectAccount,
+  connectAccount2fa,
+  disconnectAccount,
+  getAccountConnectionStatus,
+  getDefaultAccount,
+} from "./accounts"
 import {
   getCategory,
   listCategories,
@@ -56,3 +62,7 @@ catalog.get("/products/:id/listing", getProductListing)
 catalog.put("/products/:id/listing", putProductListing)
 
 catalog.get("/accounts/default", getDefaultAccount)
+catalog.get("/accounts/status", getAccountConnectionStatus)
+catalog.post("/accounts/connect", connectAccount)
+catalog.post("/accounts/connect/2fa", connectAccount2fa)
+catalog.post("/accounts/disconnect", disconnectAccount)

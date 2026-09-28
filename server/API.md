@@ -180,3 +180,122 @@ Body (JSON, camelCase): усі поля опційні, **хоча б одне**
 | Метод | Шлях | Нотатки |
 |-------|------|---------|
 | GET | `/api/v1/accounts/default` | Єдиний `isDefault: true`. Повний CRUD акаунтів — етап 2 |
+| GET | `/api/v1/accounts/status` | In-memory сесія браузера: `{ status, requires2FA, email, error? }`. `status`: `DISCONNECTED` \| `AUTHENTICATING` \| `ACTIVE`. Після рестарту API: **CDP rehydrate** — якщо Chrome ще на MFA (`#mfa-code-validation-form`) → знову `AUTHENTICATING` + `requires2FA`; якщо вже залогінений → `ACTIVE` |
+| POST | `/api/v1/accounts/connect` | Body `{ email, password, proxy? }` — **password використовується** для Keycloak fill (у БД **не** зберігається). Відкриває/чіпляє Chrome → onboarding «Iniciar sesión con email» → fill `#username`/`#password` → `#kc-login`. Вже залогінений профіль → `ACTIVE` без форми. Потрібен 2FA → `requires2FA: true`. Fail (у т.ч. reCAPTCHA) → **400** `CONNECT_FAILED` |
+| POST | `/api/v1/accounts/connect/2fa` | Body `{ code }` (4–8 alphanumeric). Вводить OTP у відкритий контекст. Якщо RAM злетіла після рестарту, але MFA-екран у Chrome лишився — **re-attach CDP** і прийняти код (не 409). Без MFA/сесії → **409** `NOT_AUTHENTICATING`. Помилка коду → **400** `CONNECT_FAILED` |
+| POST | `/api/v1/accounts/disconnect` | Повний **logout Wallapop** у Chrome-профілі (`clearCookies` + `es.wallapop.com/logout`) + CRM `DISCONNECTED`; Prisma default → `INACTIVE`. Профіль на диску / процес Chrome не видаляються. Якщо CDP недоступний — CRM все одно від’єднується |
+
+Пароль Wallapop у БД **не** зберігається. При `ACTIVE` / disconnect оновлюється `status` default-акаунта в Prisma (`ACTIVE` / `INACTIVE`).
+
+### Браузерні профілі (обов’язково — 1 акаунт = 1 Chrome user-data-dir)
+
+**Правило:** кожен Wallapop-акаунт має **окремий** persistent Chrome profile (`--user-data-dir`). Не шарити один профіль між кількох акаунтів і не ганяти логін у «чистому» тимчасовому профілі.
+
+**Навіщо:** Wallapop / антифрод сильно детектить однакові fingerprints, cookies і історію. Окремий `user-data-dir` зберігає cookies, Google-логін у Chrome, історію й локальний стан саме під цей акаунт — як зараз локальний ярлик `Chrome CDP.lnk` → `ChromeCDP-Persistent`.
+
+**Як робимо зараз (один акаунт):**
+- Launch / attach: реальний Google Chrome + CDP (`WALLAPOP_CDP_URL`, default `:9222`).
+- Profile: `WALLAPOP_CHROME_USER_DATA_DIR` або `%USERPROFILE%\ChromeCDP-Persistent` (той самий каталог, що в ярлику).
+- Не використовуємо порожній `profiles/account_1` для робочого акаунта.
+
+**Як будемо масштабувати (multi-account, етап 2+):**
+- На кожен CRM `Account` — свій каталог, напр. `ChromeCDP-<accountId>` або `profiles/wallapop_<n>` **поза** спільним Default Chrome.
+- Окремий CDP-порт на акаунт (9222, 9223, …) або один Chrome за раз з відповідним `user-data-dir`.
+- Proxy (якщо є) — теж per-account, бажано з самого старту Chrome.
+- У БД / конфігу акаунта зберігати шлях до `userDataDir` (+ порт / proxy), **не** пароль Wallapop.
+- Shortcut-шаблон як `Chrome CDP.lnk`: `chrome.exe --remote-debugging-port=<port> --user-data-dir="<dir>"` + stability flags.
+
+Потрібно: встановлений Google Chrome на машині API; Playwright для CDP (`npm i playwright`).
+
+### Email login UI map + selector registry
+
+Реалізовано в `SELECTORS` / `loginWallapopInBrowser` / `submitWallapop2faInBrowser` (`server/src/lib/wallapop-browser.ts`).
+
+**Правило:** не шукай email/password на onboarding — їх немає до Keycloak. Для 2FA віддавай перевагу структурним маркерам (`id`, `name`, `data-*`), не копії тексту (текст може змінитись). Якщо Wallapop оновить DOM — оновлюй **і** цей розділ, **і** `SELECTORS` у коді.
+
+#### Крок 1 — Onboarding
+
+URL: `https://es.wallapop.com/login` → редірект на `…/auth/onboarding`
+
+- SSO-кнопки: Google, Apple, Facebook; також «Regístrate»
+- Полів email/password **немає**
+- `walla-button` = Stencil / shadow DOM — у коді спочатку `getByRole('button', { name: 'Iniciar sesión con email' })`, потім CSS-фолбек
+
+| Призначення | Селектори (порядок як у коді) |
+|-------------|-------------------------------|
+| Email-login entry | role: `button` name `Iniciar sesión con email` |
+| Email-login entry (CSS) | `walla-button[text="Iniciar sesión con email"]` |
+
+#### Крок 2 — Keycloak password
+
+URL: `https://accounts.wallapop.com/realms/wallapop-internal/protocol/openid-connect/auth…`
+
+| Призначення (`SELECTORS.*`) | Селектори |
+|-----------------------------|-----------|
+| `email` | `#username`, `input[name="username"]`, `input[type="email"]`, `input[autocomplete="username"]` |
+| `password` | `#password`, `input[name="password"]`, `input[type="password"]`, `input[autocomplete="current-password"]` |
+| `submit` (Acceder) | `#kc-login`, `walla-button#kc-login`, `button:has-text("Acceder a Wallapop")`, `button[type="submit"]` |
+
+Label на UI (довідково, не для детекції): «Dirección de email», кнопка «Acceder a Wallapop».
+
+#### Крок 3 — SMS 2FA (MFA)
+
+URL: `…/realms/wallapop-internal/login-actions/authenticate?execution=…`  
+Форма: `#mfa-code-validation-form` (`method=post`, class з модулем `mfa-code-validation-module__otp-form___…` — hash у class може змінитись, **id стабільніший**).
+
+| Призначення (`SELECTORS.*`) | Селектори |
+|-----------------------------|-----------|
+| `otpScreen` (детект `REQUIRES_2FA`) | `#mfa-code-validation-form`, `form[id="mfa-code-validation-form"]`, `[data-input-otp-container="true"]`, `input[name="mfa_code"]`, `input[data-input-otp="true"]` |
+| `otp` (fill коду) | `input[data-input-otp="true"]`, `input[name="mfa_code"]`, `input[autocomplete="one-time-code"]` |
+| `otpSubmit` | `#mfa-code-validation-form walla-button[behaviour-type="submit"]`, `walla-button[behaviour-type="submit"][text="Verificar"]`, `walla-button[text="Verificar"]` |
+
+Додаткові спостереження з live DOM (довідково):
+
+| Елемент | Маркер |
+|---------|--------|
+| Visible OTP widget | `input[data-input-otp="true"]` — також `inputmode="numeric"`, `pattern="^\\d+$"`, `maxlength="6"`, `autocomplete="one-time-code"` |
+| Hidden post field | `input[name="mfa_code"]` (синхронізуємо при submit 2FA) |
+| OTP container | `[data-input-otp-container="true"]` (6 «клітинок» — візуал; реальний input один overlay) |
+| Resend | `walla-button[text="Reenviar"]` (`button-type="tertiary"`) — поки не автоматизуємо |
+| Device/session hiddens | `#id-device-id` (`deviceId`), `#id-device-os`, `#id-app-version`, `#id-session-id`, `#id-tracking-user-id` — не чіпаємо |
+
+Текст на екрані («Introduce el código de verificación», «Lo hemos enviado al número…») — **не** використовуємо для детекції.
+
+**Важливо після submit 2FA:** Wallapop може одразу редіректнути з MFA на `/wall`. Не блокуватись довго на sync hidden `input[name="mfa_code"]` (нода зникає → Playwright timeout → CRM зависає на «Verificando»). Якщо MFA-форми вже немає — вважати перехід до outcome / logged-in. Playwright має дивитись вкладку `es.wallapop.com` (часто `/wall`), а не застряглий `accounts.wallapop.com`.
+
+#### Крок 4 — Logged-in success markers (ACTIVE)
+
+Знято live через CDP з профілю після успішного email+2FA логіну. Для `detectLoggedIn` / `waitForLoginOutcome` — **структура**, не фрази на кшталт «Elegidos para…».
+
+| Сигнал | Маркер |
+|--------|--------|
+| URL (primary) | `https://es.wallapop.com/wall` (pathname `/wall`) |
+| URL (також ок) | `/app/`, `/profile`, `/you`, `/account` на `*.wallapop.com` |
+| URL (не logged-in) | `accounts.wallapop.com`, `/login`, `/auth/onboarding` |
+| DOM | `img[data-testid="user-avatar"]` |
+| DOM | `[data-testid="section-inview-feed"]` (стрічка feed на `/wall`) |
+| Cookie | `accessToken` (domain `.wallapop.com`) |
+| Cookie (також) | `__Secure-next-auth.session-token`, `publisherId`, `trackingUserId`, `wallapop_keep_session` |
+
+Довідково (не primary): у header видно «Tú», «Favoritos»; персоналізований feed «Elegidos para …» — текст може змінитись, `data-testid` надійніший.
+
+Якщо після 2FA з’явилась нова вкладка на `/wall`, а стара MFA закрилась/порожня — **перемкнути** `page` на вкладку з `es.wallapop.com/wall` перед детекцією SUCCESS.
+
+#### Cookies / CMP
+
+| `SELECTORS.cookieAccept` |
+|--------------------------|
+| `button:has-text("Aceptar")`, `button:has-text("Accept")`, `button:has-text("Accept all")`, `button:has-text("Aceptar todas")`, `#onetrust-accept-btn-handler` |
+
+#### reCAPTCHA (fail, без обходу)
+
+| `SELECTORS.recaptcha` |
+|-----------------------|
+| `iframe[src*="recaptcha"]`, `#id-recaptcha-token`, `.g-recaptcha` |
+
+При видимому captcha після submit пароля → `CONNECT_FAILED` з повідомленням (можна вирішити вручну в headed Chrome).
+
+#### Поза скоупом (кнопки є, логін не робимо)
+
+Google / Apple / Facebook SSO на onboarding — окремі `walla-button`; email-шлях вище.
+

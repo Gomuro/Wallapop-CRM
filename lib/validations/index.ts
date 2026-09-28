@@ -2,11 +2,17 @@ export {
   accountCreateSchema,
   accountStatusSchema,
   accountUpdateSchema,
+  wallapop2faSchema,
+  wallapopConnectSchema,
+  wallapopConnectionStatusSchema,
 } from "./account"
 export type {
   AccountCreateInput,
   AccountStatus,
   AccountUpdateInput,
+  Wallapop2faInput,
+  WallapopConnectInput,
+  WallapopConnectionStatus,
 } from "./account"
 export {
   assertProductCategoryIsLeaf,
