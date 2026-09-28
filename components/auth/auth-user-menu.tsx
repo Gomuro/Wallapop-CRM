@@ -40,7 +40,7 @@ export function AuthUserMenu() {
   return (
     <div className="flex items-center gap-2">
       {name ? (
-        <span className="max-w-[10rem] truncate text-sm text-muted-foreground" title={name}>
+        <span className="max-w-40 truncate text-sm text-muted-foreground" title={name}>
           {name}
         </span>
       ) : null}
