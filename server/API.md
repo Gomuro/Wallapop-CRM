@@ -193,14 +193,19 @@ Body (JSON, camelCase): усі поля опційні, **хоча б одне**
 
 **Навіщо:** Wallapop / антифрод сильно детектить однакові fingerprints, cookies і історію. Окремий `user-data-dir` зберігає cookies, Google-логін у Chrome, історію й локальний стан саме під цей акаунт — як зараз локальний ярлик `Chrome CDP.lnk` → `ChromeCDP-Persistent`.
 
-**Як робимо зараз (один акаунт):**
-- Launch / attach: реальний Google Chrome + CDP (`WALLAPOP_CDP_URL`, default `:9222`).
+**Як робимо зараз (один акаунт) — ТИМЧАСОВО, не фінальна архітектура:**
+
+> **`WALLAPOP_CDP_URL` / один порт `:9222` / один `ChromeCDP-Persistent` — лише single-account MVP.**  
+> Зараз у коді **один глобальний** CDP-endpoint і **один** `user-data-dir` на весь API-процес. Це **не** назавжди.  
+> **Для multi-account буде інакше:** не шарити один `WALLAPOP_CDP_URL` між акаунтами — per-account `user-data-dir` + окремий CDP-порт (або послідовний attach). Не проєктувати прод multi-login навколо поточного env.
+
+- Launch / attach: реальний Google Chrome + CDP (`WALLAPOP_CDP_URL`, default `http://127.0.0.1:9222`). Якщо CDP ще не слухає — API **сам** spawn Chrome з `--remote-debugging-port` + `--user-data-dir`.
 - Profile: `WALLAPOP_CHROME_USER_DATA_DIR` або `%USERPROFILE%\ChromeCDP-Persistent` (той самий каталог, що в ярлику).
 - Не використовуємо порожній `profiles/account_1` для робочого акаунта.
 
-**Як будемо масштабувати (multi-account, етап 2+):**
+**Як будемо масштабувати (multi-account, етап 2+) — замінить глобальний `WALLAPOP_CDP_*`:**
 - На кожен CRM `Account` — свій каталог, напр. `ChromeCDP-<accountId>` або `profiles/wallapop_<n>` **поза** спільним Default Chrome.
-- Окремий CDP-порт на акаунт (9222, 9223, …) або один Chrome за раз з відповідним `user-data-dir`.
+- Окремий CDP-порт на акаунт (9222, 9223, …) або один Chrome за раз з відповідним `user-data-dir` (не один shared `WALLAPOP_CDP_URL` на всіх).
 - Proxy (якщо є) — теж per-account, бажано з самого старту Chrome.
 - У БД / конфігу акаунта зберігати шлях до `userDataDir` (+ порт / proxy), **не** пароль Wallapop.
 - Shortcut-шаблон як `Chrome CDP.lnk`: `chrome.exe --remote-debugging-port=<port> --user-data-dir="<dir>"` + stability flags.
@@ -283,9 +288,15 @@ URL: `…/realms/wallapop-internal/login-actions/authenticate?execution=…`
 
 #### Cookies / CMP
 
-| `SELECTORS.cookieAccept` |
-|--------------------------|
-| `button:has-text("Aceptar")`, `button:has-text("Accept")`, `button:has-text("Accept all")`, `button:has-text("Aceptar todas")`, `#onetrust-accept-btn-handler` |
+Wallapop часто показує **consentmanager** `#cmpbox` (GDPR welcome) з кнопками **Accept all** / **Reject all** — це `<a class="cmpboxbtnyes">`, не `<button>`. Connect має клікнути Accept all перед логіном.
+
+| `SELECTORS.cookieAccept` (пріоритет) |
+|--------------------------------------|
+| `#cmpwelcomebtnyes a.cmpboxbtnyes`, `#cmpwelcomebtnyes a`, `a.cmpboxbtnyes`, `#cmpbntyestxt` |
+| `a.cmpboxbtn:has-text("Accept all")` / `Aceptar todo` / `Aceptar todas` |
+| legacy: `button:has-text(…)`, `#onetrust-accept-btn-handler` |
+
+Після кліку чекаємо `#cmpbox` hidden, щоб оверлей не блокував «Iniciar sesión con email».
 
 #### reCAPTCHA (fail, без обходу)
 

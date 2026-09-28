@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { EyeIcon, EyeOffIcon, Link2Icon, LoaderCircleIcon } from "lucide-react";
 
 import { Badge } from "@/components/ui/badge";
@@ -33,6 +33,7 @@ const STATUS_LABEL: Record<WallapopConnectionStatus, string> = {
 };
 
 type PendingKind = "connect" | "2fa" | "disconnect" | null;
+type ResetMode = "disconnect" | "cancel";
 
 function statusBadgeVariant(
   status: WallapopConnectionStatus,
@@ -59,8 +60,11 @@ export function ConnectAccountForm() {
   const [twoFaCode, setTwoFaCode] = useState("");
   const [statusLoading, setStatusLoading] = useState(true);
   const [disconnectConfirmOpen, setDisconnectConfirmOpen] = useState(false);
+  const [resetMode, setResetMode] = useState<ResetMode>("cancel");
+  const connectRequestIdRef = useRef(0);
+  const twoFaRequestIdRef = useRef(0);
 
-  const pending = pendingKind != null;
+  const resetBusy = pendingKind === "disconnect";
 
   useEffect(() => {
     let cancelled = false;
@@ -91,6 +95,16 @@ export function ConnectAccountForm() {
     };
   }, [apiReady]);
 
+  useEffect(() => {
+    if (
+      disconnectConfirmOpen &&
+      session.status === "ACTIVE" &&
+      resetMode === "cancel"
+    ) {
+      setDisconnectConfirmOpen(false);
+    }
+  }, [disconnectConfirmOpen, session.status, resetMode]);
+
   async function onConnect(event: React.FormEvent) {
     event.preventDefault();
     setError(null);
@@ -101,6 +115,7 @@ export function ConnectAccountForm() {
       return;
     }
 
+    const requestId = ++connectRequestIdRef.current;
     setPendingKind("connect");
     setSession({
       status: "AUTHENTICATING",
@@ -113,12 +128,14 @@ export function ConnectAccountForm() {
         password,
         proxy,
       });
+      if (requestId !== connectRequestIdRef.current) return;
       setSession(next);
       if (next.requires2FA) {
         setTwoFaOpen(true);
         setTwoFaCode("");
       }
     } catch (err) {
+      if (requestId !== connectRequestIdRef.current) return;
       setError(wallapopAccountErrorMessage(err));
       setSession({
         status: "DISCONNECTED",
@@ -127,7 +144,9 @@ export function ConnectAccountForm() {
       });
       setTwoFaOpen(false);
     } finally {
-      setPendingKind(null);
+      if (requestId === connectRequestIdRef.current) {
+        setPendingKind((kind) => (kind === "connect" ? null : kind));
+      }
     }
   }
 
@@ -140,9 +159,11 @@ export function ConnectAccountForm() {
       return;
     }
 
+    const requestId = ++twoFaRequestIdRef.current;
     setPendingKind("2fa");
     try {
       const next = await submitWallapop2fa(code);
+      if (requestId !== twoFaRequestIdRef.current) return;
       setSession(next);
       if (next.status === "ACTIVE") {
         setTwoFaOpen(false);
@@ -152,15 +173,20 @@ export function ConnectAccountForm() {
         setTwoFaOpen(true);
       }
     } catch (err) {
+      if (requestId !== twoFaRequestIdRef.current) return;
       setError(wallapopAccountErrorMessage(err));
     } finally {
-      setPendingKind(null);
+      if (requestId === twoFaRequestIdRef.current) {
+        setPendingKind((kind) => (kind === "2fa" ? null : kind));
+      }
     }
   }
 
   async function onDisconnect() {
     setError(null);
     setDisconnectConfirmOpen(false);
+    connectRequestIdRef.current += 1;
+    twoFaRequestIdRef.current += 1;
     setPendingKind("disconnect");
     try {
       const next = await disconnectWallapopAccount();
@@ -174,15 +200,38 @@ export function ConnectAccountForm() {
     }
   }
 
-  function requestDisconnect() {
-    if (pending) return;
+  function openResetConfirm(mode: ResetMode) {
+    if (resetBusy) return;
+    setResetMode(mode);
+    setTwoFaOpen(false);
     setDisconnectConfirmOpen(true);
   }
 
+  function requestDisconnect() {
+    if (resetBusy) return;
+    openResetConfirm(session.status === "ACTIVE" ? "disconnect" : "cancel");
+  }
+
   const connectedEmail = session.email;
-  const showDisconnect = session.status !== "DISCONNECTED";
-  const showConnectHint =
-    pendingKind === "connect" && !twoFaOpen;
+  const isActive = session.status === "ACTIVE";
+  const isAuthenticating = session.status === "AUTHENTICATING";
+  const isDisconnected = session.status === "DISCONNECTED";
+  const showSessionReset = isActive || isAuthenticating;
+  const showConnectHint = pendingKind === "connect" && !twoFaOpen;
+
+  const resetPendingLabel =
+    resetMode === "disconnect" ? "Desconectando…" : "Cancelando…";
+  const resetIdleLabel = isActive ? "Desconectar" : "Cancelar";
+  const resetConfirmTitle =
+    resetMode === "disconnect"
+      ? "¿Desconectar la cuenta?"
+      : "¿Cancelar el intento de conexión?";
+  const resetConfirmDescription =
+    resetMode === "disconnect"
+      ? "Se cerrará la sesión de Wallapop en Chrome. Tendrás que volver a iniciar sesión."
+      : "Se abortará el login en curso y se cerrará Chrome. Podrás intentarlo de nuevo.";
+  const resetConfirmAction =
+    resetMode === "disconnect" ? "Desconectar" : "Cancelar intento";
 
   return (
     <div className="mx-auto w-full max-w-md">
@@ -207,9 +256,15 @@ export function ConnectAccountForm() {
         </p>
       ) : null}
 
-      {connectedEmail && session.status !== "DISCONNECTED" ? (
+      {connectedEmail && isActive ? (
         <p className="mb-4 text-sm text-muted-foreground">
           Sesión: <span className="text-foreground">{connectedEmail}</span>
+        </p>
+      ) : null}
+
+      {connectedEmail && isAuthenticating ? (
+        <p className="mb-4 text-sm text-muted-foreground">
+          Intentando: <span className="text-foreground">{connectedEmail}</span>
         </p>
       ) : null}
 
@@ -243,7 +298,12 @@ export function ConnectAccountForm() {
             className="h-12 text-base md:h-10 md:text-sm"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
-            disabled={pending || !apiReady || session.status === "ACTIVE"}
+            disabled={
+              !apiReady ||
+              !isDisconnected ||
+              pendingKind === "connect" ||
+              resetBusy
+            }
             required
           />
         </div>
@@ -259,7 +319,12 @@ export function ConnectAccountForm() {
               className="h-12 pr-11 text-base md:h-10 md:text-sm"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
-              disabled={pending || !apiReady || session.status === "ACTIVE"}
+              disabled={
+                !apiReady ||
+                !isDisconnected ||
+                pendingKind === "connect" ||
+                resetBusy
+              }
               required
             />
             <Button
@@ -293,16 +358,21 @@ export function ConnectAccountForm() {
             className="h-12 text-base md:h-10 md:text-sm"
             value={proxy}
             onChange={(e) => setProxy(e.target.value)}
-            disabled={pending || !apiReady || session.status === "ACTIVE"}
+            disabled={
+              !apiReady ||
+              !isDisconnected ||
+              pendingKind === "connect" ||
+              resetBusy
+            }
           />
         </div>
 
         <div className="flex flex-col gap-2 pt-1">
-          {session.status !== "ACTIVE" ? (
+          {isDisconnected ? (
             <Button
               type="submit"
               className="h-12 w-full"
-              disabled={pending || !apiReady}
+              disabled={!apiReady || pendingKind === "connect" || resetBusy}
               aria-busy={pendingKind === "connect" || undefined}
             >
               {pendingKind === "connect" ? (
@@ -314,19 +384,21 @@ export function ConnectAccountForm() {
             </Button>
           ) : null}
 
-          {showDisconnect ? (
+          {showSessionReset ? (
             <Button
               type="button"
               variant="outline"
               className="h-12 w-full"
-              disabled={pending || !apiReady}
+              disabled={!apiReady || resetBusy}
               onClick={requestDisconnect}
-              aria-busy={pendingKind === "disconnect" || undefined}
+              aria-busy={resetBusy || undefined}
             >
-              {pendingKind === "disconnect" ? (
-                <LoaderCircleIcon className="animate-spin" />
-              ) : null}
-              {pendingKind === "disconnect" ? "Desconectando…" : "Desconectar"}
+              {resetBusy ? <LoaderCircleIcon className="animate-spin" /> : null}
+              {resetBusy
+                ? isActive
+                  ? "Desconectando…"
+                  : "Cancelando…"
+                : resetIdleLabel}
             </Button>
           ) : null}
         </div>
@@ -335,38 +407,33 @@ export function ConnectAccountForm() {
       <Dialog
         open={disconnectConfirmOpen}
         onOpenChange={(open) => {
-          if (!pending) setDisconnectConfirmOpen(open);
+          if (!resetBusy) setDisconnectConfirmOpen(open);
         }}
       >
-        <DialogContent showCloseButton={!pending}>
+        <DialogContent showCloseButton={!resetBusy}>
           <DialogHeader>
-            <DialogTitle>¿Desconectar la cuenta?</DialogTitle>
-            <DialogDescription>
-              Se cerrará la sesión de Wallapop en Chrome. Tendrás que volver a
-              iniciar sesión.
-            </DialogDescription>
+            <DialogTitle>{resetConfirmTitle}</DialogTitle>
+            <DialogDescription>{resetConfirmDescription}</DialogDescription>
           </DialogHeader>
           <DialogFooter>
             <Button
               type="button"
               variant="outline"
               className="h-11 w-full sm:w-auto"
-              disabled={pending}
+              disabled={resetBusy}
               onClick={() => setDisconnectConfirmOpen(false)}
             >
-              Cancelar
+              Volver
             </Button>
             <Button
               type="button"
               variant="destructive"
               className="h-11 w-full sm:w-auto"
-              disabled={pending}
+              disabled={resetBusy}
               onClick={() => void onDisconnect()}
             >
-              {pendingKind === "disconnect" ? (
-                <LoaderCircleIcon className="animate-spin" />
-              ) : null}
-              Desconectar
+              {resetBusy ? <LoaderCircleIcon className="animate-spin" /> : null}
+              {resetBusy ? resetPendingLabel : resetConfirmAction}
             </Button>
           </DialogFooter>
         </DialogContent>
@@ -375,10 +442,15 @@ export function ConnectAccountForm() {
       <Dialog
         open={twoFaOpen}
         onOpenChange={(open) => {
-          if (!pending) setTwoFaOpen(open);
+          if (pendingKind === "2fa" || resetBusy) return;
+          if (!open) {
+            openResetConfirm("cancel");
+            return;
+          }
+          setTwoFaOpen(true);
         }}
       >
-        <DialogContent showCloseButton={!pending}>
+        <DialogContent showCloseButton={pendingKind !== "2fa" && !resetBusy}>
           <form onSubmit={onSubmit2fa} className="flex flex-col gap-4">
             <DialogHeader>
               <DialogTitle>Código 2FA</DialogTitle>
@@ -397,16 +469,25 @@ export function ConnectAccountForm() {
                 className="h-12 text-base tracking-widest md:h-10 md:text-sm"
                 value={twoFaCode}
                 onChange={(e) => setTwoFaCode(e.target.value)}
-                disabled={pending}
+                disabled={pendingKind === "2fa" || resetBusy}
                 maxLength={8}
                 required
               />
             </div>
             <DialogFooter>
               <Button
+                type="button"
+                variant="outline"
+                className="h-11 w-full sm:w-auto"
+                disabled={pendingKind === "2fa" || resetBusy}
+                onClick={() => openResetConfirm("cancel")}
+              >
+                Cancelar intento
+              </Button>
+              <Button
                 type="submit"
                 className="h-11 w-full sm:w-auto"
-                disabled={pending}
+                disabled={pendingKind === "2fa" || resetBusy}
                 aria-busy={pendingKind === "2fa" || undefined}
               >
                 {pendingKind === "2fa" ? (

@@ -31,6 +31,9 @@ const state: SessionState = {
   error: null,
 }
 
+/** Bumped on disconnect so in-flight connect/2FA cannot overwrite cleared state. */
+let connectGeneration = 0
+
 function snapshot(): WallapopSessionSnapshot {
   return {
     status: state.status,
@@ -101,6 +104,7 @@ export async function connectWallapopSession(input: {
   password: string
   proxy?: string | null
 }): Promise<ConnectSessionResult> {
+  const gen = ++connectGeneration
   state.status = "AUTHENTICATING"
   state.requires2FA = false
   state.email = input.email
@@ -112,6 +116,10 @@ export async function connectWallapopSession(input: {
       password: input.password,
       proxy: input.proxy,
     })
+
+    if (gen !== connectGeneration) {
+      return { ok: true, session: snapshot() }
+    }
 
     if (outcome === "REQUIRES_2FA") {
       state.status = "AUTHENTICATING"
@@ -126,6 +134,9 @@ export async function connectWallapopSession(input: {
     await syncDefaultAccountStatus("ACTIVE")
     return { ok: true, session: snapshot() }
   } catch (error) {
+    if (gen !== connectGeneration) {
+      return { ok: true, session: snapshot() }
+    }
     const message =
       error instanceof Error ? error.message : "Error al conectar Wallapop."
     state.status = "DISCONNECTED"
@@ -161,16 +172,23 @@ export async function submitWallapopSession2fa(
     }
   }
 
+  const gen = connectGeneration
   state.error = null
 
   try {
     await submitWallapop2faInBrowser(code)
+    if (gen !== connectGeneration) {
+      return { ok: true, session: snapshot() }
+    }
     state.status = "ACTIVE"
     state.requires2FA = false
     state.error = null
     await syncDefaultAccountStatus("ACTIVE")
     return { ok: true, session: snapshot() }
   } catch (error) {
+    if (gen !== connectGeneration) {
+      return { ok: true, session: snapshot() }
+    }
     const message =
       error instanceof Error ? error.message : "Error al verificar 2FA."
     state.status = "AUTHENTICATING"
@@ -187,6 +205,7 @@ export async function submitWallapopSession2fa(
 }
 
 export async function disconnectWallapopSession(): Promise<WallapopSessionSnapshot> {
+  connectGeneration += 1
   try {
     await logoutWallapopInBrowser()
   } catch (error) {

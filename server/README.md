@@ -21,9 +21,11 @@ npm run server:smoke
 1. Чіпляється до Chrome на CDP (`WALLAPOP_CDP_URL`, default `http://127.0.0.1:9222`), якщо вже відкритий.
 2. Якщо ні — **сам** запускає Google Chrome (headed) з тим самим профілем, що ярлик «Chrome CDP»:
    `WALLAPOP_CHROME_USER_DATA_DIR` або `%USERPROFILE%\ChromeCDP-Persistent`, порт `9222`.
-3. Відкриває сторінку Wallapop (поки **без** автологіну). Disconnect лише від’єднує Playwright.
+3. Email-login: onboarding → Keycloak fill → submit; 2FA через CRM-модалку; disconnect = logout Wallapop у профілі + CRM `DISCONNECTED`.
 
-**Профілі (запам’ятати):** 1 Wallapop-акаунт = 1 окремий Chrome `--user-data-dir` (cookies / історія / fingerprint). Не шарити профіль між акаунтами — інакше сильний детект. Деталі й план multi-account: [API.md → Accounts → Браузерні профілі](./API.md#браузерні-профілі-обовязково--1-акаунт--1-chrome-user-data-dir).
+**CDP env — тимчасово (single-account MVP):** один глобальний `WALLAPOP_CDP_URL` / один профіль на весь процес. **Для multi-account буде інакше** (per-account `user-data-dir` + порт) — не вважати поточний env фінальним. Деталі: [API.md → Браузерні профілі](./API.md#браузерні-профілі-обовязково--1-акаунт--1-chrome-user-data-dir).
+
+**Профілі (запам’ятати):** 1 Wallapop-акаунт = 1 окремий Chrome `--user-data-dir` (cookies / історія / fingerprint). Не шарити профіль між акаунтами — інакше сильний детект.
 
 
 Postman: імпорт `server/postman/Wallapop-CRM.postman_collection.json` + `server/postman/local.postman_environment.json`, environment **Wallapop CRM · local**, папка **Smoke** → Runner. Cookie `crm_session` після Login кладеться в jar сама.
