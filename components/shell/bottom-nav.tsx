@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutGridIcon, PlusIcon } from "lucide-react"
+import { LayoutGridIcon, PlusIcon, UserRoundIcon } from "lucide-react"
 
 import { buttonVariants } from "@/components/ui/button"
 import { typeMeta } from "@/lib/ui/type"
@@ -12,10 +12,12 @@ export function BottomNav() {
   const pathname = usePathname()
   const catalogActive = pathname === "/"
   const newItemActive = pathname === "/products/new"
+  const accountsActive =
+    pathname === "/accounts" || pathname.startsWith("/accounts/")
 
   return (
     <nav className="fixed inset-x-0 bottom-0 z-40 flex w-full border-t bg-background/95 pb-[env(safe-area-inset-bottom)] backdrop-blur-sm md:hidden">
-      <div className="grid w-full grid-cols-2 px-2 py-1">
+      <div className="grid w-full grid-cols-3 px-2 py-1">
         <Link
           href="/"
           aria-current={catalogActive ? "page" : undefined}
@@ -54,6 +56,26 @@ export function BottomNav() {
             )}
           >
             Subir producto
+          </span>
+        </Link>
+        <Link
+          href="/accounts"
+          aria-current={accountsActive ? "page" : undefined}
+          className={cn(
+            buttonVariants({ variant: "ghost", size: "lg" }),
+            "h-12 w-full flex-col gap-0.5",
+          )}
+        >
+          <UserRoundIcon
+            className={accountsActive ? "text-primary-text" : "text-foreground"}
+          />
+          <span
+            className={cn(
+              typeMeta,
+              accountsActive ? "text-primary-text" : "text-foreground",
+            )}
+          >
+            Cuenta
           </span>
         </Link>
       </div>

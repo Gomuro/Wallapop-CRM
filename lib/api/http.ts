@@ -1,7 +1,10 @@
 export const API_TIMEOUT_MS = 25_000
 
-export function withApiTimeout(init: RequestInit = {}): RequestInit {
-  const timeout = AbortSignal.timeout(API_TIMEOUT_MS)
+export function withApiTimeout(
+  init: RequestInit = {},
+  timeoutMs = API_TIMEOUT_MS,
+): RequestInit {
+  const timeout = AbortSignal.timeout(timeoutMs)
   if (!init.signal || typeof AbortSignal.any !== "function") {
     return { ...init, signal: timeout }
   }

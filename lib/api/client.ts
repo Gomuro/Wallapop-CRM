@@ -26,20 +26,29 @@ export type ApiFetchOptions = RequestInit & {
   cookieHeader?: string
 }
 
+export type ApiClientFetchInit = RequestInit & {
+  /** Override default API_TIMEOUT_MS for long-running calls (e.g. browser connect). */
+  timeoutMs?: number
+}
+
 export async function apiClientFetch<T>(
   path: string,
-  init?: RequestInit,
+  init?: ApiClientFetchInit,
 ): Promise<T> {
   assertApiConfigured()
+  const { timeoutMs, ...requestInit } = init ?? {}
   let response: Response
   try {
     response = await fetch(
       clientApiV1Path(path),
-      withApiTimeout({
-        credentials: "include",
-        ...init,
-        headers: jsonApiHeaders(init?.headers, init?.body),
-      }),
+      withApiTimeout(
+        {
+          credentials: "include",
+          ...requestInit,
+          headers: jsonApiHeaders(requestInit.headers, requestInit.body),
+        },
+        timeoutMs,
+      ),
     )
   } catch {
     throw new ApiError(

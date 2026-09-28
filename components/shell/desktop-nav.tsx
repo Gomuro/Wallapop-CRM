@@ -2,7 +2,7 @@
 
 import Link from "next/link"
 import { usePathname } from "next/navigation"
-import { LayoutGridIcon, PlusIcon } from "lucide-react"
+import { LayoutGridIcon, PlusIcon, UserRoundIcon } from "lucide-react"
 
 import { AuthUserMenu } from "@/components/auth/auth-user-menu"
 import { buttonVariants } from "@/components/ui/button"
@@ -12,6 +12,8 @@ export function DesktopNav() {
   const pathname = usePathname()
   const catalogActive = pathname === "/"
   const newItemActive = pathname === "/products/new"
+  const accountsActive =
+    pathname === "/accounts" || pathname.startsWith("/accounts/")
 
   return (
     <header className="sticky top-0 z-40 hidden h-14 shrink-0 items-center justify-between gap-4 border-b bg-background px-4 md:flex md:px-8">
@@ -44,6 +46,19 @@ export function DesktopNav() {
         >
           <PlusIcon />
           Subir producto
+        </Link>
+        <Link
+          href="/accounts"
+          aria-current={accountsActive ? "page" : undefined}
+          className={cn(
+            buttonVariants({
+              variant: accountsActive ? "secondary" : "ghost",
+              size: "sm",
+            }),
+          )}
+        >
+          <UserRoundIcon />
+          Cuenta
         </Link>
         <AuthUserMenu />
       </nav>
