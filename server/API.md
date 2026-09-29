@@ -187,7 +187,7 @@ Body (JSON, camelCase): усі поля опційні, **хоча б одне**
 
 | Метод | Шлях | Нотатки |
 |-------|------|---------|
-| GET | `/api/v1/accounts/default` | Єдиний `isDefault: true`. `{ account, autopost }`. `autopost.enabled` — `accounts.autopost_enabled` (кнопка Start/Stop). `lastPublication`: `{ at, title }` або `null`. `livePublish` — env `WALLAPOP_PUBLISH_DRY_RUN===false` |
+| GET | `/api/v1/accounts/default` | Єдиний `isDefault: true`. `{ account, autopost }`. `autopost.enabled` — `accounts.autopost_enabled` (кнопка Start/Stop). `lastPublication`: `{ at, title }` або `null`. `nextTickAt` — ISO наступного in-process тіку черги, або `null` якщо autopost parado. `livePublish` — env `WALLAPOP_PUBLISH_DRY_RUN===false` |
 | PATCH | `/api/v1/accounts/default/autopost` | Body `{ value: int, unit: "seconds" \| "minutes" \| "hours" \| "days" }`. Конвертує в ms на сервері (1 хв … 7 діб). Пише `accounts.autopost_interval_ms`. Відповідь як GET. 400 `VALIDATION_ERROR`, 404 без default |
 | POST | `/api/v1/accounts/default/autopost/start` | `autopostEnabled: true`. Session має бути `ACTIVE`, інакше **409** `NOT_ACTIVE`. Відповідь як GET |
 | POST | `/api/v1/accounts/default/autopost/stop` | `autopostEnabled: false`. Поточний тік може добігти |

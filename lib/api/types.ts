@@ -104,6 +104,8 @@ export type ApiAutopostStatus = {
   enabled: boolean
   livePublish: boolean
   lastPublication: { at: string; title: string } | null
+  /** Next in-process queue check (ISO). Null when autopost is stopped. */
+  nextTickAt: string | null
 }
 
 export type ApiDefaultAccountResponse = {

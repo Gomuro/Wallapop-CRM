@@ -111,6 +111,28 @@ export function formatListingPostedAt(iso: string) {
   }).format(date)
 }
 
+/** Human countdown for autopost next tick (Spanish, compact). */
+export function formatAutopostCountdown(remainingMs: number): string {
+  const totalSec = Math.max(0, Math.ceil(remainingMs / 1000))
+  if (totalSec <= 0) return "En breve…"
+
+  const days = Math.floor(totalSec / 86400)
+  const hours = Math.floor((totalSec % 86400) / 3600)
+  const minutes = Math.floor((totalSec % 3600) / 60)
+  const seconds = totalSec % 60
+
+  if (days > 0) {
+    return hours > 0 ? `${days} d ${hours} h` : `${days} d`
+  }
+  if (hours > 0) {
+    return minutes > 0 ? `${hours} h ${minutes} min` : `${hours} h`
+  }
+  if (minutes > 0) {
+    return seconds > 0 ? `${minutes} min ${seconds} s` : `${minutes} min`
+  }
+  return `${seconds} s`
+}
+
 export function apiErrorMessage(code: string, fallback: string) {
   switch (code) {
     case "VALIDATION_ERROR":

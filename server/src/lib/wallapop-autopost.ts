@@ -28,6 +28,8 @@ export type AutopostIntervalResolution = {
 
 let started = false
 let scheduling = false
+/** Wall clock when the in-process timer will run `runAutopostTick` (not publish finish). */
+let nextAutopostTickAtMs: number | null = null
 
 /** Exact string `true` — unset / `1` / `TRUE` stay off. */
 export function isWallapopAutopostEnabled(): boolean {
@@ -111,6 +113,7 @@ export function toAutopostStatusJson(
   extras: {
     enabled: boolean
     lastPublication: { at: string; title: string } | null
+    nextTickAt: string | null
   },
 ) {
   return {
@@ -120,7 +123,14 @@ export function toAutopostStatusJson(
     enabled: extras.enabled,
     livePublish: isAutopostLivePublishEnabled(),
     lastPublication: extras.lastPublication,
+    nextTickAt: extras.nextTickAt,
   }
+}
+
+/** ISO timestamp of the next scheduled queue tick, or null if the loop is not scheduling. */
+export function getNextAutopostTickAt(): string | null {
+  if (nextAutopostTickAtMs == null) return null
+  return new Date(nextAutopostTickAtMs).toISOString()
 }
 
 export async function loadAutopostStatus(prisma: PrismaClient) {
@@ -140,12 +150,14 @@ export async function loadAutopostStatus(prisma: PrismaClient) {
       product: { select: { title: true } },
     },
   })
+  const enabled = account?.autopostEnabled === true
   return toAutopostStatusJson(resolution, {
-    enabled: account?.autopostEnabled === true,
+    enabled,
     lastPublication:
       last?.lastPostedAt != null
         ? { at: last.lastPostedAt.toISOString(), title: last.product.title }
         : null,
+    nextTickAt: enabled ? getNextAutopostTickAt() : null,
   })
 }
 
@@ -215,6 +227,7 @@ export function isWallapopAutopostLoopScheduling(): boolean {
 export function resetWallapopAutopostLoopForTests(): void {
   started = false
   scheduling = false
+  nextAutopostTickAtMs = null
 }
 
 /**
@@ -252,7 +265,9 @@ function scheduleNext(): void {
     })
     .then((intervalMs) => {
       const delayMs = autopostDelayWithJitter(intervalMs)
+      nextAutopostTickAtMs = Date.now() + delayMs
       setTimeout(() => {
+        nextAutopostTickAtMs = null
         void runAutopostTick()
           .catch((error) => {
             log("error", "wallapop_autopost_tick_failed", serializeError(error))

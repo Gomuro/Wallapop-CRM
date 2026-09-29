@@ -115,6 +115,10 @@ describe("API v1 integration (Express + Postgres)", () => {
       expect(["account", "env", "default"]).toContain(res.body.autopost.source)
       expect(typeof res.body.autopost.enabled).toBe("boolean")
       expect(typeof res.body.autopost.livePublish).toBe("boolean")
+      expect(
+        res.body.autopost.nextTickAt === null ||
+          typeof res.body.autopost.nextTickAt === "string",
+      ).toBe(true)
     })
 
     it("PATCH stores the interval and GET reflects source account", async () => {

@@ -26,7 +26,10 @@ import {
   wallapopAccountErrorMessage,
   type WallapopConnectionStatus,
 } from "@/lib/api/wallapop-account"
-import { formatListingPostedAt } from "@/lib/inventory/format"
+import {
+  formatAutopostCountdown,
+  formatListingPostedAt,
+} from "@/lib/inventory/format"
 import {
   AUTOPOST_INTERVAL_UNITS,
   autopostIntervalPatchSchema,
@@ -54,6 +57,35 @@ function formatIntervalHint(autopost: ApiAutopostStatus): string {
   )
   const jitterPct = Math.round(autopost.jitterFraction * 100)
   return `Entre publicaciones: ~${value} ${UNIT_SHORT[unit]} (±${jitterPct} %)`
+}
+
+function useAutopostNextTickLabel(
+  nextTickAt: string | null | undefined,
+  enabled: boolean,
+): string | null {
+  const [label, setLabel] = useState<string | null>(null)
+
+  useEffect(() => {
+    if (!enabled) {
+      setLabel(null)
+      return
+    }
+
+    function refresh() {
+      if (!nextTickAt) {
+        setLabel("Comprobando la cola…")
+        return
+      }
+      const remainingMs = new Date(nextTickAt).getTime() - Date.now()
+      setLabel(formatAutopostCountdown(remainingMs))
+    }
+
+    refresh()
+    const timer = window.setInterval(refresh, 1000)
+    return () => window.clearInterval(timer)
+  }, [enabled, nextTickAt])
+
+  return label
 }
 
 export function AutopostIntervalForm() {
@@ -103,6 +135,30 @@ export function AutopostIntervalForm() {
       cancelled = true
     }
   }, [apiReady])
+
+  const running = autopost?.enabled === true
+  const nextTickLabel = useAutopostNextTickLabel(
+    autopost?.nextTickAt,
+    running,
+  )
+
+  useEffect(() => {
+    if (!apiReady || !running) return
+
+    let cancelled = false
+    const timer = window.setInterval(() => {
+      void getDefaultAccountAutopost()
+        .then((next) => {
+          if (!cancelled) setAutopost(next.autopost)
+        })
+        .catch(() => {})
+    }, 15000)
+
+    return () => {
+      cancelled = true
+      window.clearInterval(timer)
+    }
+  }, [apiReady, running])
 
   useEffect(() => {
     if (!saved) return
@@ -171,7 +227,6 @@ export function AutopostIntervalForm() {
 
   const busy = loading || saving || toggling
   const sessionActive = sessionStatus === "ACTIVE"
-  const running = autopost?.enabled === true
   const lastLabel = autopost?.lastPublication
     ? `${autopost.lastPublication.title} · ${formatListingPostedAt(autopost.lastPublication.at) ?? ""}`
     : "Aún no hay publicaciones"
@@ -211,6 +266,18 @@ export function AutopostIntervalForm() {
       <p className="mb-4 text-sm text-muted-foreground">
         Última publicación: {lastLabel}
       </p>
+
+      {running && nextTickLabel ? (
+        <p
+          className="mb-4 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm tabular-nums"
+          aria-live="polite"
+        >
+          <span className="text-muted-foreground">
+            Próxima comprobación de la cola:{" "}
+          </span>
+          <span className="font-medium text-foreground">{nextTickLabel}</span>
+        </p>
+      ) : null}
 
       {error ? (
         <p

@@ -8,6 +8,7 @@ import {
   DEFAULT_AUTOPOST_INTERVAL_MS,
   isAutopostLivePublishEnabled,
   isWallapopAutopostEnabled,
+  getNextAutopostTickAt,
   isWallapopAutopostLoopScheduling,
   readAutopostIntervalMs,
   resolveAutopostInterval,
@@ -224,6 +225,27 @@ describe("startWallapopAutopostLoop", () => {
     startWallapopAutopostLoop()
     await Promise.resolve()
     expect(isWallapopAutopostLoopScheduling()).toBe(true)
+    vi.clearAllTimers()
+  })
+
+  it("exposes next tick time when scheduling", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"))
+    resetWallapopAutopostLoopForTests()
+    delete process.env.WALLAPOP_AUTOPOST_INTERVAL_MS
+    startWallapopAutopostLoop()
+    await vi.waitFor(() => {
+      expect(getNextAutopostTickAt()).not.toBeNull()
+    })
+
+    const at = getNextAutopostTickAt()
+    expect(at).not.toBeNull()
+    const remainingMs = new Date(at!).getTime() - Date.now()
+    const minMs = DEFAULT_AUTOPOST_INTERVAL_MS * (1 - AUTOPOST_JITTER_FRACTION)
+    const maxMs = DEFAULT_AUTOPOST_INTERVAL_MS * (1 + AUTOPOST_JITTER_FRACTION)
+    expect(remainingMs).toBeGreaterThanOrEqual(Math.floor(minMs) - 1)
+    expect(remainingMs).toBeLessThanOrEqual(Math.ceil(maxMs) + 1)
+
     vi.clearAllTimers()
   })
 })
