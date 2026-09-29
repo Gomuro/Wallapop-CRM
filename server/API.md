@@ -27,7 +27,7 @@
 | `UPLOAD_DIR` | Файли фото на диску цього процесу |
 | `CORS_ORIGIN` | Origin Next (локально `http://localhost:3000`, проді — Vercel). Кілька через кому |
 | `API_ORIGIN` | Опційно для `npm run server:smoke`, якщо не `http://127.0.0.1:$PORT` |
-| `WALLAPOP_PUBLISH_DRY_RUN` | Publish MVP (planned): `true` = стоп перед кліком Publicar. Див. [Publish — planned](#publish--planned-phase-0-lock) |
+| `WALLAPOP_PUBLISH_DRY_RUN` | Publish: не `false` = стоп перед Publicar. Див. [Publish](#publish-phase-1) |
 
 ## Помилки
 
@@ -94,9 +94,9 @@ Postman-колекція: `server/postman/`.
 | Метод | Шлях | Нотатки |
 |-------|------|---------|
 | GET | `/api/v1/products` | Пагінація `page` (default 1), `pageSize` (default 20, max 100). Фільтри: `status` (`ALL` \| `ACTIVE` \| `SOLD` \| `INACTIVE`), `q` (SKU або title, case-insensitive), опційно `categoryId`. Сортування: `updatedAt` desc. Відповідь: `{ products: [{ id, sku, title, price, currency, status, categoryId, coverUrl, updatedAt, listingActive }], page, pageSize, total, totalPages }` |
-| POST | `/api/v1/products` | `sku`, `title`, `description`, `price`, `currency` default `EUR`, `categoryId` (листок), `condition` enum, `brand?`, `weightKg?`, `typeAttributes?`. Авто listing на default, статус `READY_TO_POST` |
+| POST | `/api/v1/products` | `sku`, `title`, `description`, `price`, `currency` default `EUR`, `categoryId` (листок), `condition` enum, `brand?`, `weightKg?`, `shippingPackageSize?` (`STANDARD` \| `BULKY`), `widthCm?` / `lengthCm?` / `heightCm?`, `typeAttributes?`. Авто listing на default, статус `READY_TO_POST` |
 | GET | `/api/v1/products/:id` | Картка + images + listing |
-| PATCH | `/api/v1/products/:id` | Часткове оновлення складу: `sku`, `title`, `description`, `price`, `currency`, `categoryId`, `condition`, `brand`, `weightKg`, `typeAttributes` (усі опційно). **Strict body:** `status`, `soldAt`, `soldPrice` та невідомі ключі → **400** `VALIDATION_ERROR` (не strip). Статус — лише #57. |
+| PATCH | `/api/v1/products/:id` | Часткове оновлення складу: `sku`, `title`, `description`, `price`, `currency`, `categoryId`, `condition`, `brand`, `weightKg`, `shippingPackageSize`, `widthCm`, `lengthCm`, `heightCm`, `typeAttributes` (усі опційно). **Strict body:** `status`, `soldAt`, `soldPrice` та невідомі ключі → **400** `VALIDATION_ERROR` (не strip). Статус — лише #57. |
 | DELETE | `/api/v1/products/:id` | |
 
 `condition`: `NEW` \| `AS_GOOD_AS_NEW` \| `GOOD` \| `FAIR` \| `HAS_GIVEN_IT_ALL`.  
@@ -181,7 +181,7 @@ Body (JSON, camelCase): усі поля опційні, **хоча б одне**
 | Метод | Шлях | Нотатки |
 |-------|------|---------|
 | GET | `/api/v1/accounts/default` | Єдиний `isDefault: true`. Повний CRUD акаунтів — етап 2 |
-| GET | `/api/v1/accounts/status` | In-memory сесія браузера: `{ status, requires2FA, email, error? }`. `status`: `DISCONNECTED` \| `AUTHENTICATING` \| `ACTIVE`. Після рестарту API: **CDP rehydrate** — якщо Chrome ще на MFA (`#mfa-code-validation-form`) → знову `AUTHENTICATING` + `requires2FA`; якщо вже залогінений → `ACTIVE` |
+| GET | `/api/v1/accounts/status` | In-memory сесія браузера: `{ status, requires2FA, email, error? }`. `status`: `DISCONNECTED` \| `AUTHENTICATING` \| `ACTIVE`. Boot-rehydrate **може spawn** Chrome; цей GET лише **attach**. Якщо немає Wallapop-табу — probe **goto** `/wall`, далі MFA → `AUTHENTICATING` / logged-in → `ACTIVE` |
 | POST | `/api/v1/accounts/connect` | Body `{ email, password, proxy? }` — **password використовується** для Keycloak fill (у БД **не** зберігається). Відкриває/чіпляє Chrome → onboarding «Iniciar sesión con email» → fill `#username`/`#password` → `#kc-login`. Вже залогінений профіль → `ACTIVE` без форми. Потрібен 2FA → `requires2FA: true`. Fail (у т.ч. reCAPTCHA) → **400** `CONNECT_FAILED` |
 | POST | `/api/v1/accounts/connect/2fa` | Body `{ code }` (4–8 alphanumeric). Вводить OTP у відкритий контекст. Якщо RAM злетіла після рестарту, але MFA-екран у Chrome лишився — **re-attach CDP** і прийняти код (не 409). Без MFA/сесії → **409** `NOT_AUTHENTICATING`. Помилка коду → **400** `CONNECT_FAILED` |
 | POST | `/api/v1/accounts/disconnect` | Повний **logout Wallapop** у Chrome-профілі (`clearCookies` + `es.wallapop.com/logout`) + CRM `DISCONNECTED`; Prisma default → `INACTIVE`. Профіль на диску / процес Chrome не видаляються. Якщо CDP недоступний — CRM все одно від’єднується |
@@ -311,30 +311,54 @@ Wallapop часто показує **consentmanager** `#cmpbox` (GDPR welcome) �
 
 Google / Apple / Facebook SSO на onboarding — окремі `walla-button`; email-шлях вище.
 
-## Publish — planned (Phase 0 lock)
 
-**Статус:** контракт і домовленості зафіксовані; хендлера / `publishWallapopInBrowser` ще **немає**. Research: `Desk/clients/dmytro-filyk-wallapop/tmp/autopost-research/PUBLISH-FLOW-RESEARCH.md`.
+## Publish (Phase 1)
+
+**Статус:** реалізовано dry-run MVP. Research: `Desk/clients/dmytro-filyk-wallapop/tmp/autopost-research/PUBLISH-FLOW-RESEARCH.md`.
+
+**Модулі:** `wallapop-cdp.ts` (CDP / `location.assign`) · `wallapop-browser.ts` (login/2FA/logout) · `wallapop-publish.ts` (upload flow). Login не змішується з publish.
 
 ### Locked decisions
 
-1. **Gate:** publish лише якщо in-memory Wallapop session `status === "ACTIVE"`. Інакше **409** (як для 2FA out-of-order, напр. `NOT_ACTIVE` / аналог існуючих account-помилок).
+1. **Gate:** publish лише якщо in-memory Wallapop session `status === "ACTIVE"`. Інакше **409** `NOT_ACTIVE` (повідомлення ES). Після `listen` API fire-and-forget `rehydrateWallapopSessionOnBoot()` — **attach або spawn** Chrome на CDP (`WALLAPOP_CDP_PORT` / профіль Persistent); якщо немає Wallapop-табу — **goto** `https://es.wallapop.com/wall`, потім classify (ACTIVE / 2FA / DISCONNECTED). Звичайний `GET /accounts/status` reconcile — **лише attach** (без spawn), але той самий probe `/wall` якщо вкладка не Wallapop. **Publish / Probar:** `ensureWallapopPage()` — **attach або spawn** (як login), щоб CDP не був обов’язково піднятий до кліку. **Зараз** виклик живе інлайн у [`server/src/index.ts`](./src/index.ts); **пізніше** винести всі post-`listen` хуки в окремий модуль startup-скриптів (напр. `server/src/startup/` або `runStartupHooks()`), щоб `index.ts` лишався лише boot + listen.
 2. **Navigation:** у publish-flow **заборонено** `page.goto` на вже відкритому Wallapop-табі. Дозволено: `location.assign`, UI-кліки, нова вкладка через CDP при recover.
-3. **Dry-run default:** перший інкремент коду зупиняється **перед** кліком `Publicar`. Env `WALLAPOP_PUBLISH_DRY_RUN=true` (default у `.env.example`). Реальний publish лише коли `WALLAPOP_PUBLISH_DRY_RUN=false`.
-4. **MVP scope:** один CDP-акаунт (існуючий `WALLAPOP_CDP_*`); лише consumer-goods («Algo que ya no necesito»). Multi-account / bulk / mobile app — out of scope.
-5. **Data path (Фаза 1+):** CRM Product `title` → Resumen ≤50; images з `UPLOAD_DIR`; після AI-fill обов’язкові: Estado, Precio, Material fallback `Otro`; envío Estándar якщо не габарит; Pro «Añadir más unidades» — skip.
+3. **Dry-run default:** стоп **перед** кліком `Publicar`, якщо `WALLAPOP_PUBLISH_DRY_RUN` не дорівнює `false` (unset / `true` = dry-run).
+4. **MVP scope:** один CDP-акаунт; лише consumer-goods («Algo que ya no necesito»).
+5. **Data path:** CRM `title` → Resumen ≤50; images з `UPLOAD_DIR` + `storageKey`; **category** ← `Category.path` (wallapop_id segments) → breadcrumb `nameEs` root→leaf → desplegable «Categoría y subcategoría» (`ensureCategorySelected` у `wallapop-publish.ts`, константа `PUBLISH_CATEGORY`); Estado / Precio / **tamaño del paquete** (`#delivery` Estándar / `#bulky` Voluminoso) / **tramo de peso** після Estándar з CRM `weightKg` / опційно Medidas `#width` `#length` `#height`; Material fallback `Otro`; skip Pro «Añadir más unidades».
 
-### Flow (research)
+### Category picker (upload form DOM)
 
-- Entry: `https://es.wallapop.com/app/catalog/upload` → категорія **consumer-goods** («Algo que ya no necesito»).
-- **STOP** (не клікати в dry-run): `Publicar` / `Publicar anuncio` / `Crear producto` / `Subir anuncio`.
+Після photos + **Continuar** — `walla-dropdown` («Categoría y subcategoría») → floating `[role=listbox]`. Опції: **`walla-dropdown-item[role=option][aria-label="<nameEs>"]`** (блоки «Categorías sugeridas» / «Todas las categorías»). Спочатку клік по **leaf** з CRM (часто в sugeridas), інакше breadcrumb root→leaf. Breadcrumb: `categoryBreadcrumbLabelsEs(..., { consumerGoodsPublish: true })`.
 
-### Draft endpoint (not implemented)
+**Estado / Precio (información del producto):** `Estado*` — той самий `walla-dropdown` + `walla-dropdown-item[aria-label]` (напр. `Como nuevo`, `En condiciones aceptables` для `FAIR`). Hidden `#condition` має заповнитись після вибору. **Precio** — `input#price_amount` / `name="price_amount"` (не `price`). Без Estado + Precio кнопка **Publicar** не з’являється. Кнопка **Publicar** — у **shadow DOM** `walla-button` (host `innerText` порожній); детектор dry-run читає `shadowRoot.querySelector("button")`. Текст кнопки залежить від мови акаунта: `Publicar` (ES) або `Пост` (UK).
+
+**Envío / tamaño del paquete:** якщо «Activar envío» увімкнено, рядок **Estándar** у light DOM: `#standardDescription1` + іконка `#standardShippingIcon` + хост `walla-radio[arialabel="delivery"]`. Сам `#delivery` — `input[type=radio]` у **shadow DOM** (`value="false"` = не обрано). Voluminoso: `#bulkyDescription1` / `arialabel="bulky"`. Клікати рядок і хост, не лише `document.querySelector("#delivery")`. CRM `shippingPackageSize` (`STANDARD` \| `BULKY`) → цей вибір. Medidas `#width` / `#length` / `#height` — опційно з `widthCm` / `lengthCm` / `heightCm`. Без обраного розміру пакета з’являється тост «Виберіть розмір».
+
+**Envío / tramo de peso (Estándar):** після `#delivery` Wallapop показує **«¿Cuánto pesa?»**. CRM `weightKg` + buffer **0.25 kg** (envoltorio) → перша смуга, де `effectiveKg <= maxKg`: `0 a 1` / `1 a 2` / `2 a 5` / `5 a 10` / `10 a 20` / `20 a 30` kg. Клік лише по рядку цього tramo всередині `#newWeightSelector` (не `#delivery` / `#bulky`). Якщо envío увімкнено і `weightKg` порожній → **400** `VALIDATION_ERROR` («Indica el peso del producto antes de publicar con envío.») **до** Chrome. Якщо Estándar і `effectiveKg > 30` → **400** («El peso es demasiado alto para envío estándar…»). Voluminoso: вага все одно обов’язкова на API, вибір kg-смуги в браузері — поза фазою 1.
+
+**Перед зміною селекторів publish:** перевірити живу форму через **MCP Playwright** (`browser_evaluate` / snapshot на `…/upload/consumer-goods`), не лише CDP-логи.
+
+### Chrome lifecycle (planned — зменшити навантаження на сервер)
+
+**Ціль (наступий етап, не повністю в коді):** Chrome / вкладки Wallapop **відкривати лише коли потрібна дія** (login, 2FA, publish, reconcile з probe), і **прибирати після завершення** (закрити вкладку upload-flow, від’єднати Playwright, за потреби зупинити процес Chrome), щоб не тримати браузер постійно на VPS.
+
+| Що | Зараз | План |
+|----|--------|------|
+| Boot rehydrate | `attachOrLaunch` + probe `/wall` | без змін |
+| Login / 2FA | `attachOrLaunch` | після logout / FAILED — `closeWallapopBrowser` (вже частково) |
+| `GET /accounts/status` reconcile | attach-only; при NONE — `closeWallapopBrowser` | не spawn зі status; можливо не вбивати CDP якщо сесія ще ACTIVE у профілі |
+| Publish / **Probar publicación** | `ensureWallapopPage` → `attachOrLaunch`; після dry-run/live **вкладка лишається відкритою** | після успіху: закрити `ownedPage` / вкладку upload; опційно `browser.close()` (disconnect) або quit Chrome якщо idle |
+| `closeWallapopBrowser()` | закриває owned tab + Playwright disconnect; **не** завершує процес Chrome (профіль лишається) | чітко розділити: *close tab* vs *disconnect CDP* vs *quit chrome.exe* |
+
+**Probar:** dry-run зупиняється **перед** `Publicar` (форма заповнена в Chrome, клік Publicar не робиться). Повідомлення UI типу «Rellena el formulario…» — очікувана підказка для live publish; при успішному dry-run API повертає `step: "before_publicar"`.
+
+### Endpoint
 
 | Метод | Шлях | Нотатки |
 |-------|------|---------|
-| POST | `/api/v1/products/:id/publish` | Auth cookie. Потребує session `ACTIVE` → інакше **409**. Тіло поки не потрібне (dry-run керується env). |
+| POST | `/api/v1/products/:id/publish` | Auth cookie. Optional body `{ dryRun?: true }` forces stop before Publicar (інакше dry-run з env). `ACTIVE` обов'язково. |
 
-**200** (shape-чернетка):
+**200** dry-run:
 
 ```json
 {
@@ -346,20 +370,20 @@ Google / Apple / Facebook SSO на onboarding — окремі `walla-button`; e
 }
 ```
 
-| Поле | Коли |
-|------|------|
-| `ok` | успіх dry-run / live |
-| `dryRun` | `true` якщо зупинились перед Publicar |
-| `listing` | після live publish — оновлений listing (або `null` у dry-run) |
-| `error` | короткий код/текст при частковому фейлі |
-| `step` | останній успішний крок флоу (напр. `before_publicar`) |
+**200** live (`WALLAPOP_PUBLISH_DRY_RUN=false`): `{ ok, dryRun: false, listing, error: null, step: "published" }` — listing `ACTIVE`, `externalUrl` best-effort.
 
-Помилки (очікувані): **401** `UNAUTHORIZED`; **404** `NOT_FOUND` (продукт); **409** session не `ACTIVE`; **400** / **500** — валідація / браузерний фейл (коди уточняться у Фазі 1).
+| HTTP | code | Коли |
+|------|------|------|
+| 401 | `UNAUTHORIZED` | Немає cookie |
+| 404 | `NOT_FOUND` | Продукт / default account |
+| 409 | `NOT_ACTIVE` | Session не ACTIVE |
+| 400 | `VALIDATION_ERROR` | Немає фото / файл відсутній на диску |
+| 500 | `PUBLISH_FAILED` | Браузерний крок упав (`step: message`) |
 
-### Checklist — готово до Фази 1
+### Manual verify (dry-run)
 
-- [ ] CDP Chrome з `ACTIVE` сесією піднімається як зараз (connect flow).
-- [ ] Research `PUBLISH-FLOW-RESEARCH.md` доступний команді.
-- [ ] Env `WALLAPOP_PUBLISH_DRY_RUN` задокументований (`.env.example` + ця секція).
-- [ ] Наступний крок: **Фаза 1 = browser publish + dry-run stop** (UI у тому ж PR не обов’язковий).
-
+1. Chrome CDP + connect → session `ACTIVE`.
+2. Продукт з ≥1 фото в `UPLOAD_DIR` і **leaf** `categoryId` (breadcrumb у БД по `path`).
+3. `WALLAPOP_PUBLISH_DRY_RUN` unset або `true`.
+4. `POST /api/v1/products/:id/publish` (або **Probar publicación** у CRM) → `step: before_publicar`; у Chrome заповнена категорія з CRM, **не** натиснуто Publicar.
+5. У логах API: `wallapop_publish_step` (category `select_done`), потім `wallapop_publish_before_publicar`.

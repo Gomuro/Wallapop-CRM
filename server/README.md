@@ -27,9 +27,9 @@ npm run server:smoke
 
 **Профілі (запам’ятати):** 1 Wallapop-акаунт = 1 окремий Chrome `--user-data-dir` (cookies / історія / fingerprint). Не шарити профіль між акаунтами — інакше сильний детект.
 
-### Autopost (next)
+### Autopost (Phase 1)
 
-Публікація оголошень з CRM на Wallapop ще **не реалізована**. Зафіксовано (Phase 0): лише при session `ACTIVE`; dry-run за замовчуванням (`WALLAPOP_PUBLISH_DRY_RUN=true` — стоп перед кліком Publicar); single-account consumer-goods MVP. Контракт і checklist до Фази 1: [API.md → Publish — planned](./API.md#publish--planned-phase-0-lock).
+`POST /api/v1/products/:id/publish` — browser publish consumer-goods через CDP. Потрібна session `ACTIVE`. За замовчуванням dry-run (`WALLAPOP_PUBLISH_DRY_RUN` ≠ `false`) — стоп перед Publicar, без UI. Модулі: `wallapop-cdp` / `wallapop-browser` (login) / `wallapop-publish`. Деталі: [API.md → Publish](./API.md#publish-phase-1).
 
 
 Postman: імпорт `server/postman/Wallapop-CRM.postman_collection.json` + `server/postman/local.postman_environment.json`, environment **Wallapop CRM · local**, папка **Smoke** → Runner. Cookie `crm_session` після Login кладеться в jar сама.
