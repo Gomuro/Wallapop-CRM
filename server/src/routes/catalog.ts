@@ -20,6 +20,7 @@ import {
   getProductListing,
   putProductListing,
 } from "./product-listings"
+import { publishProduct } from "./product-publish"
 import {
   deleteProductImage,
   patchProductImages,
@@ -60,6 +61,7 @@ catalog.delete("/products/:id/images/:imageId", deleteProductImage)
 
 catalog.get("/products/:id/listing", getProductListing)
 catalog.put("/products/:id/listing", putProductListing)
+catalog.post("/products/:id/publish", publishProduct)
 
 catalog.get("/accounts/default", getDefaultAccount)
 catalog.get("/accounts/status", getAccountConnectionStatus)
