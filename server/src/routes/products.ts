@@ -76,6 +76,10 @@ export function toProductJson(row: {
   condition: string
   brand: string | null
   weightKg: { toString(): string } | null
+  shippingPackageSize: string | null
+  widthCm: { toString(): string } | null
+  lengthCm: { toString(): string } | null
+  heightCm: { toString(): string } | null
   status: string
   typeAttributes: unknown
   soldAt: Date | null
@@ -109,6 +113,10 @@ export function toProductJson(row: {
     condition: row.condition,
     brand: row.brand,
     weightKg: decimalJson(row.weightKg),
+    shippingPackageSize: row.shippingPackageSize,
+    widthCm: decimalJson(row.widthCm),
+    lengthCm: decimalJson(row.lengthCm),
+    heightCm: decimalJson(row.heightCm),
     status: row.status,
     typeAttributes: row.typeAttributes,
     soldAt: row.soldAt?.toISOString() ?? null,
@@ -321,6 +329,10 @@ export async function createProduct(req: Request, res: Response) {
           condition: body.condition,
           brand: body.brand ?? null,
           weightKg: body.weightKg ?? null,
+          shippingPackageSize: body.shippingPackageSize ?? null,
+          widthCm: body.widthCm ?? null,
+          lengthCm: body.lengthCm ?? null,
+          heightCm: body.heightCm ?? null,
           status: body.status,
           typeAttributes: body.typeAttributes as Prisma.InputJsonValue,
         },
@@ -412,6 +424,12 @@ export async function patchProduct(req: Request, res: Response) {
   if (body.condition !== undefined) data.condition = body.condition
   if (body.brand !== undefined) data.brand = body.brand
   if (body.weightKg !== undefined) data.weightKg = body.weightKg
+  if (body.shippingPackageSize !== undefined) {
+    data.shippingPackageSize = body.shippingPackageSize
+  }
+  if (body.widthCm !== undefined) data.widthCm = body.widthCm
+  if (body.lengthCm !== undefined) data.lengthCm = body.lengthCm
+  if (body.heightCm !== undefined) data.heightCm = body.heightCm
   if (body.typeAttributes !== undefined) {
     data.typeAttributes = body.typeAttributes as Prisma.InputJsonValue
   }
