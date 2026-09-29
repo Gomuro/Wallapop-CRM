@@ -42,7 +42,17 @@ export const productConditionSchema = z.enum([
   "HAS_GIVEN_IT_ALL",
 ])
 
-export const productCreateSchema = z.object({
+export const shippingPackageSizeSchema = z.enum(["STANDARD", "BULKY"])
+
+const optionalMeasureCm = z
+  .number({ error: "Introduce unas medidas válidas." })
+  .finite("Introduce unas medidas válidas.")
+  .positive("Introduce unas medidas válidas.")
+  .max(999, "Introduce unas medidas válidas.")
+  .nullable()
+  .optional()
+
+const productFieldsSchema = z.object({
   sku: z.string().trim().min(1, "Introduce un SKU.").max(64, "El SKU es demasiado largo."),
   title: z
     .string()
@@ -66,12 +76,42 @@ export const productCreateSchema = z.object({
     .nonnegative("El peso no puede ser negativo.")
     .nullable()
     .optional(),
+  shippingPackageSize: shippingPackageSizeSchema.nullable().optional(),
+  widthCm: optionalMeasureCm,
+  lengthCm: optionalMeasureCm,
+  heightCm: optionalMeasureCm,
   images: productImagesSchema.default([]),
   status: productStatusSchema.default("ACTIVE"),
   externalLinks: z.array(z.string().trim().url()).default([]),
 })
 
-export const productUpdateSchema = productCreateSchema.partial()
+function refineProductDimensions(
+  value: {
+    widthCm?: number | null
+    lengthCm?: number | null
+    heightCm?: number | null
+  },
+  ctx: z.RefinementCtx,
+) {
+  const filled = [value.widthCm, value.lengthCm, value.heightCm].filter(
+    (item) => item != null,
+  ).length
+  if (filled > 0 && filled < 3) {
+    ctx.addIssue({
+      code: "custom",
+      message: "Indica ancho, fondo y alto.",
+      path: ["widthCm"],
+    })
+  }
+}
+
+export const productCreateSchema = productFieldsSchema.superRefine(
+  refineProductDimensions,
+)
+
+export const productUpdateSchema = productFieldsSchema
+  .partial()
+  .superRefine(refineProductDimensions)
 
 const moneySchema = z
   .number({ error: "Introduce un precio válido." })
@@ -101,6 +141,10 @@ export const warehouseProductCreateSchema = z.object({
     .nonnegative("El peso no puede ser negativo.")
     .nullable()
     .optional(),
+  shippingPackageSize: shippingPackageSizeSchema.nullable().optional(),
+  widthCm: optionalMeasureCm,
+  lengthCm: optionalMeasureCm,
+  heightCm: optionalMeasureCm,
   status: productStatusSchema.default("ACTIVE"),
   typeAttributes: z.record(z.string(), z.unknown()).default({}),
   soldAt: z.coerce.date().nullable().optional(),
@@ -162,6 +206,7 @@ export type ProductCreateInput = z.infer<typeof productCreateSchema>
 export type ProductUpdateInput = z.infer<typeof productUpdateSchema>
 export type ProductStatus = z.infer<typeof productStatusSchema>
 export type ProductCondition = z.infer<typeof productConditionSchema>
+export type ShippingPackageSize = z.infer<typeof shippingPackageSizeSchema>
 export type WarehouseProductCreateInput = z.infer<
   typeof warehouseProductCreateSchema
 >

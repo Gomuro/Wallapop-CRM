@@ -1,4 +1,4 @@
-import type { ListingStatus, ProductCondition, ProductStatus } from "@/lib/validations"
+import type { ListingStatus, ProductCondition, ProductStatus, ShippingPackageSize } from "@/lib/validations"
 
 export type InventoryProductImage = {
   id: string
@@ -26,6 +26,10 @@ export type InventoryProduct = {
   condition: string
   conditionCode: ProductCondition
   weight: number | null
+  shippingPackageSize: ShippingPackageSize | null
+  widthCm: number | null
+  lengthCm: number | null
+  heightCm: number | null
   images: string[]
   productImages: InventoryProductImage[]
   status: ProductStatus

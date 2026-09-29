@@ -42,6 +42,10 @@ export type ApiProduct = {
   condition: ProductCondition
   brand: string | null
   weightKg: number | null
+  shippingPackageSize: "STANDARD" | "BULKY" | null
+  widthCm: number | null
+  lengthCm: number | null
+  heightCm: number | null
   status: ProductStatus
   typeAttributes: Record<string, unknown>
   soldAt: string | null

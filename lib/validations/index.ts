@@ -57,6 +57,7 @@ export {
   productPublishImagesSchema,
   productStatusSchema,
   productUpdateSchema,
+  shippingPackageSizeSchema,
   warehouseProductCreateSchema,
   warehouseProductCreateWithLeafSchema,
   warehouseProductUpdateSchema,
@@ -68,6 +69,7 @@ export type {
   ProductListStatusFilter,
   ProductStatus,
   ProductUpdateInput,
+  ShippingPackageSize,
   WarehouseProductCreateInput,
   WarehouseProductUpdateInput,
 } from "./product"
