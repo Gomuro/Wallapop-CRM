@@ -31,6 +31,13 @@ const LISTING_STATUS_OPTIONS: ListingStatus[] = [
   "DEACTIVATED",
 ]
 
+function writableListingStatus(
+  status: InventoryListing["status"] | undefined,
+): ListingStatus {
+  if (status === "ACTIVE" || status === "DEACTIVATED") return status
+  return "READY_TO_POST"
+}
+
 export function ListingFields({
   productId,
   listing,
@@ -53,8 +60,9 @@ export function ListingFields({
   }
   const [state, formAction, pending] = useActionState(submitAction, {} as ListingActionState)
   const [status, setStatus] = useState<ListingStatus>(
-    listing?.status ?? "READY_TO_POST",
+    writableListingStatus(listing?.status),
   )
+  const isPosting = listing?.status === "POSTING"
 
   useEffect(() => {
     if (!state.error && !state.fieldErrors) return
@@ -67,7 +75,9 @@ export function ListingFields({
   }, [state])
 
   useEffect(() => {
-    if (listing?.status) setStatus(listing.status)
+    if (listing?.status && listing.status !== "POSTING") {
+      setStatus(listing.status)
+    }
   }, [listing?.status])
 
   useEffect(() => {
@@ -121,39 +131,89 @@ export function ListingFields({
               </p>
             ) : (
               <p className="text-xs text-muted-foreground">
-                Déjalo vacío para quitar el enlace.
+                {isPosting
+                  ? "Vacío no quita el enlace que ya está guardado."
+                  : "Déjalo vacío para quitar el enlace."}
               </p>
             )}
           </div>
 
           <div className="space-y-1.5">
             <Label htmlFor="listingStatus">Estado del anuncio</Label>
-            <Select
-              value={status}
-              onValueChange={(value) => value && setStatus(value as ListingStatus)}
-              itemToStringLabel={(value) => listingStatusLabel(value as ListingStatus)}
-              items={Object.fromEntries(
-                LISTING_STATUS_OPTIONS.map((item) => [
-                  item,
-                  listingStatusLabel(item),
-                ]),
-              )}
-            >
-              <SelectTrigger
-                id="listingStatus"
-                className="h-11 w-full data-[size=default]:h-11"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {LISTING_STATUS_OPTIONS.map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {listingStatusLabel(item)}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
-            <input type="hidden" name="listingStatus" value={status} />
+            {isPosting ? (
+              <>
+                <input type="hidden" name="keepUrlIfEmpty" value="1" />
+                <Input
+                  id="listingStatus"
+                  readOnly
+                  disabled
+                  value={listingStatusLabel("POSTING")}
+                  className="h-11 scroll-mt-28"
+                  aria-readonly="true"
+                />
+                <p className="text-xs text-muted-foreground">
+                  Se está publicando en Wallapop. No hace falta volver a publicarlo.
+                </p>
+                <Button
+                  type="submit"
+                  variant="secondary"
+                  className="h-12 w-full"
+                  disabled={pending}
+                  aria-busy={pending}
+                >
+                  {pending ? <LoaderCircleIcon className="animate-spin" /> : null}
+                  {pending ? "Guardando anuncio…" : "Guardar enlace"}
+                </Button>
+                <Button
+                  type="submit"
+                  name="listingStatus"
+                  value="ACTIVE"
+                  variant="default"
+                  className="h-12 w-full"
+                  disabled={pending}
+                  aria-busy={pending}
+                >
+                  {pending ? <LoaderCircleIcon className="animate-spin" /> : null}
+                  Marcar como publicado en Wallapop
+                </Button>
+                <p className="text-xs text-muted-foreground">
+                  Si ya salió en Wallapop y el CRM se quedó en Publicando, márcalo aquí. El enlace es opcional: vacío no borra el que ya hay.
+                </p>
+              </>
+            ) : (
+              <>
+                <Select
+                  value={status}
+                  onValueChange={(value) =>
+                    value && setStatus(value as ListingStatus)
+                  }
+                  itemToStringLabel={(value) =>
+                    listingStatusLabel(value as ListingStatus)
+                  }
+                  items={Object.fromEntries(
+                    LISTING_STATUS_OPTIONS.map((item) => [
+                      item,
+                      listingStatusLabel(item),
+                    ]),
+                  )}
+                >
+                  <SelectTrigger
+                    id="listingStatus"
+                    className="h-11 w-full data-[size=default]:h-11"
+                  >
+                    <SelectValue />
+                  </SelectTrigger>
+                  <SelectContent>
+                    {LISTING_STATUS_OPTIONS.map((item) => (
+                      <SelectItem key={item} value={item}>
+                        {listingStatusLabel(item)}
+                      </SelectItem>
+                    ))}
+                  </SelectContent>
+                </Select>
+                <input type="hidden" name="listingStatus" value={status} />
+              </>
+            )}
           </div>
 
           {listing.externalUrl ? (
@@ -179,6 +239,7 @@ export function ListingFields({
             </p>
           ) : null}
 
+          {isPosting ? null : (
           <Button
             type="submit"
             variant="secondary"
@@ -189,6 +250,7 @@ export function ListingFields({
             {pending ? <LoaderCircleIcon className="animate-spin" /> : null}
             {pending ? "Guardando anuncio…" : "Guardar anuncio"}
           </Button>
+          )}
         </form>
       </CardContent>
     </Card>

@@ -12,9 +12,11 @@ import { Button } from "@/components/ui/button"
 export function TestPublishButton({
   productId,
   disabled,
+  disabledHint,
 }: {
   productId: string
   disabled?: boolean
+  disabledHint?: string
 }) {
   const [pending, setPending] = useState(false)
   const [error, setError] = useState<string | null>(null)
@@ -54,7 +56,8 @@ export function TestPublishButton({
       </Button>
       {disabled ? (
         <p className="text-xs text-muted-foreground">
-          Añade al menos una foto para probar la publicación.
+          {disabledHint ??
+            "Añade al menos una foto para probar la publicación."}
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">

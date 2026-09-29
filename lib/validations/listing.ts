@@ -1,7 +1,16 @@
 import { z } from "zod"
 
+/** Public PUT / create status. `POSTING` is internal (publish claim) and is rejected here. */
 export const listingStatusSchema = z.enum([
   "READY_TO_POST",
+  "ACTIVE",
+  "DEACTIVATED",
+])
+
+/** Read/API mapping: includes internal `POSTING` while a live publish is in flight. */
+export const listingStatusReadSchema = z.enum([
+  "READY_TO_POST",
+  "POSTING",
   "ACTIVE",
   "DEACTIVATED",
 ])
@@ -43,3 +52,4 @@ export type ProductListingUpdateInput = z.infer<
   typeof productListingUpdateSchema
 >
 export type ListingStatus = z.infer<typeof listingStatusSchema>
+export type ListingStatusRead = z.infer<typeof listingStatusReadSchema>

@@ -36,11 +36,21 @@ function firstFieldError(error: {
 function formToListingBody(formData: FormData) {
   const externalUrlRaw = String(formData.get("externalUrl") ?? "").trim()
   const statusRaw = String(formData.get("listingStatus") ?? "").trim()
+  const keepUrlIfEmpty = String(formData.get("keepUrlIfEmpty") ?? "") === "1"
 
-  return {
-    externalUrl: externalUrlRaw === "" ? null : externalUrlRaw,
-    ...(statusRaw ? { status: statusRaw } : {}),
+  const body: {
+    externalUrl?: string | null
+    status?: string
+  } = {}
+
+  if (externalUrlRaw !== "") {
+    body.externalUrl = externalUrlRaw
+  } else if (!keepUrlIfEmpty) {
+    body.externalUrl = null
   }
+
+  if (statusRaw) body.status = statusRaw
+  return body
 }
 
 export async function updateProductListingAction(
@@ -48,7 +58,11 @@ export async function updateProductListingAction(
   _prev: ListingActionState,
   formData: FormData,
 ): Promise<ListingActionState> {
-  const parsed = productListingApiPutBodySchema.safeParse(formToListingBody(formData))
+  const body = formToListingBody(formData)
+  if (Object.keys(body).length === 0) {
+    return { success: true }
+  }
+  const parsed = productListingApiPutBodySchema.safeParse(body)
   if (!parsed.success) {
     return {
       error: "Revisa los campos marcados.",

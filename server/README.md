@@ -31,6 +31,8 @@ npm run server:smoke
 
 `POST /api/v1/products/:id/publish` — browser publish consumer-goods через CDP. Потрібна session `ACTIVE`. За замовчуванням dry-run (`WALLAPOP_PUBLISH_DRY_RUN` ≠ `false`) — стоп перед Publicar, без UI. Модулі: `wallapop-cdp` / `wallapop-browser` (login) / `wallapop-publish`. Деталі: [API.md → Publish](./API.md#publish-phase-1).
 
+Черга — це `product_listings` (без Redis). За замовчуванням **вимкнено**. Live: у `server/.env` обидва `WALLAPOP_AUTOPOST=true` (саме рядок `true`) **і** `WALLAPOP_PUBLISH_DRY_RUN=false`; опційно `WALLAPOP_AUTOPOST_INTERVAL_MS` (default **15 хв** + ±20% jitter). Якщо dry-run не вимкнено — тіки йдуть, але **без Chrome** (idle до live). Цикл (live): session `ACTIVE` + Chrome idle → найстаріший listing default-акаунта (`READY_TO_POST`, `externalUrl` null, продукт `ACTIVE` з ≥1 фото, `createdAt` asc) → той самий `runProductPublish`, що HTTP. `POSTING` / `ACTIVE` / `DEACTIVATED` не бере. Старт: `runStartupHooks()` у [`startup.ts`](./src/startup.ts) (після `listen` з `index.ts`).
+
 
 Postman: імпорт `server/postman/Wallapop-CRM.postman_collection.json` + `server/postman/local.postman_environment.json`, environment **Wallapop CRM · local**, папка **Smoke** → Runner. Cookie `crm_session` після Login кладеться в jar сама.
 

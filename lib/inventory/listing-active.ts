@@ -4,6 +4,7 @@ export function computeListingActive(
   listing: InventoryListing | null | undefined,
   listingActive?: boolean,
 ): boolean {
+  if (listing?.status === "POSTING") return false
   if (listingActive === true) return true
   if (listingActive === false) return false
   return listing?.status === "ACTIVE"

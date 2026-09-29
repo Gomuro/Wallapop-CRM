@@ -115,7 +115,14 @@ export default async function ProductDetailPage({
           {process.env.NODE_ENV === "development" ? (
             <TestPublishButton
               productId={product.id}
-              disabled={!product.images.length}
+              disabled={
+                !product.images.length || product.listing?.status === "POSTING"
+              }
+              disabledHint={
+                product.listing?.status === "POSTING"
+                  ? "Se está publicando en Wallapop. No hace falta volver a publicarlo."
+                  : undefined
+              }
             />
           ) : null}
           <Separator />

@@ -6,10 +6,12 @@
 import type { Page } from "playwright"
 
 import {
+  closeWallapopUploadTab,
   dismissWallapopConsent,
   ensureWallapopPage,
   firstVisible,
   navigateViaAssign,
+  quitWallapopChrome,
   runWithBrowserBusy,
 } from "./wallapop-cdp"
 import { log } from "./log"
@@ -111,6 +113,52 @@ export class WallapopPublishError extends Error {
     super(message)
     this.name = "WallapopPublishError"
     this.step = step
+  }
+}
+
+const PUBLICAR_SETTLE_MS = 5_000
+
+export type PageUrlReader = {
+  url: () => string
+  waitForTimeout: (ms: number) => Promise<void>
+}
+
+export function listingUrlFromPageUrl(url: string): string | null {
+  return url.includes("wallapop.com") ? url : null
+}
+
+/**
+ * Playwright tore down the tab/context after (or during) in-page click.
+ * Treat as posted: the DOM click may already have run; reverting would duplicate.
+ */
+export function isPublicarContextDestroyedError(error: unknown): boolean {
+  const message = (
+    error instanceof Error ? error.message : String(error)
+  ).toLowerCase()
+  return (
+    message.includes("target closed") ||
+    message.includes("execution context was destroyed") ||
+    message.includes("page closed") ||
+    (message.includes("protocol error") && message.includes("closed"))
+  )
+}
+
+/**
+ * After a successful Publicar click: wait/url are best-effort.
+ * Tab teardown (Target closed) still counts as posted — never throws.
+ */
+export async function readUrlAfterPublicarClick(
+  page: PageUrlReader,
+  settleMs = PUBLICAR_SETTLE_MS,
+): Promise<string | null> {
+  try {
+    await page.waitForTimeout(settleMs)
+    return listingUrlFromPageUrl(page.url())
+  } catch (error) {
+    log("warn", "wallapop_publish_url_after_publicar_failed", {
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return null
   }
 }
 
@@ -869,7 +917,8 @@ async function finalButtonVisible(page: Page): Promise<boolean> {
 async function clickFinalPublish(page: Page): Promise<boolean> {
   const finalPattern = JSON.stringify(FINAL_RE.source)
   const finalFlags = JSON.stringify(FINAL_RE.flags)
-  const clicked = await page.evaluate(`(() => {
+  try {
+    const clicked = await page.evaluate(`(() => {
     const re = new RegExp(${finalPattern}, ${finalFlags});
     const visible = (el) => {
       const s = window.getComputedStyle(el);
@@ -899,8 +948,17 @@ async function clickFinalPublish(page: Page): Promise<boolean> {
     }
     return false;
   })()`)
-  if (clicked) await page.waitForTimeout(5_000)
-  return Boolean(clicked)
+    return Boolean(clicked)
+  } catch (error) {
+    if (isPublicarContextDestroyedError(error)) {
+      log("warn", "wallapop_publish_publicar_evaluate_torn_down", {
+        message: error instanceof Error ? error.message : String(error),
+      })
+      // DOM click may have already run; Node never got `true`. Prefer stuck POSTING over a duplicate.
+      return true
+    }
+    throw error
+  }
 }
 
 export async function publishWallapopInBrowser(
@@ -913,14 +971,31 @@ export async function publishWallapopInBrowser(
     )
   }
 
-  return runWithBrowserBusy("publish", () => publishWallapopInBrowserInner(input))
+  try {
+    return await runWithBrowserBusy("publish", () =>
+      publishWallapopInBrowserInner(input),
+    )
+  } finally {
+    if (input.dryRun) {
+      await closeWallapopUploadTab()
+    } else {
+      await quitWallapopChrome()
+    }
+  }
 }
 
 async function publishWallapopInBrowserInner(
   input: PublishWallapopInput,
 ): Promise<PublishWallapopResult> {
-  let step: PublishStep = "attach"
   const page = await ensureWallapopPage()
+  return publishWallapopInBrowserAfterAttach(input, page)
+}
+
+async function publishWallapopInBrowserAfterAttach(
+  input: PublishWallapopInput,
+  page: Page,
+): Promise<PublishWallapopResult> {
+  let step: PublishStep = "attach"
   await dismissWallapopConsent(page)
   await dismissSearchOverlay(page)
 
@@ -1147,7 +1222,7 @@ async function publishWallapopInBrowserInner(
     )
   }
 
-  const externalUrl = page.url().includes("wallapop.com") ? page.url() : null
+  const externalUrl = await readUrlAfterPublicarClick(page)
   return {
     ok: true,
     dryRun: false,

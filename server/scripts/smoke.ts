@@ -408,10 +408,14 @@ async function main() {
   const soldListItem = (
     (listSold.body as Json).products as Array<{
       listingActive?: boolean
+      listingStatus?: string | null
     }>
   )?.[0]
   if (soldListItem?.listingActive !== false) {
     fail("GET /api/v1/products (after sold)", "expected listingActive false")
+  }
+  if (soldListItem?.listingStatus !== "DEACTIVATED") {
+    fail("GET /api/v1/products (after sold)", "expected listingStatus DEACTIVATED")
   }
   ok("GET /api/v1/products (after sold)  listingActive false")
 

@@ -137,6 +137,25 @@ export async function putProductListing(req: Request, res: Response) {
 
   if (!(await assertProductExists(prisma, productId, res))) return
 
+  const existing = await prisma.productListing.findUnique({
+    where: {
+      productId_accountId: { productId, accountId },
+    },
+    select: { status: true },
+  })
+
+  if (existing?.status === "POSTING" && body.status !== undefined) {
+    if (body.status !== "ACTIVE" && body.status !== "DEACTIVATED") {
+      sendError(
+        res,
+        409,
+        "PUBLISH_IN_PROGRESS",
+        "Listing is being published. Mark as ACTIVE to recover, or omit status to update the URL only.",
+      )
+      return
+    }
+  }
+
   const listing = await prisma.productListing.upsert({
     where: {
       productId_accountId: { productId, accountId },

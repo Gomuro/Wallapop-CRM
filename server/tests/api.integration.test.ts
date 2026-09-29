@@ -3,6 +3,15 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import request from "supertest"
 
 import { createApp } from "../src/app"
+import { getPrisma } from "../src/lib/db"
+import { findDefaultAccountId } from "../src/lib/default-account"
+import {
+  activatePostingListing,
+  claimListingForPublish,
+  listingBlocksDryRun,
+  revertPublishClaim,
+  shouldRevertPublishClaim,
+} from "../src/routes/product-publish"
 import {
   errorCode,
   findLeafCategoryId,
@@ -123,8 +132,15 @@ describe("API v1 integration (Express + Postgres)", () => {
         `/api/v1/products?page=1&pageSize=50&q=${encodeURIComponent(sku)}`,
       )
       expect(res.status).toBe(200)
-      const items = res.body.products as Array<{ sku?: string }>
-      expect(items.some((p) => p.sku === sku)).toBe(true)
+      const items = res.body.products as Array<{
+        sku?: string
+        listingStatus?: string | null
+        listingActive?: boolean
+      }>
+      const item = items.find((p) => p.sku === sku)
+      expect(item).toBeTruthy()
+      expect(item?.listingStatus).toBe("READY_TO_POST")
+      expect(item?.listingActive).toBe(false)
     })
   })
 
@@ -134,6 +150,14 @@ describe("API v1 integration (Express + Postgres)", () => {
       expect(res.status).toBe(200)
       expect(res.body.listing?.status).toBe("READY_TO_POST")
       expect(res.body.listing?.externalUrl).toBeNull()
+    })
+
+    it("PUT listing rejects internal POSTING", async () => {
+      const res = await agent
+        .put(`/api/v1/products/${productId}/listing`)
+        .send({ status: "POSTING" })
+      expect(res.status).toBe(400)
+      expect(errorCode(res.body)).toBe("VALIDATION_ERROR")
     })
 
     it("PUT listing externalUrl and ACTIVE", async () => {
@@ -149,6 +173,26 @@ describe("API v1 integration (Express + Postgres)", () => {
       expect(get.status).toBe(200)
       expect(get.body.listing?.status).toBe("ACTIVE")
       expect(get.body.listing?.externalUrl).toBe(wallapopUrl)
+
+      const list = await agent.get(
+        `/api/v1/products?page=1&pageSize=50&q=${encodeURIComponent(sku)}`,
+      )
+      expect(list.status).toBe(200)
+      const item = (list.body.products as Array<{
+        sku?: string
+        listingStatus?: string | null
+        listingActive?: boolean
+      }>).find((p) => p.sku === sku)
+      expect(item?.listingStatus).toBe("ACTIVE")
+      expect(item?.listingActive).toBe(true)
+    })
+
+    it("dry-run publish refuses already ACTIVE listing", async () => {
+      const res = await agent
+        .post(`/api/v1/products/${productId}/publish`)
+        .send({ dryRun: true })
+      expect(res.status).toBe(409)
+      expect(errorCode(res.body)).toBe("ALREADY_POSTED")
     })
   })
 
@@ -202,7 +246,11 @@ describe("API v1 integration (Express + Postgres)", () => {
         `/api/v1/products?page=1&pageSize=50&q=${encodeURIComponent(sku)}`,
       )
       expect(res.status).toBe(200)
-      const item = res.body.products?.[0] as { listingActive?: boolean }
+      const item = res.body.products?.[0] as {
+        listingActive?: boolean
+        listingStatus?: string | null
+      }
+      expect(item?.listingStatus).toBe("DEACTIVATED")
       expect(item?.listingActive).toBe(false)
     })
 
@@ -210,6 +258,307 @@ describe("API v1 integration (Express + Postgres)", () => {
       const res = await agent.post(`/api/v1/products/${productId}/sold`)
       expect(res.status).toBe(409)
       expect(errorCode(res.body)).toBe("ALREADY_SOLD")
+    })
+
+    it("publish refuses SOLD product", async () => {
+      const res = await agent
+        .post(`/api/v1/products/${productId}/publish`)
+        .send({ dryRun: true })
+      expect(res.status).toBe(409)
+      expect(errorCode(res.body)).toBe("NOT_PUBLISHABLE")
+    })
+  })
+
+  describe("publish claim (prisma)", () => {
+    let claimProductId: string
+
+    beforeAll(async () => {
+      const categoryId = await findLeafCategoryId(agent)
+      const res = await agent.post("/api/v1/products").send({
+        sku: `API-CLAIM-${Date.now()}`,
+        title: "API claim product",
+        description: "Vitest publish claim",
+        price: 4.5,
+        currency: "EUR",
+        categoryId,
+        condition: "GOOD",
+      })
+      expect(res.status).toBe(201)
+      claimProductId = res.body.product?.id as string
+      expect(claimProductId).toBeTruthy()
+    })
+
+    it("listingBlocksDryRun allows POSTING but not ACTIVE or URL", () => {
+      expect(
+        listingBlocksDryRun({ status: "POSTING", externalUrl: null }),
+      ).toBe(false)
+      expect(
+        listingBlocksDryRun({ status: "READY_TO_POST", externalUrl: null }),
+      ).toBe(false)
+      expect(
+        listingBlocksDryRun({ status: "ACTIVE", externalUrl: null }),
+      ).toBe(true)
+      expect(
+        listingBlocksDryRun({
+          status: "READY_TO_POST",
+          externalUrl: "https://es.wallapop.com/item/x",
+        }),
+      ).toBe(true)
+    })
+
+    it("claims READY_TO_POST → POSTING and refuses a second claim", async () => {
+      const prisma = getPrisma()
+      expect(prisma).toBeTruthy()
+      const accountId = await findDefaultAccountId(prisma!)
+      expect(accountId).toBeTruthy()
+
+      const claimed = await claimListingForPublish(
+        prisma!,
+        claimProductId,
+        accountId!,
+      )
+      expect(claimed).toBe(true)
+
+      const get = await agent.get(`/api/v1/products/${claimProductId}/listing`)
+      expect(get.status).toBe(200)
+      expect(get.body.listing?.status).toBe("POSTING")
+
+      const again = await claimListingForPublish(
+        prisma!,
+        claimProductId,
+        accountId!,
+      )
+      expect(again).toBe(false)
+    })
+
+    it("reverts POSTING → READY_TO_POST and does not revert ACTIVE", async () => {
+      const prisma = getPrisma()
+      expect(prisma).toBeTruthy()
+      const accountId = await findDefaultAccountId(prisma!)
+      expect(accountId).toBeTruthy()
+
+      await revertPublishClaim(prisma!, claimProductId, accountId!)
+      const afterRevert = await agent.get(
+        `/api/v1/products/${claimProductId}/listing`,
+      )
+      expect(afterRevert.body.listing?.status).toBe("READY_TO_POST")
+
+      const claimed = await claimListingForPublish(
+        prisma!,
+        claimProductId,
+        accountId!,
+      )
+      expect(claimed).toBe(true)
+
+      await prisma!.productListing.updateMany({
+        where: { productId: claimProductId, accountId: accountId! },
+        data: { status: "ACTIVE" },
+      })
+      await revertPublishClaim(prisma!, claimProductId, accountId!)
+      const stillActive = await agent.get(
+        `/api/v1/products/${claimProductId}/listing`,
+      )
+      expect(stillActive.body.listing?.status).toBe("ACTIVE")
+    })
+
+    it("live-path HTTP refuses already ACTIVE without opening Chrome", async () => {
+      const prev = process.env.WALLAPOP_PUBLISH_DRY_RUN
+      process.env.WALLAPOP_PUBLISH_DRY_RUN = "false"
+      try {
+        const res = await agent.post(
+          `/api/v1/products/${claimProductId}/publish`,
+        )
+        expect(res.status).toBe(409)
+        expect(errorCode(res.body)).toBe("ALREADY_POSTED")
+      } finally {
+        if (prev === undefined) delete process.env.WALLAPOP_PUBLISH_DRY_RUN
+        else process.env.WALLAPOP_PUBLISH_DRY_RUN = prev
+      }
+    })
+
+    it("shouldRevertPublishClaim only when claimed and Publicar was not clicked", () => {
+      expect(shouldRevertPublishClaim(false, false)).toBe(false)
+      expect(shouldRevertPublishClaim(true, false)).toBe(true)
+      expect(shouldRevertPublishClaim(true, true)).toBe(false)
+      expect(shouldRevertPublishClaim(false, true)).toBe(false)
+      expect(shouldRevertPublishClaim(true, false, true)).toBe(false)
+      expect(shouldRevertPublishClaim(true, true, true)).toBe(false)
+      expect(shouldRevertPublishClaim(false, false, true)).toBe(false)
+    })
+
+    it("activatePostingListing writes ACTIVE only from POSTING", async () => {
+      const prisma = getPrisma()
+      expect(prisma).toBeTruthy()
+      const accountId = await findDefaultAccountId(prisma!)
+      expect(accountId).toBeTruthy()
+
+      const categoryId = await findLeafCategoryId(agent)
+      const created = await agent.post("/api/v1/products").send({
+        sku: `API-ACTIVATE-${Date.now()}`,
+        title: "API activate posting",
+        description: "Vitest activatePostingListing",
+        price: 5.5,
+        currency: "EUR",
+        categoryId,
+        condition: "GOOD",
+      })
+      expect(created.status).toBe(201)
+      const id = created.body.product?.id as string
+      expect(id).toBeTruthy()
+
+      try {
+        const claimed = await claimListingForPublish(prisma!, id, accountId!)
+        expect(claimed).toBe(true)
+
+        const activated = await activatePostingListing(prisma!, id, accountId!, {
+          externalUrl: "https://es.wallapop.com/item/test-activate",
+          shippingEnabled: true,
+        })
+        expect(activated?.status).toBe("ACTIVE")
+        expect(activated?.externalUrl).toBe(
+          "https://es.wallapop.com/item/test-activate",
+        )
+
+        const get = await agent.get(`/api/v1/products/${id}/listing`)
+        expect(get.body.listing?.status).toBe("ACTIVE")
+        expect(get.body.listing?.externalUrl).toBe(
+          "https://es.wallapop.com/item/test-activate",
+        )
+      } finally {
+        await agent.delete(`/api/v1/products/${id}`)
+      }
+    })
+
+    it("activatePostingListing does not clobber DEACTIVATED", async () => {
+      const prisma = getPrisma()
+      expect(prisma).toBeTruthy()
+      const accountId = await findDefaultAccountId(prisma!)
+      expect(accountId).toBeTruthy()
+
+      const categoryId = await findLeafCategoryId(agent)
+      const created = await agent.post("/api/v1/products").send({
+        sku: `API-DEACT-${Date.now()}`,
+        title: "API deactivate posting",
+        description: "Vitest no clobber DEACTIVATED",
+        price: 6.5,
+        currency: "EUR",
+        categoryId,
+        condition: "GOOD",
+      })
+      expect(created.status).toBe(201)
+      const id = created.body.product?.id as string
+      expect(id).toBeTruthy()
+
+      try {
+        const claimed = await claimListingForPublish(prisma!, id, accountId!)
+        expect(claimed).toBe(true)
+
+        await prisma!.productListing.updateMany({
+          where: { productId: id, accountId: accountId! },
+          data: { status: "DEACTIVATED" },
+        })
+
+        const activated = await activatePostingListing(prisma!, id, accountId!, {
+          externalUrl: "https://es.wallapop.com/item/should-not-write",
+          shippingEnabled: true,
+        })
+        expect(activated).toBeNull()
+
+        const get = await agent.get(`/api/v1/products/${id}/listing`)
+        expect(get.body.listing?.status).toBe("DEACTIVATED")
+        expect(get.body.listing?.externalUrl).toBeNull()
+      } finally {
+        await agent.delete(`/api/v1/products/${id}`)
+      }
+    })
+
+    afterAll(async () => {
+      if (!claimProductId || !agent) return
+      await agent.delete(`/api/v1/products/${claimProductId}`)
+    })
+  })
+
+  describe("PUT listing POSTING protection", () => {
+    const createdIds: string[] = []
+
+    async function createAndClaim() {
+      const categoryId = await findLeafCategoryId(agent)
+      const sku = `API-PUT-POSTING-${Date.now()}-${createdIds.length}`
+      const created = await agent.post("/api/v1/products").send({
+        sku,
+        title: "API PUT posting protection",
+        description: "Vitest PUT while POSTING",
+        price: 7.5,
+        currency: "EUR",
+        categoryId,
+        condition: "GOOD",
+      })
+      expect(created.status).toBe(201)
+      const id = created.body.product?.id as string
+      expect(id).toBeTruthy()
+      createdIds.push(id)
+
+      const prisma = getPrisma()
+      expect(prisma).toBeTruthy()
+      const accountId = await findDefaultAccountId(prisma!)
+      expect(accountId).toBeTruthy()
+      const claimed = await claimListingForPublish(prisma!, id, accountId!)
+      expect(claimed).toBe(true)
+      return { id, sku }
+    }
+
+    it("list shows POSTING and listingActive false; PUT READY_TO_POST 409; URL-only and ACTIVE recovery ok", async () => {
+      const { id, sku } = await createAndClaim()
+
+      const list = await agent.get(
+        `/api/v1/products?page=1&pageSize=50&q=${encodeURIComponent(sku)}`,
+      )
+      expect(list.status).toBe(200)
+      const item = (list.body.products as Array<{
+        sku?: string
+        listingStatus?: string | null
+        listingActive?: boolean
+      }>).find((p) => p.sku === sku)
+      expect(item?.listingStatus).toBe("POSTING")
+      expect(item?.listingActive).toBe(false)
+
+      const rejected = await agent
+        .put(`/api/v1/products/${id}/listing`)
+        .send({ status: "READY_TO_POST" })
+      expect(rejected.status).toBe(409)
+      expect(errorCode(rejected.body)).toBe("PUBLISH_IN_PROGRESS")
+      const stillPosting = await agent.get(`/api/v1/products/${id}/listing`)
+      expect(stillPosting.body.listing?.status).toBe("POSTING")
+
+      const url = "https://es.wallapop.com/item/posting-url-only"
+      const urlOnly = await agent
+        .put(`/api/v1/products/${id}/listing`)
+        .send({ externalUrl: url })
+      expect(urlOnly.status).toBe(200)
+      expect(urlOnly.body.listing?.status).toBe("POSTING")
+      expect(urlOnly.body.listing?.externalUrl).toBe(url)
+
+      const recovered = await agent
+        .put(`/api/v1/products/${id}/listing`)
+        .send({ status: "ACTIVE" })
+      expect(recovered.status).toBe(200)
+      expect(recovered.body.listing?.status).toBe("ACTIVE")
+    })
+
+    it("PUT DEACTIVATED while POSTING is allowed", async () => {
+      const { id } = await createAndClaim()
+      const res = await agent
+        .put(`/api/v1/products/${id}/listing`)
+        .send({ status: "DEACTIVATED" })
+      expect(res.status).toBe(200)
+      expect(res.body.listing?.status).toBe("DEACTIVATED")
+    })
+
+    afterAll(async () => {
+      if (!agent) return
+      for (const id of createdIds) {
+        await agent.delete(`/api/v1/products/${id}`)
+      }
     })
   })
 

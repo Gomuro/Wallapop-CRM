@@ -1,4 +1,5 @@
-import type { ListingStatus, ProductStatus } from "@/lib/validations"
+import type { ListingStatusRead } from "@/lib/inventory/types"
+import type { ProductStatus } from "@/lib/validations"
 
 export function formatEuro(amount: number) {
   return new Intl.NumberFormat("es-ES", {
@@ -23,7 +24,7 @@ export function statusLabel(status: ProductStatus) {
   }
 }
 
-export function listingStatusLabel(status: ListingStatus) {
+export function listingStatusLabel(status: ListingStatusRead) {
   switch (status) {
     case "ACTIVE":
       return "En venta"
@@ -31,6 +32,8 @@ export function listingStatusLabel(status: ListingStatus) {
       return "Desactivado"
     case "READY_TO_POST":
       return "Listo para publicar"
+    case "POSTING":
+      return "Publicando…"
   }
 }
 
@@ -65,9 +68,10 @@ export function conditionLabel(value: string) {
 }
 
 export function isListingActive(
-  listing: { status: ListingStatus } | null | undefined,
+  listing: { status: ListingStatusRead } | null | undefined,
   listingActive?: boolean,
 ) {
+  if (listing?.status === "POSTING") return false
   if (listingActive === true) return true
   if (listingActive === false) return false
   return listing?.status === "ACTIVE"
@@ -75,10 +79,11 @@ export function isListingActive(
 
 /** Short label for catalog card badge (single default listing). */
 export function listingIndicatorShort(
-  listing: { status: ListingStatus } | null | undefined,
+  listing: { status: ListingStatusRead } | null | undefined,
   listingActive?: boolean,
 ): string | null {
   if (!listing) return null
+  if (listing.status === "POSTING") return "Publicando…"
   if (isListingActive(listing, listingActive)) return "En Wallapop"
   if (listing.status === "READY_TO_POST") return "Listo para publicar"
   if (listing.status === "DEACTIVATED") return "Desactivado"
@@ -86,9 +91,10 @@ export function listingIndicatorShort(
 }
 
 export function listingBadgeVariant(
-  listing: { status: ListingStatus } | null | undefined,
+  listing: { status: ListingStatusRead } | null | undefined,
   listingActive?: boolean,
 ): "default" | "outline" | "secondary" {
+  if (listing?.status === "POSTING") return "outline"
   if (isListingActive(listing, listingActive)) return "default"
   if (listing?.status === "READY_TO_POST") return "secondary"
   return "outline"
@@ -100,8 +106,8 @@ export function apiErrorMessage(code: string, fallback: string) {
       return fallback
     case "NOT_FOUND":
       return fallback
-    case "UNAUTHORIZED":
-      return "Inicia sesión para continuar."
+    case "PUBLISH_IN_PROGRESS":
+      return "Se está publicando. Márcalo como publicado o espera a que termine."
     default:
       return fallback
   }

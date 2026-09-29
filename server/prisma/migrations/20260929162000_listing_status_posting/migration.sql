@@ -1,0 +1,2 @@
+-- AlterEnum
+ALTER TYPE "ListingStatus" ADD VALUE 'POSTING' AFTER 'READY_TO_POST';

@@ -21,6 +21,7 @@ enum AccountStatus {
 
 enum ListingStatus {
   READY_TO_POST
+  POSTING
   ACTIVE
   DEACTIVATED
 }

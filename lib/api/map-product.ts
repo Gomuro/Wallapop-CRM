@@ -10,19 +10,23 @@ import {
   conditionFromFormValue,
   conditionLabel,
 } from "@/lib/inventory/conditions"
-import type { InventoryListing, InventoryProduct } from "@/lib/inventory/types"
 import type {
-  ListingStatus,
+  InventoryListing,
+  InventoryProduct,
+  ListingStatusRead,
+} from "@/lib/inventory/types"
+import type {
   ProductCondition,
   ProductStatus,
   ShippingPackageSize,
 } from "@/lib/validations"
 
 const PRODUCT_STATUSES = new Set<ProductStatus>(["ACTIVE", "SOLD", "INACTIVE"])
-const LISTING_STATUSES = new Set<ListingStatus>([
+const LISTING_STATUSES = new Set<ListingStatusRead>([
   "ACTIVE",
   "DEACTIVATED",
   "READY_TO_POST",
+  "POSTING",
 ])
 
 function asString(value: unknown, fallback = ""): string {
@@ -50,9 +54,9 @@ function asStatus(value: unknown): ProductStatus {
     : "ACTIVE"
 }
 
-function asListingStatus(value: unknown): ListingStatus {
-  return typeof value === "string" && LISTING_STATUSES.has(value as ListingStatus)
-    ? (value as ListingStatus)
+function asListingStatus(value: unknown): ListingStatusRead {
+  return typeof value === "string" && LISTING_STATUSES.has(value as ListingStatusRead)
+    ? (value as ListingStatusRead)
     : "READY_TO_POST"
 }
 
@@ -111,6 +115,17 @@ export function mapListItemToInventory(row: ApiProductListItem): InventoryProduc
       ? resolveMediaUrl(row.coverUrl)
       : ""
 
+  const listing =
+    mapApiListing(row.listing, "") ??
+    (row.listingStatus != null
+      ? {
+          id: "",
+          accountId: "",
+          status: asListingStatus(row.listingStatus),
+          externalUrl: null,
+        }
+      : null)
+
   return {
     id: asString(row.id),
     sku: asString(row.sku),
@@ -132,8 +147,13 @@ export function mapListItemToInventory(row: ApiProductListItem): InventoryProduc
     externalLinks: [],
     createdAt: asString(row.updatedAt),
     updatedAt: asString(row.updatedAt),
-    listing: null,
-    listingActive: Boolean(row.listingActive),
+    listing,
+    listingActive:
+      listing?.status === "POSTING"
+        ? false
+        : listing
+          ? listing.status === "ACTIVE"
+          : Boolean(row.listingActive),
   }
 }
 

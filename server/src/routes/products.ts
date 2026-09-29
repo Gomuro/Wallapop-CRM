@@ -26,7 +26,12 @@ const productListInclude = {
     take: 1,
     select: { url: true },
   },
-  listings: { select: { status: true } },
+  listings: {
+    where: { account: { isDefault: true } },
+    orderBy: { createdAt: "asc" as const },
+    take: 1,
+    select: { status: true },
+  },
 }
 
 export const productCardInclude = {
@@ -185,6 +190,7 @@ function toProductListItemJson(row: {
   images: Array<{ url: string }>
   listings: Array<{ status: string }>
 }) {
+  const listingStatus = row.listings[0]?.status ?? null
   return {
     id: row.id,
     sku: row.sku,
@@ -195,9 +201,8 @@ function toProductListItemJson(row: {
     categoryId: row.categoryId,
     coverUrl: row.images[0]?.url ?? null,
     updatedAt: row.updatedAt.toISOString(),
-    listingActive: row.listings.some(
-      (listing) => listing.status !== "DEACTIVATED",
-    ),
+    listingStatus,
+    listingActive: listingStatus === "ACTIVE",
   }
 }
 

@@ -1,4 +1,5 @@
-import type { ListingStatus, ProductCondition, ProductStatus } from "@/lib/validations"
+import type { ListingStatusRead } from "@/lib/inventory/types"
+import type { ProductCondition, ProductStatus } from "@/lib/validations"
 
 export type ApiCategory = {
   id: string
@@ -23,7 +24,7 @@ export type ApiProductImage = {
 
 export type ApiListing = {
   id: string
-  status: ListingStatus
+  status: ListingStatusRead
   externalUrl: string | null
   externalItemId: string | null
   shippingEnabled: boolean
@@ -67,6 +68,9 @@ export type ApiProductListItem = {
   coverUrl: string | null
   updatedAt: string
   listingActive: boolean
+  /** Default-account listing status, or null when none exists. */
+  listingStatus: ListingStatusRead | null
+  listing?: ApiListing | null
 }
 
 export type ApiProductListResponse = {
