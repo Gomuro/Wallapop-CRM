@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
   AUTOPOST_PICK_ORDER_BY,
+  AUTOPOST_JITTER_FRACTION,
   autopostDelayWithJitter,
   autopostEligibleListingWhere,
   DEFAULT_AUTOPOST_INTERVAL_MS,
@@ -9,9 +10,16 @@ import {
   isWallapopAutopostEnabled,
   isWallapopAutopostLoopScheduling,
   readAutopostIntervalMs,
+  resolveAutopostInterval,
+  resetWallapopAutopostLoopForTests,
   runAutopostTick,
   startWallapopAutopostLoop,
 } from "../src/lib/wallapop-autopost"
+import {
+  AUTOPOST_INTERVAL_RANGE_MESSAGE,
+  autopostIntervalPatchSchema,
+  msToAutopostIntervalInput,
+} from "../../lib/validations/account"
 
 describe("isWallapopAutopostEnabled", () => {
   const prev = process.env.WALLAPOP_AUTOPOST
@@ -60,9 +68,106 @@ describe("readAutopostIntervalMs", () => {
   })
 })
 
+describe("resolveAutopostInterval", () => {
+  const prev = process.env.WALLAPOP_AUTOPOST_INTERVAL_MS
+
+  afterEach(() => {
+    if (prev === undefined) delete process.env.WALLAPOP_AUTOPOST_INTERVAL_MS
+    else process.env.WALLAPOP_AUTOPOST_INTERVAL_MS = prev
+  })
+
+  function mockPrisma(stored: number | null) {
+    return {
+      account: {
+        findFirst: async () => ({ autopostIntervalMs: stored }),
+      },
+    } as never
+  }
+
+  it("prefers a stored account interval over env", async () => {
+    process.env.WALLAPOP_AUTOPOST_INTERVAL_MS = "120000"
+    const result = await resolveAutopostInterval(mockPrisma(300000))
+    expect(result).toEqual({
+      effectiveIntervalMs: 300000,
+      source: "account",
+      storedIntervalMs: 300000,
+    })
+  })
+
+  it("uses env when the account column is null", async () => {
+    process.env.WALLAPOP_AUTOPOST_INTERVAL_MS = "120000"
+    const result = await resolveAutopostInterval(mockPrisma(null))
+    expect(result).toEqual({
+      effectiveIntervalMs: 120000,
+      source: "env",
+      storedIntervalMs: null,
+    })
+  })
+
+  it("falls back to 15 minutes when account and env are empty", async () => {
+    delete process.env.WALLAPOP_AUTOPOST_INTERVAL_MS
+    const result = await resolveAutopostInterval(mockPrisma(null))
+    expect(result).toEqual({
+      effectiveIntervalMs: DEFAULT_AUTOPOST_INTERVAL_MS,
+      source: "default",
+      storedIntervalMs: null,
+    })
+  })
+
+  it("ignores non-positive stored values", async () => {
+    delete process.env.WALLAPOP_AUTOPOST_INTERVAL_MS
+    const result = await resolveAutopostInterval(mockPrisma(0))
+    expect(result.source).toBe("default")
+  })
+})
+
+describe("autopost interval input", () => {
+  it("splits milliseconds into the coarsest even unit", () => {
+    expect(msToAutopostIntervalInput(900000)).toEqual({
+      value: 15,
+      unit: "minutes",
+    })
+    expect(msToAutopostIntervalInput(3600000)).toEqual({
+      value: 1,
+      unit: "hours",
+    })
+  })
+
+  it("rejects PATCH values outside 1 minute … 7 days", () => {
+    expect(
+      autopostIntervalPatchSchema.safeParse({
+        value: 30,
+        unit: "seconds",
+      }).success,
+    ).toBe(false)
+    expect(
+      autopostIntervalPatchSchema.safeParse({
+        value: 8,
+        unit: "days",
+      }).success,
+    ).toBe(false)
+
+    const tooShort = autopostIntervalPatchSchema.safeParse({
+      value: 30,
+      unit: "seconds",
+    })
+    expect(tooShort.success).toBe(false)
+    if (!tooShort.success) {
+      expect(tooShort.error.issues[0]?.message).toBe(
+        AUTOPOST_INTERVAL_RANGE_MESSAGE,
+      )
+    }
+
+    expect(
+      autopostIntervalPatchSchema.parse({ value: 15, unit: "minutes" }),
+    ).toEqual({ value: 15, unit: "minutes" })
+  })
+})
+
 describe("autopostDelayWithJitter", () => {
   it("spreads ±20% around the base interval", () => {
     const base = 1000
+    expect(AUTOPOST_JITTER_FRACTION).toBe(0.2)
     expect(autopostDelayWithJitter(base, () => 0)).toBe(800)
     expect(autopostDelayWithJitter(base, () => 0.5)).toBe(1000)
     expect(autopostDelayWithJitter(base, () => 1)).toBe(1200)
@@ -108,17 +213,18 @@ describe("isAutopostLivePublishEnabled", () => {
 })
 
 describe("startWallapopAutopostLoop", () => {
-  const prev = process.env.WALLAPOP_AUTOPOST
-
   afterEach(() => {
-    if (prev === undefined) delete process.env.WALLAPOP_AUTOPOST
-    else process.env.WALLAPOP_AUTOPOST = prev
+    vi.useRealTimers()
+    resetWallapopAutopostLoopForTests()
   })
 
-  it("is a no-op when env is not exactly true (no timers)", () => {
-    process.env.WALLAPOP_AUTOPOST = "false"
+  it("schedules timers even when WALLAPOP_AUTOPOST is not true", async () => {
+    vi.useFakeTimers()
+    delete process.env.WALLAPOP_AUTOPOST
     startWallapopAutopostLoop()
-    expect(isWallapopAutopostLoopScheduling()).toBe(false)
+    await Promise.resolve()
+    expect(isWallapopAutopostLoopScheduling()).toBe(true)
+    vi.clearAllTimers()
   })
 })
 

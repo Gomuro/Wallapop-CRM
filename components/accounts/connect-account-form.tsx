@@ -61,6 +61,7 @@ export function ConnectAccountForm() {
   const [statusLoading, setStatusLoading] = useState(true);
   const [disconnectConfirmOpen, setDisconnectConfirmOpen] = useState(false);
   const [resetMode, setResetMode] = useState<ResetMode>("cancel");
+  const [listingsResetNotice, setListingsResetNotice] = useState(false);
   const connectRequestIdRef = useRef(0);
   const twoFaRequestIdRef = useRef(0);
   const pendingKindRef = useRef<PendingKind>(null);
@@ -159,6 +160,7 @@ export function ConnectAccountForm() {
       });
       if (requestId !== connectRequestIdRef.current) return;
       setSession(next);
+      if (next.listingsReset) setListingsResetNotice(true);
       if (next.requires2FA) {
         setTwoFaOpen(true);
         setTwoFaCode("");
@@ -194,6 +196,7 @@ export function ConnectAccountForm() {
       const next = await submitWallapop2fa(code);
       if (requestId !== twoFaRequestIdRef.current) return;
       setSession(next);
+      if (next.listingsReset) setListingsResetNotice(true);
       if (next.status === "ACTIVE") {
         setTwoFaOpen(false);
         setTwoFaCode("");
@@ -303,6 +306,17 @@ export function ConnectAccountForm() {
           role="alert"
         >
           {error}
+        </p>
+      ) : null}
+
+      {listingsResetNotice ? (
+        <p
+          className="mb-4 rounded-lg border border-destructive/40 bg-destructive/10 px-3 py-3 text-sm font-semibold text-destructive"
+          role="status"
+        >
+          Esta cuenta de Wallapop es distinta a la anterior. Los estados de
+          publicación del CRM se han restablecido a «Listo para publicar» y se
+          han olvidado los enlaces. Los anuncios en Wallapop no se han borrado.
         </p>
       ) : null}
 
@@ -444,6 +458,17 @@ export function ConnectAccountForm() {
             <DialogTitle>{resetConfirmTitle}</DialogTitle>
             <DialogDescription>{resetConfirmDescription}</DialogDescription>
           </DialogHeader>
+          {resetMode === "disconnect" ? (
+            <p
+              className="text-sm font-bold uppercase leading-snug text-destructive"
+              role="note"
+            >
+              Si más tarde inicias sesión con otra cuenta de Wallapop, los
+              estados de publicación de este CRM se resetearán a «Listo para
+              publicar» y se olvidarán los enlaces. Los anuncios en Wallapop no
+              se borran. El mismo email conserva los estados.
+            </p>
+          ) : null}
           <DialogFooter>
             <Button
               type="button"

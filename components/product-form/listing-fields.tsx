@@ -19,7 +19,7 @@ import {
   SelectTrigger,
   SelectValue,
 } from "@/components/ui/select"
-import { listingStatusLabel } from "@/lib/inventory/format"
+import { listingStatusLabel, formatListingPostedAt } from "@/lib/inventory/format"
 import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
 import type { InventoryListing } from "@/lib/inventory/types"
 import type { ListingStatus } from "@/lib/validations"
@@ -106,6 +106,11 @@ export function ListingFields({
           <p className="text-xs text-muted-foreground">
             Un anuncio de Wallapop · se guarda aparte del producto.
           </p>
+          {listing.lastPostedAt ? (
+            <p className="text-xs text-muted-foreground">
+              Publicado {formatListingPostedAt(listing.lastPostedAt)}
+            </p>
+          ) : null}
         </CardHeader>
       <CardContent className="px-3">
         <form action={formAction} noValidate className="space-y-3">

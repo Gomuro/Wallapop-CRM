@@ -422,7 +422,37 @@
           "name": "GET /accounts/default",
           "request": {
             "method": "GET",
+            "description": "Default account + autopost status (effectiveIntervalMs, source, env gates).",
             "url": "{{baseUrl}}/api/v1/accounts/default"
+          }
+        },
+        {
+          "name": "PATCH /accounts/default/autopost",
+          "request": {
+            "method": "PATCH",
+            "description": "Set autopost interval. Body { value, unit: seconds|minutes|hours|days }. 1 min … 7 days.",
+            "header": [{ "key": "Content-Type", "value": "application/json" }],
+            "body": {
+              "mode": "raw",
+              "raw": "{\n  \"value\": 15,\n  \"unit\": \"minutes\"\n}"
+            },
+            "url": "{{baseUrl}}/api/v1/accounts/default/autopost"
+          }
+        },
+        {
+          "name": "POST /accounts/default/autopost/start",
+          "request": {
+            "method": "POST",
+            "description": "Enable queue. Session must be ACTIVE (409 NOT_ACTIVE otherwise).",
+            "url": "{{baseUrl}}/api/v1/accounts/default/autopost/start"
+          }
+        },
+        {
+          "name": "POST /accounts/default/autopost/stop",
+          "request": {
+            "method": "POST",
+            "description": "Disable queue. Current tick may finish.",
+            "url": "{{baseUrl}}/api/v1/accounts/default/autopost/stop"
           }
         }
       ]

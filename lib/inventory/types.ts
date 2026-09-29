@@ -16,6 +16,7 @@ export type InventoryListing = {
   accountName?: string
   externalUrl: string | null
   status: ListingStatusRead
+  lastPostedAt: string | null
 }
 
 export type InventoryProduct = {

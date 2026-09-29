@@ -4,13 +4,15 @@ import {
   uploadProductImages,
   uploadReplaceImage,
 } from "../middleware/upload"
-import { notImplemented } from "../lib/http-error"
 import {
   connectAccount,
   connectAccount2fa,
   disconnectAccount,
   getAccountConnectionStatus,
   getDefaultAccount,
+  patchDefaultAccountAutopost,
+  startDefaultAccountAutopost,
+  stopDefaultAccountAutopost,
 } from "./accounts"
 import {
   getCategory,
@@ -64,6 +66,9 @@ catalog.put("/products/:id/listing", putProductListing)
 catalog.post("/products/:id/publish", publishProduct)
 
 catalog.get("/accounts/default", getDefaultAccount)
+catalog.patch("/accounts/default/autopost", patchDefaultAccountAutopost)
+catalog.post("/accounts/default/autopost/start", startDefaultAccountAutopost)
+catalog.post("/accounts/default/autopost/stop", stopDefaultAccountAutopost)
 catalog.get("/accounts/status", getAccountConnectionStatus)
 catalog.post("/accounts/connect", connectAccount)
 catalog.post("/accounts/connect/2fa", connectAccount2fa)

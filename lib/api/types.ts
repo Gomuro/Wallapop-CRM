@@ -30,6 +30,7 @@ export type ApiListing = {
   shippingEnabled: boolean
   shippingUpToKg: number | null
   accountId: string
+  lastPostedAt: string | null
 }
 
 export type ApiProduct = {
@@ -71,6 +72,7 @@ export type ApiProductListItem = {
   /** Default-account listing status, or null when none exists. */
   listingStatus: ListingStatusRead | null
   listing?: ApiListing | null
+  lastPostedAt: string | null
 }
 
 export type ApiProductListResponse = {
@@ -88,6 +90,23 @@ export type ApiDefaultAccount = {
   isDefault: boolean
   city: string | null
   postalCode: string | null
+  autopostIntervalMs: number | null
   createdAt: string
   updatedAt: string
+}
+
+export type ApiAutopostIntervalSource = "account" | "env" | "default"
+
+export type ApiAutopostStatus = {
+  effectiveIntervalMs: number
+  source: ApiAutopostIntervalSource
+  jitterFraction: number
+  enabled: boolean
+  livePublish: boolean
+  lastPublication: { at: string; title: string } | null
+}
+
+export type ApiDefaultAccountResponse = {
+  account: ApiDefaultAccount
+  autopost: ApiAutopostStatus
 }

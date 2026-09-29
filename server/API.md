@@ -28,8 +28,8 @@
 | `CORS_ORIGIN` | Origin Next (локально `http://localhost:3000`, проді — Vercel). Кілька через кому |
 | `API_ORIGIN` | Опційно для `npm run server:smoke`, якщо не `http://127.0.0.1:$PORT` |
 | `WALLAPOP_PUBLISH_DRY_RUN` | Publish: не `false` = стоп перед Publicar. Див. [Publish](#publish-phase-1) |
-| `WALLAPOP_AUTOPOST` | In-process черга: має бути саме `true`, інакше no-op. Live ще потребує `WALLAPOP_PUBLISH_DRY_RUN=false`. Див. [Autopost queue](#autopost-queue) |
-| `WALLAPOP_AUTOPOST_INTERVAL_MS` | Пауза між тіками (default `900000` = 15 хв) + ±20% jitter |
+| `WALLAPOP_AUTOPOST` | Deprecated / ignored. Черга вмикається з UI `POST /accounts/default/autopost/start` (`accounts.autopost_enabled`) |
+| `WALLAPOP_AUTOPOST_INTERVAL_MS` | Fallback інтервалу, якщо `accounts.autopost_interval_ms` null. Default `900000` = 15 хв + ±20% jitter. UI `PATCH /accounts/default/autopost` перемагає env |
 
 ## Помилки
 
@@ -187,9 +187,12 @@ Body (JSON, camelCase): усі поля опційні, **хоча б одне**
 
 | Метод | Шлях | Нотатки |
 |-------|------|---------|
-| GET | `/api/v1/accounts/default` | Єдиний `isDefault: true`. Повний CRUD акаунтів — етап 2 |
+| GET | `/api/v1/accounts/default` | Єдиний `isDefault: true`. `{ account, autopost }`. `autopost.enabled` — `accounts.autopost_enabled` (кнопка Start/Stop). `lastPublication`: `{ at, title }` або `null`. `livePublish` — env `WALLAPOP_PUBLISH_DRY_RUN===false` |
+| PATCH | `/api/v1/accounts/default/autopost` | Body `{ value: int, unit: "seconds" \| "minutes" \| "hours" \| "days" }`. Конвертує в ms на сервері (1 хв … 7 діб). Пише `accounts.autopost_interval_ms`. Відповідь як GET. 400 `VALIDATION_ERROR`, 404 без default |
+| POST | `/api/v1/accounts/default/autopost/start` | `autopostEnabled: true`. Session має бути `ACTIVE`, інакше **409** `NOT_ACTIVE`. Відповідь як GET |
+| POST | `/api/v1/accounts/default/autopost/stop` | `autopostEnabled: false`. Поточний тік може добігти |
 | GET | `/api/v1/accounts/status` | In-memory сесія браузера: `{ status, requires2FA, email, error? }`. `status`: `DISCONNECTED` \| `AUTHENTICATING` \| `ACTIVE`. Boot-rehydrate **може spawn** Chrome; цей GET лише **attach**. Якщо немає Wallapop-табу — probe **goto** `/wall`, далі MFA → `AUTHENTICATING` / logged-in → `ACTIVE` |
-| POST | `/api/v1/accounts/connect` | Body `{ email, password, proxy? }` — **password використовується** для Keycloak fill (у БД **не** зберігається). Відкриває/чіпляє Chrome → onboarding «Iniciar sesión con email» → fill `#username`/`#password` → `#kc-login`. Вже залогінений профіль → `ACTIVE` без форми. Потрібен 2FA → `requires2FA: true`. Fail (у т.ч. reCAPTCHA) → **400** `CONNECT_FAILED` |
+| POST | `/api/v1/accounts/connect` | Body `{ email, password, proxy? }` — **password використовується** для Keycloak fill (у БД **не** зберігається). Відкриває/чіпляє Chrome → onboarding «Iniciar sesión con email» → fill `#username`/`#password` → `#kc-login`. Вже залогінений профіль → `ACTIVE` без форми. Потрібен 2FA → `requires2FA: true`. Fail (у т.ч. reCAPTCHA) → **400** `CONNECT_FAILED`. Якщо email Wallapop **інший**, ніж `accounts.wallapop_email` — listings default-акаунта → `READY_TO_POST`, URL/lastPostedAt null, autopost Stop; відповідь `listingsReset: true` |
 | POST | `/api/v1/accounts/connect/2fa` | Body `{ code }` (4–8 alphanumeric). Вводить OTP у відкритий контекст. Якщо RAM злетіла після рестарту, але MFA-екран у Chrome лишився — **re-attach CDP** і прийняти код (не 409). Без MFA/сесії → **409** `NOT_AUTHENTICATING`. Помилка коду → **400** `CONNECT_FAILED` |
 | POST | `/api/v1/accounts/disconnect` | Повний **logout Wallapop** у Chrome-профілі (`clearCookies` + `es.wallapop.com/logout`) + CRM `DISCONNECTED`; Prisma default → `INACTIVE`. Профіль на диску / процес Chrome не видаляються. Якщо CDP недоступний — CRM все одно від’єднується |
 
@@ -394,7 +397,7 @@ Chrome / вкладки Wallapop відкриваються коли потрі�
 
 ### Autopost queue
 
-In-process цикл по `product_listings` (без Redis / нової таблиці). **Вимкнено**, доки `WALLAPOP_AUTOPOST` не дорівнює `true`. **Live черга** лише якщо також `WALLAPOP_PUBLISH_DRY_RUN=false`; інакше кожен тік логує idle і **не** відкриває Chrome (skip pick/publish). `{ dryRun: false }` у воркері **не** обходить env — джерело правди для live лишається `WALLAPOP_PUBLISH_DRY_RUN`. Якщо live: session `ACTIVE` і Chrome idle (`getBrowserBusy() === "idle"`) → найстаріший eligible listing на **default** акаунті (`status: READY_TO_POST`, `externalUrl` null, продукт `ACTIVE` з ≥1 image, `orderBy: createdAt asc`) → `runProductPublish(productId, { dryRun: false })` (той самий шлях, що HTTP). Не вибирає `POSTING` / `ACTIVE` / `DEACTIVATED` і не ретраїть `POSTING`. Інтервал default 15 хв + jitter. Модуль: [`server/src/lib/wallapop-autopost.ts`](./src/lib/wallapop-autopost.ts). Старт: [`runStartupHooks()`](./src/startup.ts).
+In-process цикл по `product_listings` (без Redis / нової таблиці). Таймери стартують на буті завжди. Тік **не** поститить, доки UI Start не поставить `accounts.autopost_enabled` **і** `WALLAPOP_PUBLISH_DRY_RUN=false`. `{ dryRun: false }` у воркері **не** обходить env. Якщо live: session `ACTIVE` і Chrome idle (`getBrowserBusy() === "idle"`) → найстаріший eligible listing на **default** акаунті (`status: READY_TO_POST`, `externalUrl` null, продукт `ACTIVE` з ≥1 image, `orderBy: createdAt asc`) → `runProductPublish(productId, { dryRun: false })` (той самий шлях, що HTTP). Не вибирає `POSTING` / `ACTIVE` / `DEACTIVATED` і не ретраїть `POSTING`. Інтервал: `account.autopostIntervalMs` → env `WALLAPOP_AUTOPOST_INTERVAL_MS` → default 15 хв; + ±20% jitter. Після кожного тіка loop знову читає інтервал (без `clearTimeout` — новий ms після поточної паузи). Інший email Wallapop на connect скидає listings цього default-акаунта. Модуль: [`server/src/lib/wallapop-autopost.ts`](./src/lib/wallapop-autopost.ts). Старт: [`runStartupHooks()`](./src/startup.ts).
 
 ### Manual verify (dry-run)
 

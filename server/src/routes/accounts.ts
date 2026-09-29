@@ -2,14 +2,20 @@ import type { Request, Response } from "express"
 import { ZodError } from "zod"
 
 import {
+  autopostIntervalPatchSchema,
+  autopostIntervalToMs,
   wallapop2faSchema,
   wallapopConnectSchema,
 } from "../../../lib/validations/account"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import {
+  loadAutopostStatus,
+} from "../lib/wallapop-autopost"
+import {
   connectWallapopSession,
   disconnectWallapopSession,
+  getWallapopSession,
   getWallapopSessionSnapshot,
   submitWallapopSession2fa,
   type WallapopSessionSnapshot,
@@ -23,6 +29,7 @@ function toAccountJson(row: {
   isDefault: boolean
   city: string | null
   postalCode: string | null
+  autopostIntervalMs: number | null
   createdAt: Date
   updatedAt: Date
 }) {
@@ -33,6 +40,7 @@ function toAccountJson(row: {
     isDefault: row.isDefault,
     city: row.city,
     postalCode: row.postalCode,
+    autopostIntervalMs: row.autopostIntervalMs,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }
@@ -44,6 +52,7 @@ function toSessionJson(session: WallapopSessionSnapshot) {
     requires2FA: session.requires2FA,
     email: session.email,
     ...(session.error ? { error: session.error } : {}),
+    ...(session.listingsReset ? { listingsReset: true } : {}),
   }
 }
 
@@ -63,7 +72,130 @@ export async function getDefaultAccount(_req: Request, res: Response) {
     return
   }
 
-  res.json({ account: toAccountJson(account) })
+  const autopost = await loadAutopostStatus(prisma)
+  res.json({
+    account: toAccountJson(account),
+    autopost,
+  })
+}
+
+export async function patchDefaultAccountAutopost(req: Request, res: Response) {
+  let body: { value: number; unit: "seconds" | "minutes" | "hours" | "days" }
+  try {
+    body = autopostIntervalPatchSchema.parse(req.body)
+  } catch (error) {
+    if (error instanceof ZodError) {
+      sendError(
+        res,
+        400,
+        "VALIDATION_ERROR",
+        error.issues[0]?.message ?? "Invalid body.",
+      )
+      return
+    }
+    throw error
+  }
+
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+
+  const account = await prisma.account.findFirst({
+    where: { isDefault: true },
+  })
+
+  if (!account) {
+    sendError(res, 404, "NOT_FOUND", "Default account is not configured.")
+    return
+  }
+
+  const intervalMs = autopostIntervalToMs(body.value, body.unit)
+  const updated = await prisma.account.update({
+    where: { id: account.id },
+    data: { autopostIntervalMs: intervalMs },
+  })
+
+  const autopost = await loadAutopostStatus(prisma)
+  res.json({
+    account: toAccountJson(updated),
+    autopost,
+  })
+}
+
+async function jsonDefaultAutopost(res: Response) {
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+  const account = await prisma.account.findFirst({
+    where: { isDefault: true },
+  })
+  if (!account) {
+    sendError(res, 404, "NOT_FOUND", "Default account is not configured.")
+    return
+  }
+  res.json({
+    account: toAccountJson(account),
+    autopost: await loadAutopostStatus(prisma),
+  })
+}
+
+export async function startDefaultAccountAutopost(
+  _req: Request,
+  res: Response,
+) {
+  const session = getWallapopSession()
+  if (session.status !== "ACTIVE") {
+    sendError(
+      res,
+      409,
+      "NOT_ACTIVE",
+      "Conecta la cuenta de Wallapop antes de iniciar el autopost.",
+    )
+    return
+  }
+
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+
+  const updated = await prisma.account.updateMany({
+    where: { isDefault: true },
+    data: { autopostEnabled: true },
+  })
+  if (updated.count === 0) {
+    sendError(res, 404, "NOT_FOUND", "Default account is not configured.")
+    return
+  }
+
+  await jsonDefaultAutopost(res)
+}
+
+export async function stopDefaultAccountAutopost(
+  _req: Request,
+  res: Response,
+) {
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+
+  const updated = await prisma.account.updateMany({
+    where: { isDefault: true },
+    data: { autopostEnabled: false },
+  })
+  if (updated.count === 0) {
+    sendError(res, 404, "NOT_FOUND", "Default account is not configured.")
+    return
+  }
+
+  await jsonDefaultAutopost(res)
 }
 
 export async function getAccountConnectionStatus(_req: Request, res: Response) {

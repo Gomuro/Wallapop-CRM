@@ -1,6 +1,7 @@
 import { ExternalLinkIcon } from "lucide-react"
 
 import { ListingStatusBadge } from "@/components/catalog/listing-status-badge"
+import { formatListingPostedAt } from "@/lib/inventory/format"
 import type { InventoryListing } from "@/lib/inventory/types"
 import { typeSection } from "@/lib/ui/type"
 
@@ -40,6 +41,11 @@ export function ListingDetailSection({
           ) : (
             <p className="text-sm text-muted-foreground">Todavía no hay enlace público.</p>
           )}
+          {listing.lastPostedAt ? (
+            <p className="text-xs text-muted-foreground">
+              Publicado {formatListingPostedAt(listing.lastPostedAt)}
+            </p>
+          ) : null}
         </div>
       )}
     </div>

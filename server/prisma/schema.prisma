@@ -58,6 +58,11 @@ model Account {
   isDefault  Boolean         @default(false) @map("is_default")
   city      String?
   postalCode String?      @map("postal_code")
+  // Null = env WALLAPOP_AUTOPOST_INTERVAL_MS, else 15 min default.
+  autopostIntervalMs Int? @map("autopost_interval_ms")
+  autopostEnabled Boolean @default(false) @map("autopost_enabled")
+  // Wallapop login email (not the CRM operator). Kept across disconnect.
+  wallapopEmail String? @map("wallapop_email")
   listings  ProductListing[]
   createdAt DateTime      @default(now()) @map("created_at")
   updatedAt DateTime      @updatedAt @map("updated_at")

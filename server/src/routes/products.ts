@@ -17,7 +17,7 @@ import {
 } from "../lib/default-account"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
-import { toListingJson } from "../lib/listing-json"
+import { listingJsonSelect, toListingJson } from "../lib/listing-json"
 import { isUniqueConstraint, prismaErrorCode } from "../lib/prisma-error"
 
 const productListInclude = {
@@ -30,7 +30,7 @@ const productListInclude = {
     where: { account: { isDefault: true } },
     orderBy: { createdAt: "asc" as const },
     take: 1,
-    select: { status: true },
+    select: { status: true, lastPostedAt: true },
   },
 }
 
@@ -40,15 +40,7 @@ export const productCardInclude = {
     where: { account: { isDefault: true } },
     orderBy: { createdAt: "asc" as const },
     take: 1,
-    select: {
-      id: true,
-      status: true,
-      externalUrl: true,
-      externalItemId: true,
-      shippingEnabled: true,
-      shippingUpToKg: true,
-      accountId: true,
-    },
+    select: listingJsonSelect,
   },
 }
 
@@ -105,6 +97,7 @@ export function toProductJson(row: {
     shippingEnabled: boolean
     shippingUpToKg: number | null
     accountId: string
+    lastPostedAt: Date | null
   }>
 }) {
   return {
@@ -188,7 +181,7 @@ function toProductListItemJson(row: {
   categoryId: string
   updatedAt: Date
   images: Array<{ url: string }>
-  listings: Array<{ status: string }>
+  listings: Array<{ status: string; lastPostedAt: Date | null }>
 }) {
   const listingStatus = row.listings[0]?.status ?? null
   return {
@@ -203,6 +196,7 @@ function toProductListItemJson(row: {
     updatedAt: row.updatedAt.toISOString(),
     listingStatus,
     listingActive: listingStatus === "ACTIVE",
+    lastPostedAt: row.listings[0]?.lastPostedAt?.toISOString() ?? null,
   }
 }
 

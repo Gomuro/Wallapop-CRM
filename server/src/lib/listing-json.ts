@@ -6,6 +6,7 @@ export const listingJsonSelect = {
   shippingEnabled: true,
   shippingUpToKg: true,
   accountId: true,
+  lastPostedAt: true,
 } as const
 
 export function toListingJson(row: {
@@ -16,6 +17,7 @@ export function toListingJson(row: {
   shippingEnabled: boolean
   shippingUpToKg: number | null
   accountId: string
+  lastPostedAt: Date | null
 }) {
   return {
     id: row.id,
@@ -25,5 +27,6 @@ export function toListingJson(row: {
     shippingEnabled: row.shippingEnabled,
     shippingUpToKg: row.shippingUpToKg,
     accountId: row.accountId,
+    lastPostedAt: row.lastPostedAt?.toISOString() ?? null,
   }
 }

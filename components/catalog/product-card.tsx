@@ -7,7 +7,7 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { ListingStatusBadge } from "@/components/catalog/listing-status-badge"
-import { formatEuro, statusLabel } from "@/lib/inventory/format"
+import { formatEuro, formatListingPostedAt, statusLabel } from "@/lib/inventory/format"
 import type { InventoryProduct } from "@/lib/inventory/types"
 import type { ProductStatus } from "@/lib/validations"
 import { typeMeta, typePrice } from "@/lib/ui/type"
@@ -104,6 +104,12 @@ export function ProductCard({
             <div className="mt-2 flex flex-wrap gap-1">
               <ListingStatusBadge product={product} />
             </div>
+            {product.listing?.lastPostedAt ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Publicado{" "}
+                {formatListingPostedAt(product.listing.lastPostedAt)}
+              </p>
+            ) : null}
           </div>
         </Card>
       </CatalogLink>
@@ -140,6 +146,11 @@ export function ProductCard({
           <div className="mt-auto flex min-h-5 flex-wrap content-start gap-1">
             <ListingStatusBadge product={product} />
           </div>
+          {product.listing?.lastPostedAt ? (
+            <p className="text-xs text-muted-foreground">
+              Publicado {formatListingPostedAt(product.listing.lastPostedAt)}
+            </p>
+          ) : null}
         </div>
       </Card>
     </CatalogLink>

@@ -106,6 +106,10 @@ export function mapApiListing(
         ? listing.externalUrl
         : null,
     status: asListingStatus(listing.status),
+    lastPostedAt:
+      typeof listing.lastPostedAt === "string" && listing.lastPostedAt.trim()
+        ? listing.lastPostedAt
+        : null,
   }
 }
 
@@ -123,6 +127,7 @@ export function mapListItemToInventory(row: ApiProductListItem): InventoryProduc
           accountId: "",
           status: asListingStatus(row.listingStatus),
           externalUrl: null,
+          lastPostedAt: row.lastPostedAt ?? null,
         }
       : null)
 

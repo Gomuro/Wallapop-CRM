@@ -1,5 +1,7 @@
 import { apiClientFetch } from "@/lib/api/client"
 import { ApiError } from "@/lib/api/errors"
+import type { ApiDefaultAccountResponse } from "@/lib/api/types"
+import type { AutopostIntervalPatchInput } from "@/lib/validations/account"
 
 /** Browser launch + Wallapop login can exceed the default 25s API timeout. */
 const CONNECT_TIMEOUT_MS = 90_000
@@ -14,6 +16,7 @@ export type WallapopAccountSession = {
   requires2FA: boolean
   email: string | null
   error?: string
+  listingsReset?: boolean
 }
 
 export async function getWallapopAccountStatus() {
@@ -49,6 +52,36 @@ export async function disconnectWallapopAccount() {
     method: "POST",
     timeoutMs: 60_000,
   })
+}
+
+export async function getDefaultAccountAutopost() {
+  return apiClientFetch<ApiDefaultAccountResponse>("/accounts/default")
+}
+
+export async function updateAutopostInterval(
+  input: AutopostIntervalPatchInput,
+) {
+  return apiClientFetch<ApiDefaultAccountResponse>(
+    "/accounts/default/autopost",
+    {
+      method: "PATCH",
+      body: JSON.stringify(input),
+    },
+  )
+}
+
+export async function startAutopost() {
+  return apiClientFetch<ApiDefaultAccountResponse>(
+    "/accounts/default/autopost/start",
+    { method: "POST" },
+  )
+}
+
+export async function stopAutopost() {
+  return apiClientFetch<ApiDefaultAccountResponse>(
+    "/accounts/default/autopost/stop",
+    { method: "POST" },
+  )
 }
 
 export function wallapopAccountErrorMessage(error: unknown): string {

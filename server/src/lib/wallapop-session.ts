@@ -12,12 +12,14 @@ import {
 import { isBrowserBusyError, runWithBrowserBusy } from "./wallapop-cdp"
 import { getPrisma } from "./db"
 import { log } from "./log"
+import { syncWallapopIdentityOnActive } from "./wallapop-account-identity"
 
 export type WallapopSessionSnapshot = {
   status: WallapopConnectionStatus
   requires2FA: boolean
   email: string | null
   error?: string
+  listingsReset?: boolean
 }
 
 type SessionState = {
@@ -43,6 +45,21 @@ function snapshot(): WallapopSessionSnapshot {
     requires2FA: state.requires2FA,
     email: state.email,
     ...(state.error ? { error: state.error } : {}),
+  }
+}
+
+async function bindWallapopIdentity(): Promise<boolean> {
+  const prisma = getPrisma()
+  const email = state.email
+  if (!prisma || !email) return false
+  try {
+    const { listingsReset } = await syncWallapopIdentityOnActive(prisma, email)
+    return listingsReset
+  } catch (error) {
+    log("warn", "wallapop_identity_sync_failed", {
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return false
   }
 }
 
@@ -167,7 +184,8 @@ export async function connectWallapopSession(input: {
     state.requires2FA = false
     state.error = null
     await syncDefaultAccountStatus("ACTIVE")
-    return { ok: true, session: snapshot() }
+    const listingsReset = await bindWallapopIdentity()
+    return { ok: true, session: { ...snapshot(), listingsReset } }
   } catch (error) {
     if (gen !== connectGeneration) {
       return { ok: true, session: snapshot() }
@@ -237,7 +255,8 @@ export async function submitWallapopSession2fa(
     state.requires2FA = false
     state.error = null
     await syncDefaultAccountStatus("ACTIVE")
-    return { ok: true, session: snapshot() }
+    const listingsReset = await bindWallapopIdentity()
+    return { ok: true, session: { ...snapshot(), listingsReset } }
   } catch (error) {
     if (gen !== connectGeneration) {
       return { ok: true, session: snapshot() }

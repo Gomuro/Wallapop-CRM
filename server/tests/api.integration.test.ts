@@ -5,6 +5,7 @@ import request from "supertest"
 import { createApp } from "../src/app"
 import { getPrisma } from "../src/lib/db"
 import { findDefaultAccountId } from "../src/lib/default-account"
+import { syncWallapopIdentityOnActive } from "../src/lib/wallapop-account-identity"
 import {
   activatePostingListing,
   claimListingForPublish,
@@ -81,6 +82,92 @@ describe("API v1 integration (Express + Postgres)", () => {
       const me = await logoutAgent.agent.get("/api/v1/auth/me")
       expect(me.status).toBe(401)
       expect(errorCode(me.body)).toBe("UNAUTHORIZED")
+    })
+  })
+
+  describe("accounts autopost interval", () => {
+    let previousMs: number | null = null
+
+    beforeAll(async () => {
+      const res = await agent.get("/api/v1/accounts/default")
+      expect(res.status).toBe(200)
+      previousMs = res.body.account?.autopostIntervalMs ?? null
+    })
+
+    afterAll(async () => {
+      const prisma = getPrisma()
+      if (!prisma) return
+      await prisma.account.updateMany({
+        where: { isDefault: true },
+        data: { autopostIntervalMs: previousMs },
+      })
+    })
+
+    it("GET default includes autopost status", async () => {
+      const res = await agent.get("/api/v1/accounts/default")
+      expect(res.status).toBe(200)
+      expect(res.body.account?.isDefault).toBe(true)
+      expect(res.body.account).toHaveProperty("autopostIntervalMs")
+      expect(res.body.autopost).toMatchObject({
+        jitterFraction: 0.2,
+      })
+      expect(typeof res.body.autopost.effectiveIntervalMs).toBe("number")
+      expect(["account", "env", "default"]).toContain(res.body.autopost.source)
+      expect(typeof res.body.autopost.enabled).toBe("boolean")
+      expect(typeof res.body.autopost.livePublish).toBe("boolean")
+    })
+
+    it("PATCH stores the interval and GET reflects source account", async () => {
+      const patch = await agent
+        .patch("/api/v1/accounts/default/autopost")
+        .send({ value: 2, unit: "hours" })
+      expect(patch.status).toBe(200)
+      expect(patch.body.account?.autopostIntervalMs).toBe(2 * 60 * 60 * 1000)
+      expect(patch.body.autopost).toMatchObject({
+        effectiveIntervalMs: 2 * 60 * 60 * 1000,
+        source: "account",
+        jitterFraction: 0.2,
+      })
+
+      const get = await agent.get("/api/v1/accounts/default")
+      expect(get.status).toBe(200)
+      expect(get.body.account?.autopostIntervalMs).toBe(2 * 60 * 60 * 1000)
+      expect(get.body.autopost.source).toBe("account")
+      expect(get.body.autopost.effectiveIntervalMs).toBe(2 * 60 * 60 * 1000)
+    })
+
+    it("PATCH rejects intervals outside 1 minute … 7 days", async () => {
+      const tooShort = await agent
+        .patch("/api/v1/accounts/default/autopost")
+        .send({ value: 30, unit: "seconds" })
+      expect(tooShort.status).toBe(400)
+      expect(errorCode(tooShort.body)).toBe("VALIDATION_ERROR")
+
+      const tooLong = await agent
+        .patch("/api/v1/accounts/default/autopost")
+        .send({ value: 8, unit: "days" })
+      expect(tooLong.status).toBe(400)
+      expect(errorCode(tooLong.body)).toBe("VALIDATION_ERROR")
+    })
+
+    it("rejects anonymous PATCH", async () => {
+      const res = await request(app)
+        .patch("/api/v1/accounts/default/autopost")
+        .send({ value: 15, unit: "minutes" })
+      expect(res.status).toBe(401)
+    })
+
+    it("Start without an ACTIVE Wallapop session is 409", async () => {
+      const res = await agent.post("/api/v1/accounts/default/autopost/start")
+      expect(res.status).toBe(409)
+      expect(errorCode(res.body)).toBe("NOT_ACTIVE")
+    })
+
+    it("Stop writes autopostEnabled false", async () => {
+      const res = await agent.post("/api/v1/accounts/default/autopost/stop")
+      expect(res.status).toBe(200)
+      expect(res.body.autopost?.enabled).toBe(false)
+      expect(res.body.autopost).toHaveProperty("lastPublication")
     })
   })
 
@@ -559,6 +646,78 @@ describe("API v1 integration (Express + Postgres)", () => {
       for (const id of createdIds) {
         await agent.delete(`/api/v1/products/${id}`)
       }
+    })
+  })
+
+  describe("wallapop identity reset", () => {
+    let id: string
+    let previousEmail: string | null = null
+
+    beforeAll(async () => {
+      const prisma = getPrisma()
+      const account = await prisma?.account.findFirst({
+        where: { isDefault: true },
+        select: { wallapopEmail: true },
+      })
+      previousEmail = account?.wallapopEmail ?? null
+
+      const categoryId = await findLeafCategoryId(agent)
+      const sku = `ID-RESET-${Date.now()}`
+      const created = await agent.post("/api/v1/products").send({
+        sku,
+        title: "Identity reset product",
+        description: "Listing reset when Wallapop email changes",
+        price: 3,
+        currency: "EUR",
+        categoryId,
+        condition: "GOOD",
+      })
+      expect(created.status).toBe(201)
+      id = created.body.product?.id as string
+    })
+
+    afterAll(async () => {
+      if (id && agent) await agent.delete(`/api/v1/products/${id}`)
+      const prisma = getPrisma()
+      if (!prisma) return
+      await prisma.account.updateMany({
+        where: { isDefault: true },
+        data: { wallapopEmail: previousEmail },
+      })
+    })
+
+    it("resets listings when the Wallapop email changes", async () => {
+      const prisma = getPrisma()
+      expect(prisma).toBeTruthy()
+      if (!prisma) return
+
+      const posted = await agent.put(`/api/v1/products/${id}/listing`).send({
+        status: "ACTIVE",
+        externalUrl: "https://es.wallapop.com/item/identity-reset",
+      })
+      expect(posted.status).toBe(200)
+      expect(posted.body.listing).toHaveProperty("lastPostedAt")
+      expect(posted.body.listing?.status).toBe("ACTIVE")
+
+      await syncWallapopIdentityOnActive(prisma, "first-identity@example.com")
+      const same = await agent.get(`/api/v1/products/${id}/listing`)
+      expect(same.body.listing?.status).toBe("ACTIVE")
+      expect(same.body.listing?.externalUrl).toBe(
+        "https://es.wallapop.com/item/identity-reset",
+      )
+
+      await syncWallapopIdentityOnActive(prisma, "second-identity@example.com")
+      const reset = await agent.get(`/api/v1/products/${id}/listing`)
+      expect(reset.body.listing?.status).toBe("READY_TO_POST")
+      expect(reset.body.listing?.externalUrl).toBeNull()
+      expect(reset.body.listing?.lastPostedAt).toBeNull()
+
+      const account = await prisma.account.findFirst({
+        where: { isDefault: true },
+        select: { autopostEnabled: true, wallapopEmail: true },
+      })
+      expect(account?.autopostEnabled).toBe(false)
+      expect(account?.wallapopEmail).toBe("second-identity@example.com")
     })
   })
 
