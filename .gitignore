@@ -55,6 +55,9 @@ test-results/
 playwright-report/
 blob-report/
 .playwright-mcp/
+agent-tools/
+estandar-radio-before.png
+server/scripts/mcp-*.png
 
 # Local-only (not on GitHub)
 docs/
