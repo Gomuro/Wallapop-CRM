@@ -11,7 +11,12 @@ import {
   conditionLabel,
 } from "@/lib/inventory/conditions"
 import type { InventoryListing, InventoryProduct } from "@/lib/inventory/types"
-import type { ListingStatus, ProductCondition, ProductStatus } from "@/lib/validations"
+import type {
+  ListingStatus,
+  ProductCondition,
+  ProductStatus,
+  ShippingPackageSize,
+} from "@/lib/validations"
 
 const PRODUCT_STATUSES = new Set<ProductStatus>(["ACTIVE", "SOLD", "INACTIVE"])
 const LISTING_STATUSES = new Set<ListingStatus>([
@@ -53,6 +58,10 @@ function asListingStatus(value: unknown): ListingStatus {
 
 function asCondition(value: unknown): ProductCondition {
   return conditionFromFormValue(typeof value === "string" ? value : "GOOD")
+}
+
+function asPackageSize(value: unknown): ShippingPackageSize | null {
+  return value === "STANDARD" || value === "BULKY" ? value : null
 }
 
 function normalizeImages(images: unknown): ApiProductImage[] {
@@ -113,6 +122,10 @@ export function mapListItemToInventory(row: ApiProductListItem): InventoryProduc
     condition: "",
     conditionCode: "GOOD",
     weight: null,
+    shippingPackageSize: null,
+    widthCm: null,
+    lengthCm: null,
+    heightCm: null,
     images: cover ? [cover] : [],
     productImages: [],
     status: asStatus(row.status),
@@ -149,6 +162,10 @@ export function mapProductToInventory(
     condition: conditionLabel(conditionCode),
     conditionCode,
     weight: asNullableNumber(product?.weightKg),
+    shippingPackageSize: asPackageSize(product?.shippingPackageSize),
+    widthCm: asNullableNumber(product?.widthCm),
+    lengthCm: asNullableNumber(product?.lengthCm),
+    heightCm: asNullableNumber(product?.heightCm),
     images,
     productImages: normalizeImages(product?.images).map((image) => ({
       id: image.id,

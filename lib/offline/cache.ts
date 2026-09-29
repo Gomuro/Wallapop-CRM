@@ -210,6 +210,10 @@ function mergeProduct(
       next.productImages.length > 0 ? next.productImages : prev.productImages,
     listing: next.listing ?? prev.listing,
     weight: next.weight ?? prev.weight,
+    shippingPackageSize: next.shippingPackageSize ?? prev.shippingPackageSize,
+    widthCm: next.widthCm ?? prev.widthCm,
+    lengthCm: next.lengthCm ?? prev.lengthCm,
+    heightCm: next.heightCm ?? prev.heightCm,
     listingActive: next.listingActive ?? prev.listingActive,
   }
 }
@@ -274,6 +278,15 @@ export function upsertOfflineProduct(
     condition: conditionLabel(draft.condition),
     conditionCode: draft.condition,
     weight: draft.weight === undefined ? (prev?.weight ?? null) : draft.weight,
+    shippingPackageSize:
+      draft.shippingPackageSize === undefined
+        ? (prev?.shippingPackageSize ?? "STANDARD")
+        : draft.shippingPackageSize,
+    widthCm: draft.widthCm === undefined ? (prev?.widthCm ?? null) : draft.widthCm,
+    lengthCm:
+      draft.lengthCm === undefined ? (prev?.lengthCm ?? null) : draft.lengthCm,
+    heightCm:
+      draft.heightCm === undefined ? (prev?.heightCm ?? null) : draft.heightCm,
     images,
     productImages:
       images === prev?.images

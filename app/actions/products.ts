@@ -43,20 +43,29 @@ function generateFallbackSku(): string {
   return `WP-${Date.now().toString().slice(-6)}`
 }
 
+function optionalFormNumber(formData: FormData, name: string) {
+  const raw = String(formData.get(name) ?? "").trim()
+  return raw === "" ? null : Number(raw)
+}
+
 function formToPayload(formData: FormData, fallbackSku?: string) {
-  const weightRaw = String(formData.get("weight") ?? "").trim()
-  const priceRaw = String(formData.get("price") ?? "").trim()
   const conditionRaw = String(formData.get("condition") ?? "GOOD").trim()
   const rawSku = String(formData.get("sku") ?? "").trim()
+  const packageRaw = String(formData.get("shippingPackageSize") ?? "").trim()
 
   return {
     sku: rawSku || fallbackSku || generateFallbackSku(),
     title: String(formData.get("title") ?? ""),
     description: String(formData.get("description") ?? ""),
-    price: priceRaw === "" ? Number.NaN : Number(priceRaw),
+    price: optionalFormNumber(formData, "price") ?? Number.NaN,
     categoryId: String(formData.get("categoryId") ?? ""),
     condition: conditionRaw as ProductCondition,
-    weight: weightRaw === "" ? null : Number(weightRaw),
+    weight: optionalFormNumber(formData, "weight"),
+    shippingPackageSize:
+      packageRaw === "STANDARD" || packageRaw === "BULKY" ? packageRaw : null,
+    widthCm: optionalFormNumber(formData, "widthCm"),
+    lengthCm: optionalFormNumber(formData, "lengthCm"),
+    heightCm: optionalFormNumber(formData, "heightCm"),
     images: [],
     status: String(formData.get("status") || "ACTIVE") as ProductStatus,
   }

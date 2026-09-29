@@ -48,6 +48,10 @@ function warehouseCreateBody(input: ProductCreateInput) {
     categoryId: input.categoryId,
     condition: input.condition,
     weightKg: input.weight ?? null,
+    shippingPackageSize: input.shippingPackageSize ?? "STANDARD",
+    widthCm: input.widthCm ?? null,
+    lengthCm: input.lengthCm ?? null,
+    heightCm: input.heightCm ?? null,
     brand: null,
     typeAttributes: {},
   }
@@ -62,6 +66,12 @@ function warehousePatchBody(input: ProductUpdateInput) {
   if (input.categoryId !== undefined) body.categoryId = input.categoryId
   if (input.condition !== undefined) body.condition = input.condition
   if (input.weight !== undefined) body.weightKg = input.weight
+  if (input.shippingPackageSize !== undefined) {
+    body.shippingPackageSize = input.shippingPackageSize
+  }
+  if (input.widthCm !== undefined) body.widthCm = input.widthCm
+  if (input.lengthCm !== undefined) body.lengthCm = input.lengthCm
+  if (input.heightCm !== undefined) body.heightCm = input.heightCm
   return body
 }
 

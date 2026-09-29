@@ -8,6 +8,10 @@ export type ProductDraftFields = {
   description: string
   price: string
   weight: string
+  shippingPackageSize: string
+  widthCm: string
+  lengthCm: string
+  heightCm: string
   categoryId: string
   condition: string
   status: string
