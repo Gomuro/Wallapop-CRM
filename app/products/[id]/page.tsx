@@ -12,6 +12,7 @@ import {
   DeleteProductButton,
   SoldSyncButton,
 } from "@/components/product-form/product-actions"
+import { TestPublishButton } from "@/components/product-form/test-publish-button"
 import { ListingDetailSection } from "@/components/catalog/listing-detail"
 import {
   categoryLabel,
@@ -111,6 +112,12 @@ export default async function ProductDetailPage({
             listing={product.listing}
             listingActive={product.listingActive}
           />
+          {process.env.NODE_ENV === "development" ? (
+            <TestPublishButton
+              productId={product.id}
+              disabled={!product.images.length}
+            />
+          ) : null}
           <Separator />
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
             {product.description || "Sin descripción."}
