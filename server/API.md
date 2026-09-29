@@ -289,9 +289,9 @@ URL: `…/realms/wallapop-internal/login-actions/authenticate?execution=…`
 
 #### Cookies / CMP
 
-Wallapop часто показує **consentmanager** `#cmpbox` (GDPR welcome) з кнопками **Accept all** / **Reject all** — це `<a class="cmpboxbtnyes">`, не `<button>`. Connect має клікнути Accept all перед логіном.
+Wallapop часто показує **consentmanager** `#cmpbox` (GDPR welcome) з кнопками **Accept all** / **Reject all** — це `<a class="cmpboxbtnyes">`, не `<button>`. **`dismissWallapopConsent`** (селектори `WALLAPOP_CMP_ACCEPT_SELECTORS` у `wallapop-cdp.ts`) викликається на Connect/login, після probe `/wall` при rehydrate, і на старті publish/dry-run.
 
-| `SELECTORS.cookieAccept` (пріоритет) |
+| `WALLAPOP_CMP_ACCEPT_SELECTORS` / `SELECTORS.cookieAccept` (пріоритет) |
 |--------------------------------------|
 | `#cmpwelcomebtnyes a.cmpboxbtnyes`, `#cmpwelcomebtnyes a`, `a.cmpboxbtnyes`, `#cmpbntyestxt` |
 | `a.cmpboxbtn:has-text("Accept all")` / `Aceptar todo` / `Aceptar todas` |

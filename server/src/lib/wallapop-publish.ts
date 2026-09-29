@@ -6,6 +6,7 @@
 import type { Page } from "playwright"
 
 import {
+  dismissWallapopConsent,
   ensureWallapopPage,
   firstVisible,
   navigateViaAssign,
@@ -920,10 +921,12 @@ async function publishWallapopInBrowserInner(
 ): Promise<PublishWallapopResult> {
   let step: PublishStep = "attach"
   const page = await ensureWallapopPage()
+  await dismissWallapopConsent(page)
   await dismissSearchOverlay(page)
 
   step = "upload_entry"
   await navigateViaAssign(page, UPLOAD_URL)
+  await dismissWallapopConsent(page)
   await dismissSearchOverlay(page)
 
   step = "consumer_goods"

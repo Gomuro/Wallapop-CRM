@@ -10,8 +10,10 @@ import {
   closeWallapopBrowser,
   connectCdpHandle,
   CDP_URL,
+  dismissWallapopConsent,
   firstVisible,
   getBrowserBusy,
+  WALLAPOP_CMP_ACCEPT_SELECTORS,
   getWallapopHandle,
   hasOpenWallapopBrowser,
   NAV_TIMEOUT_MS,
@@ -68,20 +70,7 @@ const SELECTORS = {
     'walla-button[behaviour-type="submit"][text="Verificar"]',
     'walla-button[text="Verificar"]',
   ],
-  cookieAccept: [
-    "#cmpwelcomebtnyes a.cmpboxbtnyes",
-    "#cmpwelcomebtnyes a",
-    "a.cmpboxbtnyes",
-    "#cmpbntyestxt",
-    'a.cmpboxbtn:has-text("Accept all")',
-    'a.cmpboxbtn:has-text("Aceptar todo")',
-    'a.cmpboxbtn:has-text("Aceptar todas")',
-    'button:has-text("Aceptar todas")',
-    'button:has-text("Accept all")',
-    'button:has-text("Aceptar")',
-    'button:has-text("Accept")',
-    "#onetrust-accept-btn-handler",
-  ],
+  cookieAccept: [...WALLAPOP_CMP_ACCEPT_SELECTORS],
   recaptcha: [
     'iframe[src*="recaptcha"]',
     "#id-recaptcha-token",
@@ -94,20 +83,6 @@ const SELECTORS = {
 } as const;
 
 export type BrowserLoginOutcome = "ACTIVE" | "REQUIRES_2FA";
-
-async function dismissCookies(page: Page): Promise<void> {
-  const btn = await firstVisible(page, SELECTORS.cookieAccept, 5_000);
-  if (!btn) return;
-  try {
-    await btn.click({ timeout: 3_000 });
-    await page
-      .locator("#cmpbox")
-      .waitFor({ state: "hidden", timeout: 5_000 })
-      .catch(() => {});
-  } catch {
-    // ignore
-  }
-}
 
 async function detect2FA(page: Page): Promise<boolean> {
   return (await firstVisible(page, SELECTORS.otpScreen, 1_500)) != null;
@@ -367,6 +342,10 @@ async function detectReconcileStateFromHandle(): Promise<ReconcileBrowserState> 
     activePage = getWallapopHandle()?.page ?? activePage
   }
 
+  if (!mfaPage) {
+    await dismissWallapopConsent(activePage)
+  }
+
   if (await detect2FA(activePage)) {
     log("info", "wallapop_browser_reconcile_mfa", { url: activePage.url() })
     return "REQUIRES_2FA"
@@ -446,7 +425,7 @@ export async function loginWallapopInBrowser(input: {
         waitUntil: "domcontentloaded",
         timeout: NAV_TIMEOUT_MS,
       })
-      await dismissCookies(page)
+      await dismissWallapopConsent(page)
 
       if (await detectLoggedIn(page)) {
         log("info", "wallapop_already_logged_in", { url: page.url() })
@@ -454,7 +433,7 @@ export async function loginWallapopInBrowser(input: {
       }
 
       await clickEmailLoginEntry(page)
-      await dismissCookies(page)
+      await dismissWallapopConsent(page)
 
       const emailInput = await firstVisible(page, SELECTORS.email, 10_000)
       if (!emailInput) {

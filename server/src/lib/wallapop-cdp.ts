@@ -206,6 +206,37 @@ export async function firstVisible(
   return null
 }
 
+/** ConsentManager (CMP). Keep in sync with API.md «cookieAccept». */
+export const WALLAPOP_CMP_ACCEPT_SELECTORS = [
+  "#cmpwelcomebtnyes a.cmpboxbtnyes",
+  "#cmpwelcomebtnyes a",
+  "a.cmpboxbtnyes",
+  "#cmpbntyestxt",
+  'a.cmpboxbtn:has-text("Accept all")',
+  'a.cmpboxbtn:has-text("Aceptar todo")',
+  'a.cmpboxbtn:has-text("Aceptar todas")',
+  'button:has-text("Aceptar todas")',
+  'button:has-text("Accept all")',
+  'button:has-text("Aceptar")',
+  'button:has-text("Accept")',
+  "#onetrust-accept-btn-handler",
+] as const
+
+/** Dismiss GDPR cookie banner so login / publish / session probe can interact with the page. */
+export async function dismissWallapopConsent(page: Page): Promise<void> {
+  const btn = await firstVisible(page, WALLAPOP_CMP_ACCEPT_SELECTORS, 5_000)
+  if (!btn) return
+  try {
+    await btn.click({ timeout: 3_000 })
+    await page
+      .locator("#cmpbox")
+      .waitFor({ state: "hidden", timeout: 5_000 })
+      .catch(() => {})
+  } catch {
+    // ignore
+  }
+}
+
 /**
  * Disconnect Playwright from Chrome.
  * Does NOT quit Chrome — so the profile (and a later re-attach) stay available.
