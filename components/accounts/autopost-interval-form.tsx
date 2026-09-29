@@ -15,13 +15,6 @@ import {
 } from "@/components/ui/dialog"
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/components/ui/select"
 import { isApiConfigured } from "@/lib/api/config"
 import type { ApiAutopostStatus } from "@/lib/api/types"
 import {
@@ -287,36 +280,22 @@ export function AutopostIntervalForm() {
           </div>
           <div className="flex flex-col gap-2">
             <Label htmlFor="autopost-interval-unit">Unidad</Label>
-            <Select
+            <select
+              id="autopost-interval-unit"
+              name="unit"
+              className="h-12 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-base outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 md:h-10 md:text-sm"
               value={unit}
-              onValueChange={(next) => {
-                if (next) setUnit(next as AutopostIntervalUnit)
-              }}
-              itemToStringLabel={(item) =>
-                UNIT_LABEL[item as AutopostIntervalUnit]
+              onChange={(event) =>
+                setUnit(event.target.value as AutopostIntervalUnit)
               }
-              items={Object.fromEntries(
-                AUTOPOST_INTERVAL_UNITS.map((item) => [
-                  item,
-                  UNIT_LABEL[item],
-                ]),
-              )}
               disabled={!apiReady || busy}
             >
-              <SelectTrigger
-                id="autopost-interval-unit"
-                className="h-12 w-full data-[size=default]:h-12 md:h-10 md:data-[size=default]:h-10"
-              >
-                <SelectValue />
-              </SelectTrigger>
-              <SelectContent>
-                {AUTOPOST_INTERVAL_UNITS.map((item) => (
-                  <SelectItem key={item} value={item}>
-                    {UNIT_LABEL[item]}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+              {AUTOPOST_INTERVAL_UNITS.map((item) => (
+                <option key={item} value={item}>
+                  {UNIT_LABEL[item]}
+                </option>
+              ))}
+            </select>
           </div>
         </div>
 
