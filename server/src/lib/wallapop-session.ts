@@ -5,8 +5,11 @@ import {
   loginWallapopInBrowser,
   logoutWallapopInBrowser,
   reconcileWallapopBrowserState,
+  reconcileWallapopBrowserStateSpawning,
   submitWallapop2faInBrowser,
+  type ReconcileBrowserState,
 } from "./wallapop-browser"
+import { isBrowserBusyError, runWithBrowserBusy } from "./wallapop-cdp"
 import { getPrisma } from "./db"
 import { log } from "./log"
 
@@ -61,8 +64,9 @@ async function syncDefaultAccountStatus(
   }
 }
 
-async function applyReconcileToState(): Promise<void> {
-  const reconciled = await reconcileWallapopBrowserState()
+async function applyReconcileResult(
+  reconciled: ReconcileBrowserState,
+): Promise<void> {
   if (reconciled === "REQUIRES_2FA") {
     state.status = "AUTHENTICATING"
     state.requires2FA = true
@@ -78,6 +82,10 @@ async function applyReconcileToState(): Promise<void> {
   }
 }
 
+async function applyReconcileToState(): Promise<void> {
+  await applyReconcileResult(await reconcileWallapopBrowserState())
+}
+
 /**
  * In-memory snapshot, rehydrated from Chrome CDP when RAM was wiped (API restart)
  * but MFA / logged-in UI is still open.
@@ -90,6 +98,27 @@ export async function getWallapopSessionSnapshot(): Promise<WallapopSessionSnaps
   return snapshot()
 }
 
+/**
+ * API boot: attach or spawn Chrome CDP, then classify session into RAM.
+ * Fire-and-forget from listen — does not block boot.
+ */
+export async function rehydrateWallapopSessionOnBoot(): Promise<WallapopSessionSnapshot> {
+  try {
+    await runWithBrowserBusy("rehydrate", async () => {
+      await applyReconcileResult(await reconcileWallapopBrowserStateSpawning())
+    })
+  } catch (error) {
+    if (isBrowserBusyError(error)) {
+      log("info", "wallapop_session_rehydrate_skipped_busy", {
+        busy: error.busyWith,
+      })
+    } else {
+      throw error
+    }
+  }
+  return snapshot()
+}
+
 /** @deprecated Prefer getWallapopSessionSnapshot — sync view without CDP rehydrate. */
 export function getWallapopSession(): WallapopSessionSnapshot {
   return snapshot()
@@ -97,13 +126,19 @@ export function getWallapopSession(): WallapopSessionSnapshot {
 
 export type ConnectSessionResult =
   | { ok: true; session: WallapopSessionSnapshot }
-  | { ok: false; session: WallapopSessionSnapshot; message: string }
+  | {
+      ok: false
+      session: WallapopSessionSnapshot
+      message: string
+      code?: "BROWSER_BUSY" | "CONNECT_FAILED"
+    }
 
 export async function connectWallapopSession(input: {
   email: string
   password: string
   proxy?: string | null
 }): Promise<ConnectSessionResult> {
+  const prev = snapshot()
   const gen = ++connectGeneration
   state.status = "AUTHENTICATING"
   state.requires2FA = false
@@ -139,11 +174,29 @@ export async function connectWallapopSession(input: {
     }
     const message =
       error instanceof Error ? error.message : "Error al conectar Wallapop."
+    if (isBrowserBusyError(error)) {
+      state.status = prev.status
+      state.requires2FA = prev.requires2FA
+      state.email = prev.email
+      state.error = prev.error ?? null
+      log("warn", "wallapop_connect_browser_busy", { message })
+      return {
+        ok: false,
+        session: snapshot(),
+        message,
+        code: "BROWSER_BUSY",
+      }
+    }
     state.status = "DISCONNECTED"
     state.requires2FA = false
     state.error = message
     log("error", "wallapop_connect_failed", { message })
-    return { ok: false, session: snapshot(), message }
+    return {
+      ok: false,
+      session: snapshot(),
+      message,
+      code: "CONNECT_FAILED",
+    }
   }
 }
 
@@ -151,7 +204,7 @@ export type Submit2faResult =
   | { ok: true; session: WallapopSessionSnapshot }
   | {
       ok: false
-      code: "NOT_AUTHENTICATING" | "CONNECT_FAILED"
+      code: "NOT_AUTHENTICATING" | "CONNECT_FAILED" | "BROWSER_BUSY"
       message: string
       session: WallapopSessionSnapshot
     }
@@ -191,6 +244,15 @@ export async function submitWallapopSession2fa(
     }
     const message =
       error instanceof Error ? error.message : "Error al verificar 2FA."
+    if (isBrowserBusyError(error)) {
+      log("warn", "wallapop_2fa_browser_busy", { message })
+      return {
+        ok: false,
+        code: "BROWSER_BUSY",
+        message,
+        session: snapshot(),
+      }
+    }
     state.status = "AUTHENTICATING"
     state.requires2FA = true
     state.error = message
@@ -209,6 +271,10 @@ export async function disconnectWallapopSession(): Promise<WallapopSessionSnapsh
   try {
     await logoutWallapopInBrowser()
   } catch (error) {
+    if (isBrowserBusyError(error)) {
+      connectGeneration -= 1
+      throw error
+    }
     log("warn", "wallapop_disconnect_logout_error", {
       message: error instanceof Error ? error.message : String(error),
     })

@@ -14,6 +14,7 @@ import {
   submitWallapopSession2fa,
   type WallapopSessionSnapshot,
 } from "../lib/wallapop-session"
+import { isBrowserBusyError } from "../lib/wallapop-cdp"
 
 function toAccountJson(row: {
   id: string
@@ -93,7 +94,9 @@ export async function connectAccount(req: Request, res: Response) {
   })
 
   if (!result.ok) {
-    sendError(res, 400, "CONNECT_FAILED", result.message)
+    const status = result.code === "BROWSER_BUSY" ? 409 : 400
+    const code = result.code === "BROWSER_BUSY" ? "BROWSER_BUSY" : "CONNECT_FAILED"
+    sendError(res, status, code, result.message)
     return
   }
 
@@ -119,7 +122,10 @@ export async function connectAccount2fa(req: Request, res: Response) {
 
   const result = await submitWallapopSession2fa(body.code)
   if (!result.ok) {
-    const status = result.code === "NOT_AUTHENTICATING" ? 409 : 400
+    const status =
+      result.code === "NOT_AUTHENTICATING" || result.code === "BROWSER_BUSY"
+        ? 409
+        : 400
     sendError(res, status, result.code, result.message)
     return
   }
@@ -128,6 +134,14 @@ export async function connectAccount2fa(req: Request, res: Response) {
 }
 
 export async function disconnectAccount(_req: Request, res: Response) {
-  const session = await disconnectWallapopSession()
-  res.json(toSessionJson(session))
+  try {
+    const session = await disconnectWallapopSession()
+    res.json(toSessionJson(session))
+  } catch (error) {
+    if (isBrowserBusyError(error)) {
+      sendError(res, 409, "BROWSER_BUSY", error.message)
+      return
+    }
+    throw error
+  }
 }

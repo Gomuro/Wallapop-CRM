@@ -63,22 +63,35 @@ export function ConnectAccountForm() {
   const [resetMode, setResetMode] = useState<ResetMode>("cancel");
   const connectRequestIdRef = useRef(0);
   const twoFaRequestIdRef = useRef(0);
+  const pendingKindRef = useRef<PendingKind>(null);
+  pendingKindRef.current = pendingKind;
 
   const resetBusy = pendingKind === "disconnect";
 
   useEffect(() => {
-    let cancelled = false;
     if (!apiReady) {
       setStatusLoading(false);
       return;
     }
-    getWallapopAccountStatus()
-      .then((next) => {
+
+    let cancelled = false;
+
+    async function refreshStatus(options?: { initial?: boolean }) {
+      if (pendingKindRef.current !== null) return;
+      if (options?.initial) setStatusLoading(true);
+      try {
+        const next = await getWallapopAccountStatus();
         if (cancelled) return;
         setSession(next);
         if (next.requires2FA) setTwoFaOpen(true);
-      })
-      .catch(() => {
+        if (
+          next.status === "ACTIVE" &&
+          next.email &&
+          pendingKindRef.current === null
+        ) {
+          setEmail((current) => (current.trim() ? current : next.email!));
+        }
+      } catch {
         if (!cancelled) {
           setSession({
             status: "DISCONNECTED",
@@ -86,12 +99,28 @@ export function ConnectAccountForm() {
             email: null,
           });
         }
-      })
-      .finally(() => {
-        if (!cancelled) setStatusLoading(false);
-      });
+      } finally {
+        if (!cancelled && options?.initial) setStatusLoading(false);
+      }
+    }
+
+    void refreshStatus({ initial: true });
+
+    function onVisibility() {
+      if (document.visibilityState === "visible") {
+        void refreshStatus();
+      }
+    }
+    function onFocus() {
+      void refreshStatus();
+    }
+
+    document.addEventListener("visibilitychange", onVisibility);
+    window.addEventListener("focus", onFocus);
     return () => {
       cancelled = true;
+      document.removeEventListener("visibilitychange", onVisibility);
+      window.removeEventListener("focus", onFocus);
     };
   }, [apiReady]);
 

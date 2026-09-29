@@ -2,6 +2,7 @@ import "../load-env"
 
 import { createApp } from "./app"
 import { log, serializeError } from "./lib/log"
+import { rehydrateWallapopSessionOnBoot } from "./lib/wallapop-session"
 
 process.on("uncaughtException", (err) => {
   log("error", "uncaughtException", { err: serializeError(err) })
@@ -17,6 +18,18 @@ const app = createApp()
 
 const server = app.listen(port, () => {
   log("info", "listening", { port })
+  void rehydrateWallapopSessionOnBoot()
+    .then((s) =>
+      log("info", "wallapop_session_rehydrate", {
+        status: s.status,
+        requires2FA: s.requires2FA,
+      }),
+    )
+    .catch((err) =>
+      log("warn", "wallapop_session_rehydrate_failed", {
+        err: serializeError(err),
+      }),
+    )
 })
 
 server.on("error", (err) => {

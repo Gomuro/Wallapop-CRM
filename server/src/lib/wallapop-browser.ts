@@ -1,40 +1,30 @@
-import { spawn, type ChildProcess } from "node:child_process";
-import fs from "node:fs";
-import path from "node:path";
+/**
+ * Wallapop email login / 2FA / logout via Chrome CDP.
+ * Shared CDP attach: wallapop-cdp.ts. Publish: wallapop-publish.ts.
+ */
+import type { Page } from "playwright";
 
 import {
-  chromium,
-  type Browser,
-  type BrowserContext,
-  type Page,
-} from "playwright";
-
+  attachOrLaunch,
+  BrowserBusyError,
+  closeWallapopBrowser,
+  connectCdpHandle,
+  CDP_URL,
+  firstVisible,
+  getBrowserBusy,
+  getWallapopHandle,
+  hasOpenWallapopBrowser,
+  NAV_TIMEOUT_MS,
+  runWithBrowserBusy,
+  setWallapopHandle,
+} from "./wallapop-cdp";
 import { log } from "./log";
 
-/** CDP endpoint of the real Chrome we attach to (and may start ourselves). */
-const CDP_URL = process.env.WALLAPOP_CDP_URL ?? "http://127.0.0.1:9222";
-const CDP_PORT = Number(process.env.WALLAPOP_CDP_PORT ?? "9222");
-/**
- * Same profile as the "Chrome CDP" desktop shortcut — history, cookies, Google account.
- * Override with WALLAPOP_CHROME_USER_DATA_DIR if needed.
- */
-const PROFILE_DIR =
-  process.env.WALLAPOP_CHROME_USER_DATA_DIR?.trim() ||
-  path.resolve(process.env.USERPROFILE ?? "", "ChromeCDP-Persistent");
-const LOGIN_URL = "https://es.wallapop.com/login";
-const NAV_TIMEOUT_MS = 45_000;
-const ACTION_TIMEOUT_MS = 20_000;
-const CDP_READY_TIMEOUT_MS = 30_000;
+export { closeWallapopBrowser, hasOpenWallapopBrowser };
 
-/** Extra flags from the Chrome CDP.lnk shortcut (stability while automated). */
-const CHROME_LAUNCH_EXTRA_ARGS = [
-  "--disable-background-timer-throttling",
-  "--disable-backgrounding-occluded-windows",
-  "--disable-renderer-backgrounding",
-  "--disable-features=CalculateNativeWinOcclusion",
-  "--no-first-run",
-  "--no-default-browser-check",
-] as const;
+const LOGIN_URL = "https://es.wallapop.com/login";
+/** Session probe when Chrome has no Wallapop tab (e.g. New Tab after spawn). */
+const PROBE_URL = "https://es.wallapop.com/wall";
 
 /**
  * Email login UI map — повний registry: server/API.md → Accounts →
@@ -79,7 +69,6 @@ const SELECTORS = {
     'walla-button[text="Verificar"]',
   ],
   cookieAccept: [
-    // consentmanager.net CMP (Wallapop welcome GDPR) — <a>, not <button>
     "#cmpwelcomebtnyes a.cmpboxbtnyes",
     "#cmpwelcomebtnyes a",
     "a.cmpboxbtnyes",
@@ -87,7 +76,6 @@ const SELECTORS = {
     'a.cmpboxbtn:has-text("Accept all")',
     'a.cmpboxbtn:has-text("Aceptar todo")',
     'a.cmpboxbtn:has-text("Aceptar todas")',
-    // legacy / OneTrust / generic
     'button:has-text("Aceptar todas")',
     'button:has-text("Accept all")',
     'button:has-text("Aceptar")',
@@ -99,7 +87,6 @@ const SELECTORS = {
     "#id-recaptcha-token",
     ".g-recaptcha",
   ],
-  /** Logged-in home — server/API.md «Logged-in success markers». */
   loggedIn: [
     'img[data-testid="user-avatar"]',
     '[data-testid="section-inview-feed"]',
@@ -108,125 +95,11 @@ const SELECTORS = {
 
 export type BrowserLoginOutcome = "ACTIVE" | "REQUIRES_2FA";
 
-type BrowserHandle = {
-  browser: Browser;
-  context: BrowserContext;
-  page: Page;
-  /** True if we opened a new tab; false if we reused an existing Chrome tab. */
-  ownedPage: boolean;
-};
-
-let handle: BrowserHandle | null = null;
-/** Chrome process we spawned; left running after disconnect (profile stays warm). */
-let chromeProcess: ChildProcess | null = null;
-
-function findChromeExecutable(): string {
-  const fromEnv = process.env.WALLAPOP_CHROME_PATH?.trim();
-  const candidates = [
-    fromEnv,
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-    process.env.LOCALAPPDATA
-      ? path.join(
-          process.env.LOCALAPPDATA,
-          "Google",
-          "Chrome",
-          "Application",
-          "chrome.exe",
-        )
-      : null,
-    "/usr/bin/google-chrome",
-    "/usr/bin/google-chrome-stable",
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  ].filter((value): value is string => Boolean(value));
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate;
-  }
-
-  throw new Error(
-    "No se encontró Google Chrome. Instálalo o define WALLAPOP_CHROME_PATH.",
-  );
-}
-
-async function waitForCdp(cdpUrl: string, timeoutMs = CDP_READY_TIMEOUT_MS) {
-  const versionUrl = `${cdpUrl.replace(/\/$/, "")}/json/version`;
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(versionUrl, {
-        signal: AbortSignal.timeout(1_500),
-      });
-      if (response.ok) return;
-    } catch {
-      // not ready yet
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250));
-  }
-  throw new Error(
-    `Chrome CDP no respondió en ${cdpUrl}. ¿Arrancó Chrome con --remote-debugging-port=${CDP_PORT}?`,
-  );
-}
-
-function spawnRealChrome(proxy?: string | null): ChildProcess {
-  const chromePath = findChromeExecutable();
-  fs.mkdirSync(PROFILE_DIR, { recursive: true });
-
-  const args = [
-    `--remote-debugging-port=${CDP_PORT}`,
-    `--user-data-dir=${PROFILE_DIR}`,
-    ...CHROME_LAUNCH_EXTRA_ARGS,
-  ];
-  const proxyServer = proxy?.trim();
-  if (proxyServer) {
-    args.push(`--proxy-server=${proxyServer}`);
-  }
-
-  log("info", "wallapop_chrome_spawning", {
-    chromePath,
-    profileDir: PROFILE_DIR,
-    cdpPort: CDP_PORT,
-  });
-
-  const child = spawn(chromePath, args, {
-    detached: true,
-    stdio: "ignore",
-    windowsHide: false,
-  });
-  child.unref();
-  chromeProcess = child;
-  return child;
-}
-
-async function firstVisible(
-  page: Page,
-  selectors: readonly string[],
-  timeoutMs = 5_000,
-) {
-  const deadline = Date.now() + timeoutMs;
-  while (Date.now() < deadline) {
-    for (const selector of selectors) {
-      const locator = page.locator(selector).first();
-      try {
-        if (await locator.isVisible({ timeout: 400 })) {
-          return locator;
-        }
-      } catch {
-        // try next
-      }
-    }
-    await page.waitForTimeout(250);
-  }
-  return null;
-}
-
 async function dismissCookies(page: Page): Promise<void> {
-  // CMP can paint after first paint — give it a moment.
   const btn = await firstVisible(page, SELECTORS.cookieAccept, 5_000);
   if (!btn) return;
   try {
     await btn.click({ timeout: 3_000 });
-    // Wait for overlay to leave so it doesn't block login clicks.
     await page
       .locator("#cmpbox")
       .waitFor({ state: "hidden", timeout: 5_000 })
@@ -237,7 +110,6 @@ async function dismissCookies(page: Page): Promise<void> {
 }
 
 async function detect2FA(page: Page): Promise<boolean> {
-  // Structural markers from Wallapop MFA screen (not copy — text can change).
   return (await firstVisible(page, SELECTORS.otpScreen, 1_500)) != null;
 }
 
@@ -275,7 +147,6 @@ async function detectLoggedIn(page: Page): Promise<boolean> {
   return hasSession;
 }
 
-/** Prefer es.wallapop.com/wall (or other logged-in tab) over stale accounts MFA tab. */
 function preferLoggedInPage(pages: Page[], fallback: Page): Page {
   const wall = pages.find((p) => {
     try {
@@ -312,7 +183,6 @@ async function detectRecaptcha(page: Page): Promise<boolean> {
 }
 
 async function clickEmailLoginEntry(page: Page): Promise<void> {
-  // Already on Keycloak form.
   if (await firstVisible(page, SELECTORS.email, 1_500)) return;
 
   const byRole = page.getByRole("button", {
@@ -360,11 +230,13 @@ async function waitForLoginOutcome(
 ): Promise<BrowserLoginOutcome | "FAILED"> {
   const deadline = Date.now() + timeoutMs;
   while (Date.now() < deadline) {
+    const handle = getWallapopHandle();
     const pages = handle?.context.pages() ?? [page];
     for (const p of pages) {
       try {
         if (await detect2FA(p)) {
-          if (handle) handle = { ...handle, page: p, ownedPage: false };
+          if (handle)
+            setWallapopHandle({ ...handle, page: p, ownedPage: false });
           return "REQUIRES_2FA";
         }
       } catch {
@@ -374,7 +246,8 @@ async function waitForLoginOutcome(
     for (const p of pages) {
       try {
         if (await detectLoggedIn(p)) {
-          if (handle) handle = { ...handle, page: p, ownedPage: false };
+          if (handle)
+            setWallapopHandle({ ...handle, page: p, ownedPage: false });
           return "ACTIVE";
         }
       } catch {
@@ -384,11 +257,12 @@ async function waitForLoginOutcome(
     await page.waitForTimeout(500).catch(() => {});
   }
 
+  const handle = getWallapopHandle();
   const pages = handle?.context.pages() ?? [page];
   for (const p of pages) {
     try {
       if (await detect2FA(p)) {
-        if (handle) handle = { ...handle, page: p, ownedPage: false };
+        if (handle) setWallapopHandle({ ...handle, page: p, ownedPage: false });
         return "REQUIRES_2FA";
       }
     } catch {
@@ -398,7 +272,7 @@ async function waitForLoginOutcome(
   for (const p of pages) {
     try {
       if (await detectLoggedIn(p)) {
-        if (handle) handle = { ...handle, page: p, ownedPage: false };
+        if (handle) setWallapopHandle({ ...handle, page: p, ownedPage: false });
         return "ACTIVE";
       }
     } catch {
@@ -408,299 +282,311 @@ async function waitForLoginOutcome(
   return "FAILED";
 }
 
-/**
- * Disconnect Playwright from Chrome.
- * Does NOT quit Chrome — so the profile (and a later re-attach) stay available.
- */
-export async function closeWallapopBrowser(): Promise<void> {
-  const current = handle;
-  handle = null;
-  if (!current) return;
-  try {
-    if (current.ownedPage) {
-      await current.page.close().catch(() => {});
-    }
-    // connectOverCDP: close() disconnects automation, Chrome keeps running.
-    await current.browser.close();
-  } catch (error) {
-    log("warn", "wallapop_browser_close_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-  }
-}
-
-export function hasOpenWallapopBrowser(): boolean {
-  return handle != null;
-}
-
-/**
- * Full Wallapop logout in the persistent Chrome profile (cookies + /logout).
- * Does not quit Chrome. If CDP is down, returns without throwing (CRM still disconnects).
- */
 export async function logoutWallapopInBrowser(): Promise<void> {
-  try {
-    if (!handle) {
-      handle = await connectCdpHandle();
-      log("info", "wallapop_logout_attached_cdp", { cdpUrl: CDP_URL });
+  await runWithBrowserBusy("logout", async () => {
+    try {
+      let handle = getWallapopHandle()
+      if (!handle) {
+        handle = await connectCdpHandle()
+        setWallapopHandle(handle)
+        log("info", "wallapop_logout_attached_cdp", { cdpUrl: CDP_URL })
+      }
+
+      const { context, page } = handle
+      await context.clearCookies()
+
+      await page
+        .goto("https://es.wallapop.com/logout", {
+          waitUntil: "domcontentloaded",
+          timeout: NAV_TIMEOUT_MS,
+        })
+        .catch(() => {})
+
+      await page
+        .goto(LOGIN_URL, {
+          waitUntil: "domcontentloaded",
+          timeout: NAV_TIMEOUT_MS,
+        })
+        .catch(() => {})
+
+      log("info", "wallapop_logout_done", { url: page.url() })
+    } catch (error) {
+      log("warn", "wallapop_logout_failed", {
+        message: error instanceof Error ? error.message : String(error),
+      })
+    } finally {
+      await closeWallapopBrowser()
     }
-
-    const { context, page } = handle;
-    await context.clearCookies();
-
-    await page
-      .goto("https://es.wallapop.com/logout", {
-        waitUntil: "domcontentloaded",
-        timeout: NAV_TIMEOUT_MS,
-      })
-      .catch(() => {});
-
-    await page
-      .goto(LOGIN_URL, {
-        waitUntil: "domcontentloaded",
-        timeout: NAV_TIMEOUT_MS,
-      })
-      .catch(() => {});
-
-    log("info", "wallapop_logout_done", { url: page.url() });
-  } catch (error) {
-    log("warn", "wallapop_logout_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-  } finally {
-    await closeWallapopBrowser();
-  }
+  })
 }
 
-async function connectCdpHandle(): Promise<BrowserHandle> {
-  const browser = await chromium.connectOverCDP(CDP_URL);
-  const context = browser.contexts()[0] ?? (await browser.newContext());
-  const pages = context.pages();
-  const preferred =
-    pages.find((p) => {
-      const url = p.url().toLowerCase();
+export type ReconcileBrowserState = "REQUIRES_2FA" | "ACTIVE" | "NONE"
+
+/**
+ * After a CDP handle exists: pick MFA/logged-in page and classify.
+ * If no Wallapop tab (New Tab etc.), navigate to /wall first so cookies/session can be detected.
+ * On NONE closes the browser handle (same as prior reconcile).
+ */
+async function detectReconcileStateFromHandle(): Promise<ReconcileBrowserState> {
+  const handle = getWallapopHandle()
+  if (!handle) return "NONE"
+
+  const siblings = handle.context.pages()
+  const mfaPage =
+    siblings.find((p) => {
+      const url = p.url().toLowerCase()
       return (
         url.includes("accounts.wallapop.com") || url.includes("login-actions")
-      );
-    }) ??
-    pages.find((p) => p.url().toLowerCase().includes("wallapop.com")) ??
-    pages[0];
-  const ownedPage = !preferred;
-  const page = preferred ?? (await context.newPage());
-  page.setDefaultTimeout(ACTION_TIMEOUT_MS);
-  return { browser, context, page, ownedPage };
+      )
+    }) ?? null
+  let activePage = mfaPage ?? handle.page
+  if (mfaPage && mfaPage !== handle.page) {
+    setWallapopHandle({ ...handle, page: mfaPage, ownedPage: false })
+  }
+
+  const activeUrl = (() => {
+    try {
+      return activePage.url().toLowerCase()
+    } catch {
+      return ""
+    }
+  })()
+  const onWallapop =
+    activeUrl.includes("wallapop.com") ||
+    activeUrl.includes("login-actions")
+
+  if (!mfaPage && !onWallapop) {
+    log("info", "wallapop_browser_reconcile_probe_nav", {
+      from: activeUrl || "(unknown)",
+      to: PROBE_URL,
+    })
+    await activePage.goto(PROBE_URL, {
+      waitUntil: "domcontentloaded",
+      timeout: NAV_TIMEOUT_MS,
+    })
+    activePage = getWallapopHandle()?.page ?? activePage
+  }
+
+  if (await detect2FA(activePage)) {
+    log("info", "wallapop_browser_reconcile_mfa", { url: activePage.url() })
+    return "REQUIRES_2FA"
+  }
+  if (await detectLoggedIn(activePage)) {
+    log("info", "wallapop_browser_reconcile_active", {
+      url: activePage.url(),
+    })
+    return "ACTIVE"
+  }
+
+  await closeWallapopBrowser()
+  return "NONE"
 }
 
-export type ReconcileBrowserState = "REQUIRES_2FA" | "ACTIVE" | "NONE";
+async function reconcileWithAttach(
+  spawnIfNeeded: boolean,
+): Promise<ReconcileBrowserState> {
+  const busy = getBrowserBusy()
+  if (busy !== "idle" && busy !== "rehydrate") {
+    log("info", "wallapop_browser_reconcile_skipped_busy", {
+      busy,
+      spawnIfNeeded,
+    })
+    return "NONE"
+  }
 
-/**
- * Re-attach to an already-running Chrome (CDP only, no spawn) and infer
- * login/MFA state from the live DOM. Used after API restart so 2FA can continue.
- */
-export async function reconcileWallapopBrowserState(): Promise<ReconcileBrowserState> {
   try {
+    let handle = getWallapopHandle()
     if (!handle) {
-      handle = await connectCdpHandle();
-      log("info", "wallapop_browser_reconcile_attached", { cdpUrl: CDP_URL });
+      handle = spawnIfNeeded
+        ? await attachOrLaunch()
+        : await connectCdpHandle()
+      setWallapopHandle(handle)
+      log("info", "wallapop_browser_reconcile_attached", {
+        cdpUrl: CDP_URL,
+        spawned: spawnIfNeeded,
+      })
     }
-
-    const { page } = handle;
-
-    // Prefer MFA / accounts tab if several pages are open.
-    const siblings = handle.context.pages();
-    const mfaPage =
-      siblings.find((p) => {
-        const url = p.url().toLowerCase();
-        return (
-          url.includes("accounts.wallapop.com") || url.includes("login-actions")
-        );
-      }) ?? null;
-    const activePage = mfaPage ?? page;
-    if (mfaPage && mfaPage !== handle.page) {
-      handle = { ...handle, page: mfaPage, ownedPage: false };
-    }
-
-    if (await detect2FA(activePage)) {
-      log("info", "wallapop_browser_reconcile_mfa", { url: activePage.url() });
-      return "REQUIRES_2FA";
-    }
-    if (await detectLoggedIn(activePage)) {
-      log("info", "wallapop_browser_reconcile_active", {
-        url: activePage.url(),
-      });
-      return "ACTIVE";
-    }
-
-    await closeWallapopBrowser();
-    return "NONE";
+    return await detectReconcileStateFromHandle()
   } catch (error) {
     log("info", "wallapop_browser_reconcile_none", {
       message: error instanceof Error ? error.message : String(error),
-    });
-    handle = null;
-    return "NONE";
+      spawnIfNeeded,
+    })
+    setWallapopHandle(null)
+    return "NONE"
   }
 }
 
-/**
- * 1) Attach to Chrome already listening on CDP.
- * 2) If closed — start real Google Chrome ourselves (headed, profiles/account_1, :9222), then attach.
- */
-async function attachOrLaunch(
-  proxyInput?: string | null,
-): Promise<BrowserHandle> {
-  try {
-    const attached = await connectCdpHandle();
-    log("info", "wallapop_browser_attached_cdp", { cdpUrl: CDP_URL });
-    return attached;
-  } catch (error) {
-    log("info", "wallapop_cdp_not_ready_launching_chrome", {
-      cdpUrl: CDP_URL,
-      message: error instanceof Error ? error.message : String(error),
-    });
-  }
-
-  spawnRealChrome(proxyInput);
-  await waitForCdp(CDP_URL);
-  const attached = await connectCdpHandle();
-  log("info", "wallapop_browser_attached_after_spawn", { cdpUrl: CDP_URL });
-  return attached;
+/** Attach-only (no Chrome spawn). Used by status / publish gates. */
+export async function reconcileWallapopBrowserState(): Promise<ReconcileBrowserState> {
+  return reconcileWithAttach(false)
 }
 
 /**
- * Open Chrome (CDP attach or spawn profile), then run email login:
- * onboarding → «Iniciar sesión con email» → Keycloak fill → submit.
+ * Boot rehydrate: attach or spawn Chrome on CDP, then classify session.
+ * Do not use on every status poll — would relaunch Chrome when disconnected.
  */
+export async function reconcileWallapopBrowserStateSpawning(): Promise<ReconcileBrowserState> {
+  return reconcileWithAttach(true)
+}
+
 export async function loginWallapopInBrowser(input: {
-  email: string;
-  password: string;
-  proxy?: string | null;
+  email: string
+  password: string
+  proxy?: string | null
 }): Promise<BrowserLoginOutcome> {
-  await closeWallapopBrowser();
-  handle = await attachOrLaunch(input.proxy);
-  const { page } = handle;
+  return runWithBrowserBusy("login", async () => {
+    await closeWallapopBrowser()
+    const attached = await attachOrLaunch(input.proxy)
+    setWallapopHandle(attached)
+    const { page } = attached
 
-  try {
-    await page.goto(LOGIN_URL, {
-      waitUntil: "domcontentloaded",
-      timeout: NAV_TIMEOUT_MS,
-    });
-    await dismissCookies(page);
+    try {
+      await page.goto(LOGIN_URL, {
+        waitUntil: "domcontentloaded",
+        timeout: NAV_TIMEOUT_MS,
+      })
+      await dismissCookies(page)
 
-    if (await detectLoggedIn(page)) {
-      log("info", "wallapop_already_logged_in", { url: page.url() });
-      return "ACTIVE";
-    }
-
-    await clickEmailLoginEntry(page);
-    await dismissCookies(page);
-
-    const emailInput = await firstVisible(page, SELECTORS.email, 10_000);
-    if (!emailInput) {
-      throw new Error("No se encontró el campo de email (#username).");
-    }
-    await emailInput.fill(input.email);
-
-    const passwordInput = await firstVisible(page, SELECTORS.password, 10_000);
-    if (!passwordInput) {
-      throw new Error("No se encontró el campo de contraseña (#password).");
-    }
-    await passwordInput.fill(input.password);
-
-    const submit = await firstVisible(page, SELECTORS.submit, 10_000);
-    if (!submit) {
-      throw new Error(
-        'No se encontró el botón "Acceder a Wallapop" (#kc-login).',
-      );
-    }
-    await submit.click();
-
-    const outcome = await waitForLoginOutcome(page);
-    if (outcome === "FAILED") {
-      if (await detectRecaptcha(page)) {
-        throw new Error(
-          "Wallapop muestra reCAPTCHA. Resuélvelo manualmente en Chrome o reintenta más tarde.",
-        );
+      if (await detectLoggedIn(page)) {
+        log("info", "wallapop_already_logged_in", { url: page.url() })
+        return "ACTIVE"
       }
-      throw new Error(
-        "No se pudo completar el login de Wallapop. Revisa email, contraseña o el DOM.",
-      );
+
+      await clickEmailLoginEntry(page)
+      await dismissCookies(page)
+
+      const emailInput = await firstVisible(page, SELECTORS.email, 10_000)
+      if (!emailInput) {
+        throw new Error("No se encontró el campo de email (#username).")
+      }
+      await emailInput.fill(input.email)
+
+      const passwordInput = await firstVisible(page, SELECTORS.password, 10_000)
+      if (!passwordInput) {
+        throw new Error("No se encontró el campo de contraseña (#password).")
+      }
+      await passwordInput.fill(input.password)
+
+      const submit = await firstVisible(page, SELECTORS.submit, 10_000)
+      if (!submit) {
+        throw new Error(
+          'No se encontró el botón "Acceder a Wallapop" (#kc-login).',
+        )
+      }
+      await submit.click()
+
+      const outcome = await waitForLoginOutcome(page)
+      if (outcome === "FAILED") {
+        if (await detectRecaptcha(page)) {
+          throw new Error(
+            "Wallapop muestra reCAPTCHA. Resuélvelo manualmente en Chrome o reintenta más tarde.",
+          )
+        }
+        throw new Error(
+          "No se pudo completar el login de Wallapop. Revisa email, contraseña o el DOM.",
+        )
+      }
+      log("info", "wallapop_login_outcome", {
+        outcome,
+        url: page.url(),
+      })
+      return outcome
+    } catch (error) {
+      await closeWallapopBrowser()
+      throw error
     }
-    log("info", "wallapop_login_outcome", {
-      outcome,
-      url: page.url(),
-    });
-    return outcome;
-  } catch (error) {
-    await closeWallapopBrowser();
-    throw error;
-  }
+  })
 }
 
 export async function submitWallapop2faInBrowser(
   code: string,
 ): Promise<BrowserLoginOutcome> {
+  // Reconcile/attach while idle — reconcile skips when busy ≠ idle.
+  const busyAtStart = getBrowserBusy()
+  if (busyAtStart !== "idle") {
+    throw new BrowserBusyError(busyAtStart, "login")
+  }
+
+  let handle = getWallapopHandle()
   if (!handle?.page) {
-    const reconciled = await reconcileWallapopBrowserState();
+    const reconciled = await reconcileWallapopBrowserState()
+    handle = getWallapopHandle()
     if (reconciled !== "REQUIRES_2FA" || !handle?.page) {
-      throw new Error("No hay una sesión de autenticación activa.");
+      const busyAfter = getBrowserBusy()
+      if (busyAfter !== "idle") {
+        throw new BrowserBusyError(busyAfter, "login")
+      }
+      throw new Error("No hay una sesión de autenticación activa.")
     }
   }
 
-  let page = handle.page;
-
-  const otpInput = await firstVisible(page, SELECTORS.otp, 10_000);
-  if (!otpInput) {
-    throw new Error(
-      "No se encontró el campo del código 2FA (data-input-otp / mfa_code).",
-    );
-  }
-  const trimmed = code.trim();
-  await otpInput.fill(trimmed);
-
-  // Sync hidden field only while MFA DOM still exists — never block 20s after redirect.
-  try {
-    const hidden = page.locator('input[name="mfa_code"]').first();
-    if (await hidden.isVisible({ timeout: 800 }).catch(() => false)) {
-      await hidden.fill(trimmed, { timeout: 1_500 }).catch(() => {});
+  return runWithBrowserBusy("login", async () => {
+    handle = getWallapopHandle()
+    if (!handle?.page) {
+      throw new Error("No hay una sesión de autenticación activa.")
     }
-  } catch {
-    // page may have navigated away already
-  }
 
-  // Auto-submit / redirect may already have left MFA.
-  if (!(await detect2FA(page))) {
-    const outcome = await waitForLoginOutcome(page);
+    let page = handle.page
+    if (!(await detect2FA(page))) {
+      throw new Error(
+        "La pantalla 2FA ya no está disponible. Reintenta el login.",
+      )
+    }
+
+    const otpInput = await firstVisible(page, SELECTORS.otp, 10_000)
+    if (!otpInput) {
+      throw new Error(
+        "No se encontró el campo del código 2FA (data-input-otp / mfa_code).",
+      )
+    }
+    const trimmed = code.trim()
+    await otpInput.fill(trimmed)
+
+    try {
+      const hidden = page.locator('input[name="mfa_code"]').first()
+      if (await hidden.isVisible({ timeout: 800 }).catch(() => false)) {
+        await hidden.fill(trimmed, { timeout: 1_500 }).catch(() => {})
+      }
+    } catch {
+      // page may have navigated away already
+    }
+
+    if (!(await detect2FA(page))) {
+      const outcome = await waitForLoginOutcome(page)
+      if (outcome === "FAILED") {
+        throw new Error("No se pudo verificar el código 2FA.")
+      }
+      if (outcome === "REQUIRES_2FA") {
+        throw new Error("Código 2FA incorrecto o aún pendiente.")
+      }
+      return outcome
+    }
+
+    try {
+      const submit = await firstVisible(page, SELECTORS.otpSubmit, 5_000)
+      if (submit) {
+        await submit.click({ timeout: 5_000 })
+      } else {
+        await otpInput.press("Enter")
+      }
+    } catch {
+      // Navigation during click is fine — fall through to outcome.
+    }
+
+    handle = getWallapopHandle()
+    if (handle) {
+      page = preferLoggedInPage(handle.context.pages(), handle.page)
+      setWallapopHandle({ ...handle, page, ownedPage: false })
+    }
+
+    const outcome = await waitForLoginOutcome(page)
     if (outcome === "FAILED") {
-      throw new Error("No se pudo verificar el código 2FA.");
+      throw new Error("No se pudo verificar el código 2FA.")
     }
     if (outcome === "REQUIRES_2FA") {
-      throw new Error("Código 2FA incorrecto o aún pendiente.");
+      throw new Error("Código 2FA incorrecto o aún pendiente.")
     }
-    return outcome;
-  }
-
-  try {
-    const submit = await firstVisible(page, SELECTORS.otpSubmit, 5_000);
-    if (submit) {
-      await submit.click({ timeout: 5_000 });
-    } else {
-      await otpInput.press("Enter");
-    }
-  } catch {
-    // Navigation during click is fine — fall through to outcome.
-  }
-
-  if (handle) {
-    page = preferLoggedInPage(handle.context.pages(), handle.page);
-    handle = { ...handle, page, ownedPage: false };
-  }
-
-  const outcome = await waitForLoginOutcome(page);
-  if (outcome === "FAILED") {
-    throw new Error("No se pudo verificar el código 2FA.");
-  }
-  if (outcome === "REQUIRES_2FA") {
-    throw new Error("Código 2FA incorrecto o aún pendiente.");
-  }
-  return outcome;
+    return outcome
+  })
 }
