@@ -21,19 +21,27 @@ function generateFallbackSku(): string {
 }
 
 function payloadFromForm(formData: FormData, fallbackSku?: string) {
-  const weightRaw = String(formData.get("weight") ?? "").trim()
-  const priceRaw = String(formData.get("price") ?? "").trim()
   const conditionRaw = String(formData.get("condition") ?? "GOOD").trim()
   const rawSku = String(formData.get("sku") ?? "").trim()
+  const packageRaw = String(formData.get("shippingPackageSize") ?? "").trim()
+  const optionalNumber = (name: string) => {
+    const raw = String(formData.get(name) ?? "").trim()
+    return raw === "" ? null : Number(raw)
+  }
 
   return {
     sku: rawSku || fallbackSku || generateFallbackSku(),
     title: String(formData.get("title") ?? ""),
     description: String(formData.get("description") ?? ""),
-    price: priceRaw === "" ? Number.NaN : Number(priceRaw),
+    price: optionalNumber("price") ?? Number.NaN,
     categoryId: String(formData.get("categoryId") ?? ""),
     condition: conditionRaw as ProductCondition,
-    weight: weightRaw === "" ? null : Number(weightRaw),
+    weight: optionalNumber("weight"),
+    shippingPackageSize:
+      packageRaw === "STANDARD" || packageRaw === "BULKY" ? packageRaw : null,
+    widthCm: optionalNumber("widthCm"),
+    lengthCm: optionalNumber("lengthCm"),
+    heightCm: optionalNumber("heightCm"),
     images: [] as string[],
     status: String(formData.get("status") || "ACTIVE") as ProductStatus,
   }
@@ -97,6 +105,20 @@ export function OfflineEditProduct({
             condition: parsed.data.condition ?? current.conditionCode,
             weight:
               parsed.data.weight === undefined ? current.weight : parsed.data.weight,
+            shippingPackageSize:
+              parsed.data.shippingPackageSize === undefined
+                ? current.shippingPackageSize
+                : parsed.data.shippingPackageSize,
+            widthCm:
+              parsed.data.widthCm === undefined ? current.widthCm : parsed.data.widthCm,
+            lengthCm:
+              parsed.data.lengthCm === undefined
+                ? current.lengthCm
+                : parsed.data.lengthCm,
+            heightCm:
+              parsed.data.heightCm === undefined
+                ? current.heightCm
+                : parsed.data.heightCm,
             status: parsed.data.status ?? current.status,
             images: current.images,
           },

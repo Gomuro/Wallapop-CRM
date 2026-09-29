@@ -1,6 +1,8 @@
 import Image from "next/image"
 
 const UNOPTIMIZED_SRC = /^(data:|blob:)/i
+/** Relative `/uploads/…` or absolute API media (`http://localhost:4000/uploads/…`). */
+const UPLOAD_SRC = /\/uploads\//
 
 export const CATALOG_GRID_SIZES =
   "(max-width: 640px) 50vw, (max-width: 1024px) 25vw, 20vw"
@@ -20,7 +22,7 @@ export function ProductImage({
   sizes: string
   priority?: boolean
 }) {
-  const isUpload = src.startsWith("/uploads/")
+  const isUpload = UPLOAD_SRC.test(src)
   return (
     <Image
       src={src}

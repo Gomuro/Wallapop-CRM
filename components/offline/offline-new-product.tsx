@@ -21,19 +21,27 @@ function generateFallbackSku(): string {
 }
 
 function payloadFromForm(formData: FormData) {
-  const weightRaw = String(formData.get("weight") ?? "").trim()
-  const priceRaw = String(formData.get("price") ?? "").trim()
   const conditionRaw = String(formData.get("condition") ?? "GOOD").trim()
   const rawSku = String(formData.get("sku") ?? "").trim()
+  const packageRaw = String(formData.get("shippingPackageSize") ?? "").trim()
+  const optionalNumber = (name: string) => {
+    const raw = String(formData.get(name) ?? "").trim()
+    return raw === "" ? null : Number(raw)
+  }
 
   return {
     sku: rawSku || generateFallbackSku(),
     title: String(formData.get("title") ?? ""),
     description: String(formData.get("description") ?? ""),
-    price: priceRaw === "" ? Number.NaN : Number(priceRaw),
+    price: optionalNumber("price") ?? Number.NaN,
     categoryId: String(formData.get("categoryId") ?? ""),
     condition: conditionRaw as ProductCondition,
-    weight: weightRaw === "" ? null : Number(weightRaw),
+    weight: optionalNumber("weight"),
+    shippingPackageSize:
+      packageRaw === "STANDARD" || packageRaw === "BULKY" ? packageRaw : null,
+    widthCm: optionalNumber("widthCm"),
+    lengthCm: optionalNumber("lengthCm"),
+    heightCm: optionalNumber("heightCm"),
     images: [] as string[],
     status: String(formData.get("status") || "ACTIVE") as ProductStatus,
   }
@@ -87,6 +95,10 @@ export function OfflineNewProduct({
             categoryId: parsed.data.categoryId,
             condition: parsed.data.condition,
             weight: parsed.data.weight,
+            shippingPackageSize: parsed.data.shippingPackageSize,
+            widthCm: parsed.data.widthCm,
+            lengthCm: parsed.data.lengthCm,
+            heightCm: parsed.data.heightCm,
             status: parsed.data.status,
           },
           categories,

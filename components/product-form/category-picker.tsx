@@ -217,7 +217,11 @@ function RemoteCategoryPicker({
 
     if (!leafId) {
       lastInternalValueRef.current = ""
-      if (!initialRoots || initialRoots.length === 0) {
+      // Only bootstrap roots when nothing is loaded yet. Resetting on every
+      // empty value breaks mid-selection (parent chosen, leaf pending).
+      const needsRootBootstrap =
+        levels.length === 0 && (!initialRoots || initialRoots.length === 0)
+      if (needsRootBootstrap) {
         void fetchChildren(null)
           .then((fetched) => {
             if (!cancelled) setLevels([fetched])

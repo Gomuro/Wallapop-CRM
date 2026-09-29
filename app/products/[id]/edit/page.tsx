@@ -10,7 +10,8 @@ import { ProductForm } from "@/components/product-form/product-form"
 import { Button } from "@/components/ui/button"
 import { apiUnavailableReason } from "@/lib/api/availability"
 import { isApiConfigured } from "@/lib/api/config"
-import { getProduct } from "@/lib/inventory/store"
+import { getProduct, listCategoryRoots } from "@/lib/inventory/store"
+import type { ApiCategory } from "@/lib/api/types"
 import { typeScreen } from "@/lib/ui/type"
 
 export default async function EditProductPage({
@@ -38,6 +39,16 @@ export default async function EditProductPage({
   }
   if (!product) notFound()
 
+  let initialRoots: ApiCategory[]
+  try {
+    initialRoots = await listCategoryRoots()
+  } catch (error) {
+    if (apiUnavailableReason(error) === "config") {
+      return <ApiUnavailable reason="config" />
+    }
+    return <ProductLoadError />
+  }
+
   const action = updateProductAction.bind(null, product.id)
 
   return (
@@ -59,6 +70,7 @@ export default async function EditProductPage({
         <ProductForm
           key={product.id}
           product={product}
+          initialRoots={initialRoots}
           action={action}
           submitLabel="Guardar"
         />

@@ -29,9 +29,10 @@ import { Textarea } from "@/components/ui/textarea"
 import type { ProductActionState } from "@/app/actions/products"
 import { statusLabel } from "@/lib/inventory/format"
 import { PRODUCT_CONDITION_OPTIONS } from "@/lib/inventory/conditions"
+import { SHIPPING_PACKAGE_SIZE_OPTIONS } from "@/lib/inventory/package-size"
 import type { InventoryProduct } from "@/lib/inventory/types"
 import type { ApiCategory } from "@/lib/api/types"
-import type { ProductCondition, ProductStatus } from "@/lib/validations"
+import type { ProductCondition, ProductStatus, ShippingPackageSize } from "@/lib/validations"
 import { typeSection } from "@/lib/ui/type"
 import {
   clearAllDraftData,
@@ -74,6 +75,8 @@ export function ProductForm({
   const [condition, setCondition] = useState<ProductCondition>(
     product?.conditionCode ?? "GOOD",
   )
+  const [shippingPackageSize, setShippingPackageSize] =
+    useState<ShippingPackageSize>(product?.shippingPackageSize ?? "STANDARD")
   const [status, setStatus] = useState<ProductStatus>(product?.status ?? "ACTIVE")
 
   const resetFormState = useCallback(() => {
@@ -82,6 +85,7 @@ export function ProductForm({
     setDraft(null)
     setCategoryId("")
     setCondition("GOOD")
+    setShippingPackageSize("STANDARD")
     setStatus("ACTIVE")
     setResetKey((prev) => prev + 1)
     isSubmittingRef.current = false
@@ -140,6 +144,12 @@ export function ProductForm({
     setDraft(saved)
     if (saved?.categoryId) setCategoryId(saved.categoryId)
     if (saved?.condition) setCondition(saved.condition as ProductCondition)
+    if (
+      saved?.shippingPackageSize === "STANDARD" ||
+      saved?.shippingPackageSize === "BULKY"
+    ) {
+      setShippingPackageSize(saved.shippingPackageSize)
+    }
     if (saved?.status) setStatus(saved.status as ProductStatus)
     if (!saved) {
       void clearDraftPhotos()
@@ -157,11 +167,15 @@ export function ProductForm({
       description: current?.description ?? "",
       price: current?.price ?? "",
       weight: current?.weight ?? "",
+      shippingPackageSize: shippingPackageSize,
+      widthCm: current?.widthCm ?? "",
+      lengthCm: current?.lengthCm ?? "",
+      heightCm: current?.heightCm ?? "",
       categoryId,
       condition,
       status,
     })
-  }, [categoryId, condition, draftReady, isNew, restoreDraft, status])
+  }, [categoryId, condition, draftReady, isNew, restoreDraft, shippingPackageSize, status])
 
   useEffect(() => {
     if (!state.error && !state.fieldErrors) return
@@ -182,6 +196,10 @@ export function ProductForm({
       description: String(formData.get("description") ?? ""),
       price: String(formData.get("price") ?? ""),
       weight: String(formData.get("weight") ?? ""),
+      shippingPackageSize,
+      widthCm: String(formData.get("widthCm") ?? ""),
+      lengthCm: String(formData.get("lengthCm") ?? ""),
+      heightCm: String(formData.get("heightCm") ?? ""),
       categoryId,
       condition,
       status,
@@ -200,6 +218,10 @@ export function ProductForm({
             description: "",
             price: "",
             weight: "",
+            shippingPackageSize,
+            widthCm: "",
+            lengthCm: "",
+            heightCm: "",
             categoryId,
             condition,
             status,
@@ -208,7 +230,7 @@ export function ProductForm({
         }
       }
     },
-    [categoryId, condition, isNew, restoreDraft, status],
+    [categoryId, condition, isNew, restoreDraft, shippingPackageSize, status],
   )
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
@@ -328,6 +350,87 @@ export function ProductForm({
             aria-describedby={state.fieldErrors?.weight ? "weight-error" : undefined}
           />
         </Field>
+        <Field
+          label="Tamaño del paquete"
+          htmlFor="shippingPackageSize"
+          error={state.fieldErrors?.shippingPackageSize}
+        >
+          <Select
+            name="shippingPackageSize"
+            value={shippingPackageSize}
+            onValueChange={(value) =>
+              value && setShippingPackageSize(value as ShippingPackageSize)
+            }
+            items={Object.fromEntries(
+              SHIPPING_PACKAGE_SIZE_OPTIONS.map((item) => [item.value, item.label]),
+            )}
+          >
+            <SelectTrigger
+              id="shippingPackageSize"
+              className="h-11 w-full data-[size=default]:h-11"
+              aria-invalid={Boolean(state.fieldErrors?.shippingPackageSize)}
+            >
+              <SelectValue />
+            </SelectTrigger>
+            <SelectContent>
+              {SHIPPING_PACKAGE_SIZE_OPTIONS.map((item) => (
+                <SelectItem key={item.value} value={item.value}>
+                  {item.label}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </Field>
+        <div id="widthCm" tabIndex={-1} className="scroll-mt-28 outline-none">
+          <p className="text-sm font-medium">Dimensiones del producto (en cm)</p>
+          <p className="mt-1 text-xs text-muted-foreground">
+            Las opciones de envío pueden variar según el tamaño del artículo.
+          </p>
+          <div className="mt-2 grid grid-cols-3 gap-2">
+            <Field label="Ancho" htmlFor="widthCmInput" error={state.fieldErrors?.widthCm}>
+              <Input
+                id="widthCmInput"
+                name="widthCm"
+                type="number"
+                min="1"
+                max="999"
+                step="1"
+                inputMode="numeric"
+                defaultValue={
+                  product?.widthCm ?? draft?.widthCm ?? ""
+                }
+                className="h-11 tabular-nums"
+                aria-invalid={Boolean(state.fieldErrors?.widthCm)}
+              />
+            </Field>
+            <Field label="Fondo" htmlFor="lengthCm">
+              <Input
+                id="lengthCm"
+                name="lengthCm"
+                type="number"
+                min="1"
+                max="999"
+                step="1"
+                inputMode="numeric"
+                defaultValue={product?.lengthCm ?? draft?.lengthCm ?? ""}
+                className="h-11 tabular-nums"
+              />
+            </Field>
+            <Field label="Alto" htmlFor="heightCm">
+              <Input
+                id="heightCm"
+                name="heightCm"
+                type="number"
+                min="1"
+                max="999"
+                step="1"
+                inputMode="numeric"
+                defaultValue={product?.heightCm ?? draft?.heightCm ?? ""}
+                className="h-11 tabular-nums"
+              />
+            </Field>
+          </div>
+        </div>
         <div id="categoryId" tabIndex={-1} className="scroll-mt-28 outline-none">
           <CategoryPicker
             categories={categories}
