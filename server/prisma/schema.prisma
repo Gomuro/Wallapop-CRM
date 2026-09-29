@@ -33,6 +33,11 @@ enum ProductCondition {
   HAS_GIVEN_IT_ALL
 }
 
+enum ShippingPackageSize {
+  STANDARD
+  BULKY
+}
+
 model User {
   id           String   @id @default(cuid())
   email        String   @unique
@@ -102,6 +107,10 @@ model Product {
   condition       ProductCondition
   brand           String?
   weightKg        Decimal?          @map("weight_kg") @db.Decimal(8, 3)
+  shippingPackageSize ShippingPackageSize? @map("shipping_package_size")
+  widthCm         Decimal?          @map("width_cm") @db.Decimal(8, 2)
+  lengthCm        Decimal?          @map("length_cm") @db.Decimal(8, 2)
+  heightCm        Decimal?          @map("height_cm") @db.Decimal(8, 2)
   status          ProductStatus     @default(ACTIVE)
   typeAttributes  Json              @default("{}") @map("type_attributes")
   soldAt          DateTime?         @map("sold_at")
