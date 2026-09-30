@@ -10,6 +10,7 @@ import {
   conditionFromFormValue,
   conditionLabel,
 } from "@/lib/inventory/conditions"
+import { isShippingPublishReady } from "@/lib/inventory/shipping-for-publish"
 import type {
   InventoryListing,
   InventoryProduct,
@@ -159,6 +160,7 @@ export function mapListItemToInventory(row: ApiProductListItem): InventoryProduc
         : listing
           ? listing.status === "ACTIVE"
           : Boolean(row.listingActive),
+    shippingPublishReady: row.shippingPublishReady === true,
   }
 }
 
@@ -203,5 +205,11 @@ export function mapProductToInventory(
     updatedAt: asString(product?.updatedAt),
     listing,
     listingActive: listing?.status === "ACTIVE",
+    shippingPublishReady: isShippingPublishReady({
+      weightKg: asNullableNumber(product?.weightKg),
+      widthCm: asNullableNumber(product?.widthCm),
+      lengthCm: asNullableNumber(product?.lengthCm),
+      heightCm: asNullableNumber(product?.heightCm),
+    }),
   }
 }

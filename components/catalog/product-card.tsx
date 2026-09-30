@@ -8,9 +8,13 @@ import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { ListingStatusBadge } from "@/components/catalog/listing-status-badge"
 import { formatEuro, formatListingPostedAt, statusLabel } from "@/lib/inventory/format"
+import {
+  SHIPPING_INCOMPLETE_BADGE,
+  showShippingIncompleteBadge,
+} from "@/lib/inventory/shipping-for-publish"
 import type { InventoryProduct } from "@/lib/inventory/types"
 import type { ProductStatus } from "@/lib/validations"
-import { typeMeta, typePrice } from "@/lib/ui/type"
+import { typePrice } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
 
 function statusVariant(status: ProductStatus) {
@@ -45,6 +49,24 @@ function OverlayStatusBadge({
         {statusLabel(status)}
       </Badge>
     </span>
+  )
+}
+
+function ShippingIncompleteBadge({ product }: { product: InventoryProduct }) {
+  if (
+    !showShippingIncompleteBadge({
+      status: product.status,
+      listing: product.listing,
+      listingActive: product.listingActive,
+      shippingPublishReady: product.shippingPublishReady,
+    })
+  ) {
+    return null
+  }
+  return (
+    <Badge className="max-w-full shrink truncate bg-primary text-primary-foreground shadow-none">
+      {SHIPPING_INCOMPLETE_BADGE}
+    </Badge>
   )
 }
 
@@ -103,6 +125,7 @@ export function ProductCard({
             </div>
             <div className="mt-2 flex flex-wrap gap-1">
               <ListingStatusBadge product={product} />
+              <ShippingIncompleteBadge product={product} />
             </div>
             {product.listing?.lastPostedAt ? (
               <p className="mt-1 text-xs text-muted-foreground">
@@ -145,6 +168,7 @@ export function ProductCard({
           <p className="line-clamp-2 min-h-10 text-sm leading-snug">{product.title}</p>
           <div className="mt-auto flex min-h-5 flex-wrap content-start gap-1">
             <ListingStatusBadge product={product} />
+            <ShippingIncompleteBadge product={product} />
           </div>
           {product.listing?.lastPostedAt ? (
             <p className="text-xs text-muted-foreground">

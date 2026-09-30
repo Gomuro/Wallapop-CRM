@@ -141,6 +141,8 @@ export function apiErrorMessage(code: string, fallback: string) {
       return fallback
     case "PUBLISH_IN_PROGRESS":
       return "Se está publicando. Márcalo como publicado o espera a que termine."
+    case "SHIPPING_NOT_READY":
+      return fallback
     default:
       return fallback
   }

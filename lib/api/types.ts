@@ -73,6 +73,7 @@ export type ApiProductListItem = {
   listingStatus: ListingStatusRead | null
   listing?: ApiListing | null
   lastPostedAt: string | null
+  shippingPublishReady: boolean
 }
 
 export type ApiProductListResponse = {
@@ -106,6 +107,14 @@ export type ApiAutopostStatus = {
   lastPublication: { at: string; title: string } | null
   /** Next in-process queue check (ISO). Null when autopost is stopped. */
   nextTickAt: string | null
+  recentSkips: Array<{
+    at: string
+    productId: string
+    sku: string
+    title: string
+    code: string
+    message: string
+  }>
 }
 
 export type ApiDefaultAccountResponse = {

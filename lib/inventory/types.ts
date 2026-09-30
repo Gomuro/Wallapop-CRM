@@ -43,6 +43,7 @@ export type InventoryProduct = {
   listing: InventoryListing | null
   /** From GET /products list when full listing is omitted. */
   listingActive?: boolean
+  shippingPublishReady: boolean
 }
 
 export type ProductListQuery = {

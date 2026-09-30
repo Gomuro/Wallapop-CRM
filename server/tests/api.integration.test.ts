@@ -119,6 +119,7 @@ describe("API v1 integration (Express + Postgres)", () => {
         res.body.autopost.nextTickAt === null ||
           typeof res.body.autopost.nextTickAt === "string",
       ).toBe(true)
+      expect(Array.isArray(res.body.autopost.recentSkips)).toBe(true)
     })
 
     it("PATCH stores the interval and GET reflects source account", async () => {
@@ -357,6 +358,44 @@ describe("API v1 integration (Express + Postgres)", () => {
         .send({ dryRun: true })
       expect(res.status).toBe(409)
       expect(errorCode(res.body)).toBe("NOT_PUBLISHABLE")
+    })
+  })
+
+  describe("publish shipping gate", () => {
+    it("live-path HTTP refuses missing peso/medidas before claim", async () => {
+      const categoryId = await findLeafCategoryId(agent)
+      const created = await agent.post("/api/v1/products").send({
+        sku: `API-SHIP-${Date.now()}`,
+        title: "API shipping incomplete",
+        description: "Vitest SHIPPING_NOT_READY",
+        price: 4.5,
+        currency: "EUR",
+        categoryId,
+        condition: "GOOD",
+      })
+      expect(created.status).toBe(201)
+      const id = created.body.product?.id as string
+      expect(id).toBeTruthy()
+
+      const png = await tinyPngBuffer()
+      const photo = await agent
+        .post(`/api/v1/products/${id}/images`)
+        .attach("files", png, { filename: "test.png", contentType: "image/png" })
+      expect(photo.status).toBe(201)
+
+      const prev = process.env.WALLAPOP_PUBLISH_DRY_RUN
+      process.env.WALLAPOP_PUBLISH_DRY_RUN = "false"
+      try {
+        const res = await agent.post(`/api/v1/products/${id}/publish`)
+        expect(res.status).toBe(400)
+        expect(errorCode(res.body)).toBe("SHIPPING_NOT_READY")
+        const listing = await agent.get(`/api/v1/products/${id}/listing`)
+        expect(listing.body.listing?.status).toBe("READY_TO_POST")
+      } finally {
+        if (prev === undefined) delete process.env.WALLAPOP_PUBLISH_DRY_RUN
+        else process.env.WALLAPOP_PUBLISH_DRY_RUN = prev
+        await agent.delete(`/api/v1/products/${id}`)
+      }
     })
   })
 

@@ -111,6 +111,7 @@ export default async function ProductDetailPage({
           <ListingDetailSection
             listing={product.listing}
             listingActive={product.listingActive}
+            shippingIncomplete={!product.shippingPublishReady}
           />
           {process.env.NODE_ENV === "development" ? (
             <TestPublishButton

@@ -10,12 +10,17 @@ import {
   isWallapopAutopostEnabled,
   getNextAutopostTickAt,
   isWallapopAutopostLoopScheduling,
+  pickNextAutopostListing,
   readAutopostIntervalMs,
   resolveAutopostInterval,
   resetWallapopAutopostLoopForTests,
   runAutopostTick,
   startWallapopAutopostLoop,
 } from "../src/lib/wallapop-autopost"
+import {
+  getRecentAutopostSkips,
+  resetAutopostRecentSkipsForTests,
+} from "../src/lib/autopost-recent-skips"
 import {
   AUTOPOST_INTERVAL_RANGE_MESSAGE,
   autopostIntervalPatchSchema,
@@ -175,18 +180,59 @@ describe("autopostDelayWithJitter", () => {
   })
 })
 
-describe("autopostEligibleListingWhere", () => {
-  it("picks oldest READY_TO_POST on the account with an active product and images", () => {
-    expect(autopostEligibleListingWhere("acc-1")).toEqual({
-      accountId: "acc-1",
-      status: "READY_TO_POST",
-      externalUrl: null,
-      product: {
-        status: "ACTIVE",
-        images: { some: {} },
+describe("pickNextAutopostListing", () => {
+  afterEach(() => {
+    resetAutopostRecentSkipsForTests()
+  })
+
+  it("skips listings without peso/medidas and returns the next ready one", async () => {
+    const prisma = {
+      productListing: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "l-bad",
+            productId: "p-bad",
+            createdAt: new Date("2026-01-01"),
+            product: {
+              sku: "SKU-BAD",
+              title: "Caja sin medidas",
+              weightKg: null,
+              widthCm: null,
+              lengthCm: null,
+              heightCm: null,
+            },
+          },
+          {
+            id: "l-good",
+            productId: "p-good",
+            createdAt: new Date("2026-01-02"),
+            product: {
+              sku: "SKU-GOOD",
+              title: "Caja lista",
+              weightKg: 1.2,
+              widthCm: 10,
+              lengthCm: 20,
+              heightCm: 15,
+            },
+          },
+        ]),
       },
+    }
+
+    const picked = await pickNextAutopostListing(
+      prisma as never,
+      "acc-1",
+    )
+    expect(picked.listing).toMatchObject({
+      id: "l-good",
+      productId: "p-good",
     })
-    expect(AUTOPOST_PICK_ORDER_BY).toEqual({ createdAt: "asc" })
+    expect(picked.skipped).toBe(1)
+    expect(getRecentAutopostSkips()[0]).toMatchObject({
+      productId: "p-bad",
+      sku: "SKU-BAD",
+      code: "SHIPPING_NOT_READY",
+    })
   })
 })
 

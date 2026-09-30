@@ -10,6 +10,7 @@ import {
   warehouseProductStatusPatchSchema,
   warehouseProductUpdateSchema,
 } from "../../../lib/validations/product"
+import { isShippingPublishReady } from "../../../lib/inventory/shipping-for-publish"
 import { deleteLocalImage } from "../../../lib/uploads/delete-local-image"
 import {
   DEFAULT_ACCOUNT_MISSING_MESSAGE,
@@ -30,7 +31,7 @@ const productListInclude = {
     where: { account: { isDefault: true } },
     orderBy: { createdAt: "asc" as const },
     take: 1,
-    select: { status: true, lastPostedAt: true },
+    select: { status: true, lastPostedAt: true, externalUrl: true },
   },
 }
 
@@ -180,8 +181,16 @@ function toProductListItemJson(row: {
   status: string
   categoryId: string
   updatedAt: Date
+  weightKg: { toString(): string } | null
+  widthCm: { toString(): string } | null
+  lengthCm: { toString(): string } | null
+  heightCm: { toString(): string } | null
   images: Array<{ url: string }>
-  listings: Array<{ status: string; lastPostedAt: Date | null }>
+  listings: Array<{
+    status: string
+    lastPostedAt: Date | null
+    externalUrl: string | null
+  }>
 }) {
   const listingStatus = row.listings[0]?.status ?? null
   return {
@@ -197,6 +206,12 @@ function toProductListItemJson(row: {
     listingStatus,
     listingActive: listingStatus === "ACTIVE",
     lastPostedAt: row.listings[0]?.lastPostedAt?.toISOString() ?? null,
+    shippingPublishReady: isShippingPublishReady({
+      weightKg: decimalJson(row.weightKg),
+      widthCm: decimalJson(row.widthCm),
+      lengthCm: decimalJson(row.lengthCm),
+      heightCm: decimalJson(row.heightCm),
+    }),
   }
 }
 

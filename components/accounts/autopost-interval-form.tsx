@@ -279,6 +279,28 @@ export function AutopostIntervalForm() {
         </p>
       ) : null}
 
+      {autopost?.recentSkips && autopost.recentSkips.length > 0 ? (
+        <div className="mb-4 rounded-lg border border-border px-3 py-2">
+          <p className="text-sm font-medium">Omitidos (envío)</p>
+          <p className="mt-0.5 text-xs text-muted-foreground">
+            Sin peso o medidas: no se publican y la cola sigue con el siguiente.
+          </p>
+          <ul className="mt-2 space-y-1.5">
+            {autopost.recentSkips.slice(0, 8).map((skip) => (
+              <li key={`${skip.productId}-${skip.at}`} className="text-sm">
+                <span className="font-medium">{skip.title}</span>
+                {skip.sku ? (
+                  <span className="text-muted-foreground"> · {skip.sku}</span>
+                ) : null}
+                <span className="mt-0.5 block text-xs text-muted-foreground">
+                  {skip.message}
+                </span>
+              </li>
+            ))}
+          </ul>
+        </div>
+      ) : null}
+
       {error ? (
         <p
           className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"

@@ -4,6 +4,15 @@ import {
   AUTOPOST_INTERVAL_MS_MAX,
   AUTOPOST_INTERVAL_MS_MIN,
 } from "../../../lib/validations/account"
+import {
+  isShippingPublishReady,
+  SHIPPING_NOT_READY_CODE,
+  SHIPPING_NOT_READY_MESSAGE,
+} from "../../../lib/inventory/shipping-for-publish"
+import {
+  getRecentAutopostSkips,
+  recordAutopostSkip,
+} from "./autopost-recent-skips"
 import { findDefaultAccountId } from "./default-account"
 import { getPrisma } from "./db"
 import { log, serializeError } from "./log"
@@ -114,6 +123,7 @@ export function toAutopostStatusJson(
     enabled: boolean
     lastPublication: { at: string; title: string } | null
     nextTickAt: string | null
+    recentSkips?: ReturnType<typeof getRecentAutopostSkips>
   },
 ) {
   return {
@@ -124,6 +134,7 @@ export function toAutopostStatusJson(
     livePublish: isAutopostLivePublishEnabled(),
     lastPublication: extras.lastPublication,
     nextTickAt: extras.nextTickAt,
+    recentSkips: extras.recentSkips ?? getRecentAutopostSkips(),
   }
 }
 
@@ -158,6 +169,7 @@ export async function loadAutopostStatus(prisma: PrismaClient) {
         ? { at: last.lastPostedAt.toISOString(), title: last.product.title }
         : null,
     nextTickAt: enabled ? getNextAutopostTickAt() : null,
+    recentSkips: getRecentAutopostSkips(),
   })
 }
 
@@ -207,6 +219,16 @@ export function autopostEligibleListingWhere(
 /** Oldest listing first (FIFO). `createdAt`, not `updatedAt` — edits must not jump the queue. */
 export const AUTOPOST_PICK_ORDER_BY = { createdAt: "asc" } as const
 
+export const AUTOPOST_PICK_BATCH = 30
+
+function decimalToNumberOrNull(
+  value: { toString(): string } | number | null | undefined,
+): number | null {
+  if (value == null) return null
+  const n = typeof value === "number" ? value : Number(value.toString())
+  return Number.isFinite(n) ? n : null
+}
+
 export async function findNextAutopostListing(
   prisma: PrismaClient,
   accountId: string,
@@ -216,6 +238,75 @@ export async function findNextAutopostListing(
     orderBy: AUTOPOST_PICK_ORDER_BY,
     select: { id: true, productId: true, createdAt: true },
   })
+}
+
+export async function pickNextAutopostListing(
+  prisma: PrismaClient,
+  accountId: string,
+): Promise<{
+  listing: { id: string; productId: string; createdAt: Date } | null
+  scanned: number
+  skipped: number
+}> {
+  const candidates = await prisma.productListing.findMany({
+    where: autopostEligibleListingWhere(accountId),
+    orderBy: AUTOPOST_PICK_ORDER_BY,
+    take: AUTOPOST_PICK_BATCH,
+    select: {
+      id: true,
+      productId: true,
+      createdAt: true,
+      product: {
+        select: {
+          sku: true,
+          title: true,
+          weightKg: true,
+          widthCm: true,
+          lengthCm: true,
+          heightCm: true,
+        },
+      },
+    },
+  })
+
+  let skipped = 0
+  for (const listing of candidates) {
+    const product = listing.product
+    const ready = isShippingPublishReady({
+      weightKg: decimalToNumberOrNull(product.weightKg),
+      widthCm: decimalToNumberOrNull(product.widthCm),
+      lengthCm: decimalToNumberOrNull(product.lengthCm),
+      heightCm: decimalToNumberOrNull(product.heightCm),
+    })
+    if (ready) {
+      return {
+        listing: {
+          id: listing.id,
+          productId: listing.productId,
+          createdAt: listing.createdAt,
+        },
+        scanned: candidates.length,
+        skipped,
+      }
+    }
+
+    skipped += 1
+    recordAutopostSkip({
+      productId: listing.productId,
+      sku: product.sku,
+      title: product.title,
+      code: SHIPPING_NOT_READY_CODE,
+      message: SHIPPING_NOT_READY_MESSAGE,
+    })
+    log("info", "wallapop_autopost_skip_shipping", {
+      listingId: listing.id,
+      productId: listing.productId,
+      sku: product.sku,
+      code: SHIPPING_NOT_READY_CODE,
+    })
+  }
+
+  return { listing: null, scanned: candidates.length, skipped }
 }
 
 /** True only when timers are scheduled. */
@@ -290,13 +381,13 @@ export async function runAutopostTick(
     return
   }
 
-  if (!(await isDefaultAccountAutopostEnabled(prisma))) {
-    log("info", "wallapop_autopost_idle_until_started")
+  if (!isAutopostLivePublishEnabled()) {
+    log("info", "wallapop_autopost_idle_until_live")
     return
   }
 
-  if (!isAutopostLivePublishEnabled()) {
-    log("info", "wallapop_autopost_idle_until_live")
+  if (!(await isDefaultAccountAutopostEnabled(prisma))) {
+    log("info", "wallapop_autopost_idle_until_started")
     return
   }
 
@@ -320,11 +411,20 @@ export async function runAutopostTick(
     return
   }
 
-  const listing = await findNextAutopostListing(prisma, accountId)
-  if (!listing) {
-    log("info", "wallapop_autopost_idle")
+  const picked = await pickNextAutopostListing(prisma, accountId)
+  if (!picked.listing) {
+    if (picked.skipped > 0) {
+      log("info", "wallapop_autopost_idle_no_shipping_ready", {
+        scanned: picked.scanned,
+        skipped: picked.skipped,
+      })
+    } else {
+      log("info", "wallapop_autopost_idle")
+    }
     return
   }
+
+  const listing = picked.listing
 
   log("info", "wallapop_autopost_pick", {
     listingId: listing.id,

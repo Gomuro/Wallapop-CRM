@@ -2,15 +2,18 @@ import { ExternalLinkIcon } from "lucide-react"
 
 import { ListingStatusBadge } from "@/components/catalog/listing-status-badge"
 import { formatListingPostedAt } from "@/lib/inventory/format"
+import { SHIPPING_NOT_READY_MESSAGE } from "@/lib/inventory/shipping-for-publish"
 import type { InventoryListing } from "@/lib/inventory/types"
 import { typeSection } from "@/lib/ui/type"
 
 export function ListingDetailSection({
   listing,
   listingActive,
+  shippingIncomplete = false,
 }: {
   listing: InventoryListing | null
   listingActive?: boolean
+  shippingIncomplete?: boolean
 }) {
   return (
     <div>
@@ -44,6 +47,11 @@ export function ListingDetailSection({
           {listing.lastPostedAt ? (
             <p className="text-xs text-muted-foreground">
               Publicado {formatListingPostedAt(listing.lastPostedAt)}
+            </p>
+          ) : null}
+          {shippingIncomplete ? (
+            <p className="text-sm text-muted-foreground" role="status">
+              {SHIPPING_NOT_READY_MESSAGE}
             </p>
           ) : null}
         </div>

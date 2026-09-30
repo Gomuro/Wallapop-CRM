@@ -1,5 +1,6 @@
 import type { ApiCategory } from "@/lib/api/types"
 import { conditionLabel } from "@/lib/inventory/conditions"
+import { isShippingPublishReady } from "@/lib/inventory/shipping-for-publish"
 import type { InventoryProduct, StatusCounts } from "@/lib/inventory/types"
 import type { ProductStatus } from "@/lib/validations"
 
@@ -302,6 +303,12 @@ export function upsertOfflineProduct(
     updatedAt: now,
     listing: prev?.listing ?? null,
     listingActive: prev?.listingActive,
+    shippingPublishReady: isShippingPublishReady({
+      weightKg: next.weight,
+      widthCm: next.widthCm,
+      lengthCm: next.lengthCm,
+      heightCm: next.heightCm,
+    }),
   }
 
   writeOfflineProducts([next, ...products.filter((product) => product.id !== id)])

@@ -21,6 +21,7 @@ import {
 } from "../lib/wallapop-publish"
 import { wallapopStandardWeightBandFromCrm } from "../lib/wallapop-weight-band"
 import { categoryBreadcrumbLabelsEs } from "../lib/category-breadcrumb"
+import { validateShippingForPublish } from "../../../lib/inventory/shipping-for-publish"
 import { loadProductCard, paramId } from "./products"
 
 const ALREADY_POSTED_MESSAGE =
@@ -293,13 +294,22 @@ export async function runProductPublish(
   const shippingEnabled = isPublishShippingEnabled(product)
   const packageType = product.shippingPackageSize ?? "STANDARD"
   const weightKg = decimalToNumberOrNull(product.weightKg)
+  const widthCm = decimalToNumberOrNull(product.widthCm)
+  const lengthCm = decimalToNumberOrNull(product.lengthCm)
+  const heightCm = decimalToNumberOrNull(product.heightCm)
 
-  if (shippingEnabled && weightKg == null) {
+  const shippingReady = validateShippingForPublish({
+    weightKg,
+    widthCm,
+    lengthCm,
+    heightCm,
+  })
+  if (!dryRun && !shippingReady.ok) {
     return {
       ok: false,
       httpStatus: 400,
-      code: "VALIDATION_ERROR",
-      message: "Indica el peso del producto antes de publicar con envío.",
+      code: shippingReady.code,
+      message: shippingReady.message,
     }
   }
 
@@ -357,9 +367,9 @@ export async function runProductPublish(
       shippingEnabled,
       packageType,
       weightKg,
-      widthCm: decimalToNumberOrNull(product.widthCm),
-      lengthCm: decimalToNumberOrNull(product.lengthCm),
-      heightCm: decimalToNumberOrNull(product.heightCm),
+      widthCm,
+      lengthCm,
+      heightCm,
     })
 
     if (result.dryRun) {
