@@ -268,6 +268,14 @@ export function upsertOfflineProduct(
   const category = categories.find((item) => item.id === draft.categoryId)
   const now = new Date().toISOString()
   const images = draft.images ?? prev?.images ?? []
+  const weight =
+    draft.weight === undefined ? (prev?.weight ?? null) : draft.weight
+  const widthCm =
+    draft.widthCm === undefined ? (prev?.widthCm ?? null) : draft.widthCm
+  const lengthCm =
+    draft.lengthCm === undefined ? (prev?.lengthCm ?? null) : draft.lengthCm
+  const heightCm =
+    draft.heightCm === undefined ? (prev?.heightCm ?? null) : draft.heightCm
   const next: InventoryProduct = {
     id,
     sku: draft.sku,
@@ -278,16 +286,14 @@ export function upsertOfflineProduct(
     category: category?.nameEs ?? prev?.category ?? "",
     condition: conditionLabel(draft.condition),
     conditionCode: draft.condition,
-    weight: draft.weight === undefined ? (prev?.weight ?? null) : draft.weight,
+    weight,
     shippingPackageSize:
       draft.shippingPackageSize === undefined
         ? (prev?.shippingPackageSize ?? "STANDARD")
         : draft.shippingPackageSize,
-    widthCm: draft.widthCm === undefined ? (prev?.widthCm ?? null) : draft.widthCm,
-    lengthCm:
-      draft.lengthCm === undefined ? (prev?.lengthCm ?? null) : draft.lengthCm,
-    heightCm:
-      draft.heightCm === undefined ? (prev?.heightCm ?? null) : draft.heightCm,
+    widthCm,
+    lengthCm,
+    heightCm,
     images,
     productImages:
       images === prev?.images
@@ -304,10 +310,10 @@ export function upsertOfflineProduct(
     listing: prev?.listing ?? null,
     listingActive: prev?.listingActive,
     shippingPublishReady: isShippingPublishReady({
-      weightKg: next.weight,
-      widthCm: next.widthCm,
-      lengthCm: next.lengthCm,
-      heightCm: next.heightCm,
+      weightKg: weight,
+      widthCm,
+      lengthCm,
+      heightCm,
     }),
   }
 
