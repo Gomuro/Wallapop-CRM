@@ -52,7 +52,7 @@ export function validateShippingForPublish(
   }
 }
 
-/** Catalog badge: queue-ready product missing weight or dimensions. */
+/** Catalog badge: en venta product missing weight or dimensions (any listing state except POSTING). */
 export function showShippingIncompleteBadge(product: {
   status: string
   listing?: { status: string; externalUrl?: string | null } | null
@@ -61,9 +61,6 @@ export function showShippingIncompleteBadge(product: {
 }): boolean {
   if (product.shippingPublishReady) return false
   if (product.status !== "ACTIVE") return false
-  const listing = product.listing
-  if (!listing) return true
-  if (listing.status === "ACTIVE" || listing.status === "POSTING") return false
-  if (listing.externalUrl) return false
-  return listing.status === "READY_TO_POST" || listing.status === "DEACTIVATED"
+  if (product.listing?.status === "POSTING") return false
+  return true
 }

@@ -74,19 +74,36 @@ describe("showShippingIncompleteBadge", () => {
     ).toBe(true)
   })
 
-  it("hides when already on Wallapop or data is complete", () => {
+  it("shows on En Wallapop when shipping data is missing", () => {
     expect(
       showShippingIncompleteBadge({
         status: "ACTIVE",
         listing: { status: "ACTIVE", externalUrl: "https://es.wallapop.com/item/x" },
         shippingPublishReady: false,
       }),
-    ).toBe(false)
+    ).toBe(true)
+  })
+
+  it("hides when data is complete, warehouse inactive, or posting", () => {
     expect(
       showShippingIncompleteBadge({
         status: "ACTIVE",
         listing: { status: "READY_TO_POST" },
         shippingPublishReady: true,
+      }),
+    ).toBe(false)
+    expect(
+      showShippingIncompleteBadge({
+        status: "SOLD",
+        listing: { status: "ACTIVE" },
+        shippingPublishReady: false,
+      }),
+    ).toBe(false)
+    expect(
+      showShippingIncompleteBadge({
+        status: "ACTIVE",
+        listing: { status: "POSTING" },
+        shippingPublishReady: false,
       }),
     ).toBe(false)
   })
