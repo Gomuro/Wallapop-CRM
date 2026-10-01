@@ -830,6 +830,77 @@ async function roleRadioIsChecked(page: Page, name: string): Promise<boolean> {
   return Boolean(await radio.isChecked().catch(() => false));
 }
 
+async function roleRadioIsVisible(page: Page, name: string): Promise<boolean> {
+  const radio = page.getByRole("radio", { name, exact: true }).first();
+  if (!(await radio.count().catch(() => 0))) return false;
+  return Boolean(await radio.isVisible().catch(() => false));
+}
+
+/**
+ * Some categories (jardín / bulky) show Estándar vs Voluminoso first;
+ * «¿Cuánto pesa?» only after Estándar. Other categories already show kg bands
+ * with no size radios — do not click anything then (Activar envío stays as Wallapop set it).
+ */
+async function ensurePackageSizeIfShown(
+  page: Page,
+  packageType: ShippingPackageType,
+): Promise<void> {
+  const sizeShown =
+    (await roleRadioIsVisible(page, "delivery")) ||
+    (await roleRadioIsVisible(page, "bulky"));
+  const weightShown =
+    (await page
+      .getByText(/Cuánto pesa|How much (does it )?weigh|Скільки важить/i)
+      .first()
+      .isVisible()
+      .catch(() => false)) ||
+    (await roleRadioIsVisible(page, "Delivery Option 0"));
+
+  if (!sizeShown) {
+    log("info", "wallapop_publish_package_size_absent", {
+      packageType,
+      weightShown,
+    });
+    return;
+  }
+  if (weightShown) {
+    log("info", "wallapop_publish_package_size_skip", {
+      packageType,
+      reason: "weight_ui_already_visible",
+    });
+    return;
+  }
+
+  const which = packageType === "BULKY" ? "bulky" : "delivery";
+  if (await roleRadioIsChecked(page, which)) {
+    log("info", "wallapop_publish_package_size_already", { which });
+    return;
+  }
+
+  log("info", "wallapop_publish_package_size_click", { which, packageType });
+  for (let attempt = 0; attempt < 4; attempt++) {
+    try {
+      await clickRoleRadio(page, which);
+    } catch (err) {
+      log("warn", "wallapop_publish_package_radio_click_fail", {
+        which,
+        attempt,
+        message: err instanceof Error ? err.message : String(err),
+      });
+    }
+    await page.waitForTimeout(800);
+    if (await roleRadioIsChecked(page, which)) {
+      log("info", "wallapop_publish_package_size_selected", { which, attempt });
+      return;
+    }
+  }
+  log("warn", "wallapop_publish_package_size_unselected", {
+    which,
+    ...(await snapshotPublishForm(page)),
+    url: page.url(),
+  });
+}
+
 async function clickWeightBandByLabel(
   page: Page,
   labelNeedle: string,
@@ -1197,8 +1268,9 @@ async function runPublishAfterAttach(
   await ensureMaterialOtro(page);
   const packageType = input.packageType ?? "STANDARD";
   let weightBandLabel: string | null = null;
+  await page.evaluate(`window.scrollBy(0, 500)`).catch(() => {});
+  await ensurePackageSizeIfShown(page, packageType);
   if (packageType === "STANDARD" && input.weightKg != null) {
-    await page.evaluate(`window.scrollBy(0, 500)`).catch(() => {});
     weightBandLabel = await ensureStandardWeightBand(page, input.weightKg);
     logPublishStep(step, page, {
       phase: "after_weight",
