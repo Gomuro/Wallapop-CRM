@@ -348,7 +348,7 @@ Google / Apple / Facebook SSO на onboarding — окремі `walla-button`; e
 
 **Descripción vs IA:** після photos CRM **завжди перезаписує** textarea опису (не `fillIfEmpty` — Wallapop AI часто вже підставляє свій текст). Перед кліком Publicar повторна перевірка: нормалізований текст форми має збігатися з CRM. Якщо IA переписала — ще одна спроба fill; якщо знову чужий текст → `PUBLISH_FAILED` («La descripción en Wallapop no coincide con la del CRM…»), listing ревертиться з `POSTING` (Publicar не натиснуто).
 
-**Логи publish (VPS `server/logs/server.log`, без дебагера):** `wallapop_publish_start` (peso/cm/категорія) → `wallapop_publish_step` з `phase` → `wallapop_publish_weight_try` / `_selector_missing` (skip, не abort) / `_selected` → `wallapop_publish_measures_skip|_filled` → `wallapop_publish_continuar_round` → `wallapop_publish_before_publicar` → `wallapop_publish_done`. Будь-який throw: `wallapop_publish_abort` + snapshot (`hasCuantoPesa`, `toggleChecked`, `radios`, condition/price/leaf).
+**Логи publish (VPS `server/logs/server.log`, без дебагера):** `wallapop_publish_start` → `wallapop_publish_step` з `phase` → `wallapop_publish_weight_try` / `_selector_missing` (skip) / `_selected` → `wallapop_publish_measures_skip|_filled` → `wallapop_publish_continuar_round` → `before_publicar` → `done`. Abort і missing-weight: `wallapop_publish_abort` / `_weight_selector_missing` + snapshot + **`htmlAround`** (±100 рядків HTML навколо envío / peso / toggle; `htmlNeedle`, `htmlFromLine`–`htmlToLine`).
 
 ### Chrome lifecycle
 
