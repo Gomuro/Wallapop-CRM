@@ -185,6 +185,40 @@ function logPublishStep(
   });
 }
 
+/** Compact DOM snapshot for VPS logs — no debugger on the Windows box. */
+async function snapshotPublishForm(
+  page: Page,
+): Promise<Record<string, unknown>> {
+  try {
+    return (await page.evaluate(`(() => {
+      const text = document.body ? document.body.innerText : "";
+      const boxes = [...document.querySelectorAll("wallapop-toggle input[type=checkbox]")];
+      const radios = [...document.querySelectorAll("input[type=radio]")].slice(0, 24).map((el) => ({
+        id: el.id || "",
+        aria: el.getAttribute("aria-label") || "",
+        checked: el.checked,
+        value: el.value,
+      }));
+      return {
+        title: document.title,
+        hasCuantoPesa: /Cuánto pesa|How much/i.test(text),
+        hasActivarEnvio: /Activar envío/i.test(text),
+        hasEstandar: /Estándar/i.test(text),
+        hasVoluminoso: /Voluminoso/i.test(text),
+        toggleChecked: boxes.map((el) => el.checked),
+        radios,
+        condition: document.querySelector("#condition")?.value || "",
+        price: document.querySelector("#price_amount")?.value || "",
+        categoryLeaf: document.querySelector("#category_leaf_id")?.value || "",
+      };
+    })()`)) as Record<string, unknown>;
+  } catch (error) {
+    return {
+      snapshotError: error instanceof Error ? error.message : String(error),
+    };
+  }
+}
+
 async function categorySectionVisible(page: Page): Promise<boolean> {
   const body = (await page.evaluate(
     `document.body ? document.body.innerText : ""`,
@@ -719,13 +753,22 @@ async function fillMeasuresIfPresent(
   lengthCm?: number | null,
   heightCm?: number | null,
 ): Promise<void> {
-  if (widthCm == null || lengthCm == null || heightCm == null) return;
+  if (widthCm == null || lengthCm == null || heightCm == null) {
+    log("info", "wallapop_publish_measures_skip", {
+      widthCm: widthCm ?? null,
+      lengthCm: lengthCm ?? null,
+      heightCm: heightCm ?? null,
+      reason: "missing_one_or_more_cm",
+    });
+    return;
+  }
   const w = String(Math.round(widthCm));
   const l = String(Math.round(lengthCm));
   const h = String(Math.round(heightCm));
   await fillWallaTextInput(page, "#width, input[name=width]", w);
   await fillWallaTextInput(page, "#length, input[name=length]", l);
   await fillWallaTextInput(page, "#height, input[name=height]", h);
+  log("info", "wallapop_publish_measures_filled", { widthCm, lengthCm, heightCm });
 }
 
 /**
@@ -774,7 +817,7 @@ async function isStandardWeightBandSelected(
 async function ensureStandardWeightBand(
   page: Page,
   weightKg: number,
-): Promise<string> {
+): Promise<string | null> {
   const labelNeedle = wallapopStandardWeightBandFromCrm(weightKg);
   if (!labelNeedle) {
     throw new WallapopPublishError(
@@ -782,6 +825,12 @@ async function ensureStandardWeightBand(
       "El peso es demasiado alto para envío estándar (máx. 30 kg, incluido el envoltorio).",
     );
   }
+
+  log("info", "wallapop_publish_weight_try", {
+    weightKg,
+    labelNeedle,
+    aria: wallapopStandardWeightBandAriaName(labelNeedle),
+  });
 
   try {
     await page
@@ -792,14 +841,22 @@ async function ensureStandardWeightBand(
       .getByRole("radio", { name: "Delivery Option 0", exact: true })
       .first()
       .waitFor({ state: "visible", timeout: 5_000 });
-  } catch {
-    throw new WallapopPublishError(
-      "form",
-      "No apareció el selector de tramo de peso (¿Cuánto pesa?).",
-    );
+  } catch (error) {
+    log("warn", "wallapop_publish_weight_selector_missing", {
+      weightKg,
+      labelNeedle,
+      reason: "cuanto_pesa_or_delivery_option_0_not_visible",
+      waitMessage: error instanceof Error ? error.message : String(error),
+      ...(await snapshotPublishForm(page)),
+      url: page.url(),
+    });
+    return null;
   }
 
-  if (await isStandardWeightBandSelected(page, labelNeedle)) return labelNeedle;
+  if (await isStandardWeightBandSelected(page, labelNeedle)) {
+    log("info", "wallapop_publish_weight_already_selected", { labelNeedle });
+    return labelNeedle;
+  }
 
   for (let attempt = 0; attempt < 4; attempt++) {
     try {
@@ -812,10 +869,21 @@ async function ensureStandardWeightBand(
       });
     }
     await page.waitForTimeout(700);
-    if (await isStandardWeightBandSelected(page, labelNeedle))
+    if (await isStandardWeightBandSelected(page, labelNeedle)) {
+      log("info", "wallapop_publish_weight_selected", {
+        labelNeedle,
+        attempt,
+      });
       return labelNeedle;
+    }
   }
 
+  log("error", "wallapop_publish_weight_select_exhausted", {
+    weightKg,
+    labelNeedle,
+    ...(await snapshotPublishForm(page)),
+    url: page.url(),
+  });
   throw new WallapopPublishError(
     "form",
     `No se pudo seleccionar el tramo de peso (${labelNeedle}).`,
@@ -957,15 +1025,58 @@ async function publishWallapopInBrowserAfterAttach(
   page: Page,
 ): Promise<PublishWallapopResult> {
   let step: PublishStep = "attach";
+  log("info", "wallapop_publish_start", {
+    title: input.title.slice(0, 80),
+    dryRun: input.dryRun,
+    photoCount: input.imagePaths.length,
+    packageType: input.packageType ?? "STANDARD",
+    weightKg: input.weightKg ?? null,
+    widthCm: input.widthCm ?? null,
+    lengthCm: input.lengthCm ?? null,
+    heightCm: input.heightCm ?? null,
+    categoryLabels: input.categoryLabels,
+    url: page.url(),
+  });
+  try {
+    return await runPublishAfterAttach(input, page, (next) => {
+      step = next;
+    });
+  } catch (error) {
+    const message = error instanceof Error ? error.message : String(error);
+    const failStep =
+      error instanceof WallapopPublishError ? error.step : step;
+    log("error", "wallapop_publish_abort", {
+      step: failStep,
+      message,
+      unexpected: !(error instanceof WallapopPublishError),
+      url: page.url(),
+      ...(await snapshotPublishForm(page)),
+    });
+    throw error;
+  }
+}
+
+async function runPublishAfterAttach(
+  input: PublishWallapopInput,
+  page: Page,
+  setStep: (step: PublishStep) => void,
+): Promise<PublishWallapopResult> {
+  let step: PublishStep = "attach";
+  const mark = (next: PublishStep) => {
+    step = next;
+    setStep(next);
+  };
   await dismissWallapopConsent(page);
   await dismissSearchOverlay(page);
 
-  step = "upload_entry";
+  mark("upload_entry");
+  logPublishStep(step, page, { phase: "goto_upload" });
   await navigateViaAssign(page, UPLOAD_URL);
   await dismissWallapopConsent(page);
   await dismissSearchOverlay(page);
 
-  step = "consumer_goods";
+  mark("consumer_goods");
+  logPublishStep(step, page, { phase: "consumer_goods_check" });
   if (!page.url().includes("consumer-goods")) {
     const ok = await clickExactButtonText(page, "Algo que ya no necesito");
     if (!ok) {
@@ -985,8 +1096,9 @@ async function publishWallapopInBrowserAfterAttach(
     }
   }
 
-  step = "summary";
+  mark("summary");
   const summaryText = truncateSummary(input.title);
+  logPublishStep(step, page, { phase: "summary_fill", summaryText });
   const summary = await firstVisible(page, PUBLISH_SELECTORS.summary, 12_000);
   if (!summary) {
     throw new WallapopPublishError(
@@ -998,6 +1110,7 @@ async function publishWallapopInBrowserAfterAttach(
   await page.waitForTimeout(500);
 
   let cont = await clickEnabledContinuar(page);
+  logPublishStep(step, page, { phase: "after_summary_continuar", cont });
   if (cont === "NONE") {
     throw new WallapopPublishError(
       step,
@@ -1005,7 +1118,7 @@ async function publishWallapopInBrowserAfterAttach(
     );
   }
 
-  step = "photos";
+  mark("photos");
   const fileInput = page.locator('input[type="file"]').first();
   if (!(await fileInput.count())) {
     throw new WallapopPublishError(step, "No hay input[type=file] para fotos.");
@@ -1016,6 +1129,7 @@ async function publishWallapopInBrowserAfterAttach(
   await page.waitForTimeout(8_000);
 
   cont = await clickEnabledContinuar(page);
+  logPublishStep(step, page, { phase: "after_photos_continuar", cont });
   if (cont === "NONE") {
     throw new WallapopPublishError(
       step,
@@ -1029,28 +1143,38 @@ async function publishWallapopInBrowserAfterAttach(
     );
   }
 
-  step = "form";
+  mark("form");
   logPublishStep(step, page, { phase: "form_start" });
   await ensureCategorySelected(page, input.categoryLabels);
+  logPublishStep(step, page, { phase: "after_category" });
 
   const descriptionText = input.description?.trim() || summaryText;
   await fillIfEmpty(page, PUBLISH_SELECTORS.title, summaryText);
   await fillPublishDescription(page, descriptionText);
-  // Estado first: product-info section is stable; then Precio (#price_amount).
+  logPublishStep(step, page, { phase: "after_title_description" });
   await ensureEstado(page, estadoLabel(input.condition));
   await fillPrice(page, input.price);
+  logPublishStep(step, page, { phase: "after_estado_price" });
   await ensureMaterialOtro(page);
   const packageType = input.packageType ?? "STANDARD";
   let weightBandLabel: string | null = null;
-  if (packageType === "STANDARD") {
-    if (input.weightKg == null) {
-      throw new WallapopPublishError(
-        "form",
-        "Indica el peso del producto antes de publicar con envío.",
-      );
-    }
+  if (packageType === "STANDARD" && input.weightKg != null) {
     await page.evaluate(`window.scrollBy(0, 500)`).catch(() => {});
     weightBandLabel = await ensureStandardWeightBand(page, input.weightKg);
+    logPublishStep(step, page, {
+      phase: "after_weight",
+      weightKg: input.weightKg,
+      weightBandLabel,
+    });
+  } else {
+    log("info", "wallapop_publish_weight_skip", {
+      packageType,
+      weightKg: input.weightKg ?? null,
+      reason:
+        packageType !== "STANDARD"
+          ? "package_not_standard"
+          : "no_weight_kg_in_crm",
+    });
   }
   await fillMeasuresIfPresent(
     page,
@@ -1096,18 +1220,20 @@ async function publishWallapopInBrowserAfterAttach(
 
   for (let round = 0; round < 14; round++) {
     if (await finalButtonVisible(page)) {
-      step = "before_publicar";
+      mark("before_publicar");
+      logPublishStep(step, page, { phase: "publicar_visible", round });
       break;
     }
     await page.evaluate(`window.scrollBy(0, 350)`);
     const r = await clickEnabledContinuar(page);
+    log("info", "wallapop_publish_continuar_round", { round, result: r });
     if (r === "FINAL") {
-      step = "before_publicar";
+      mark("before_publicar");
       break;
     }
     if (r === "NONE" && round > 4) {
       if (await finalButtonVisible(page)) {
-        step = "before_publicar";
+        mark("before_publicar");
         break;
       }
     }
@@ -1141,13 +1267,14 @@ async function publishWallapopInBrowserAfterAttach(
       step,
       visibleButtons,
       formState,
+      ...(await snapshotPublishForm(page)),
     });
     throw new WallapopPublishError(
       step,
       "No apareció el botón Publicar (dry-run stop).",
     );
   }
-  step = "before_publicar";
+  mark("before_publicar");
 
   await assertShippingReadyForPublish(page, weightBandLabel);
   await ensureCrmDescriptionOnForm(page, descriptionText, "before_publicar");
@@ -1155,6 +1282,7 @@ async function publishWallapopInBrowserAfterAttach(
   log("info", "wallapop_publish_before_publicar", {
     dryRun: input.dryRun,
     url: page.url(),
+    weightBandLabel,
   });
 
   if (input.dryRun) {
@@ -1167,6 +1295,7 @@ async function publishWallapopInBrowserAfterAttach(
   }
 
   const published = await clickFinalPublish(page);
+  log("info", "wallapop_publish_publicar_click", { published });
   if (!published) {
     throw new WallapopPublishError(
       "before_publicar",
@@ -1175,6 +1304,10 @@ async function publishWallapopInBrowserAfterAttach(
   }
 
   const externalUrl = await readUrlAfterPublicarClick(page);
+  log("info", "wallapop_publish_done", {
+    step: "published",
+    externalUrl,
+  });
   return {
     ok: true,
     dryRun: false,

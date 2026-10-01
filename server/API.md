@@ -344,11 +344,11 @@ Google / Apple / Facebook SSO на onboarding — окремі `walla-button`; e
 
 **Envío (жива форма 01.10.2026):** блок «Opciones de envío». **Не клікати** «Activar envío» (`wallapop-toggle`) — Wallapop уже тримає його ON і сам показує вагу; клік по toggle не розрізняє стан і вимикає. Рядків **Estándar / Voluminoso** на цій формі **немає** (не чекати `#delivery` / `#bulky`). Далі одразу **«¿Cuánto pesa?»**. Medidas `#width` / `#length` / `#height` — опційно з `widthCm` / `lengthCm` / `heightCm`.
 
-**Envío / tramo de peso:** CRM `weightKg` + buffer **0.25 kg** (envoltorio) → перша смуга, де `effectiveKg <= maxKg`: `0 a 1` / `1 a 2` / `2 a 5` / `5 a 10` / `10 a 20` / `20 a 30` kg. Клік по рядку цього tramo (`aria-label` `Delivery Option N`). Live publish вимагає `weightKg` > 0 **до** claim / Chrome → **400** `SHIPPING_NOT_READY`. Medidas опційні. Якщо `effectiveKg > 30` → **400** `VALIDATION_ERROR`. Voluminoso kg-смуга в браузері — поза фазою 1.
+**Envío / tramo de peso:** CRM `weightKg` + buffer **0.25 kg** → смуга `0 a 1` … `20 a 30` kg. Якщо блок **«¿Cuánto pesa?»** на формі **немає** — **не фейлити** (лог `wallapop_publish_weight_selector_missing`), іти далі до Publicar. Medidas `#width`/`#length`/`#height` **опційні** (немає cm у CRM → поля не чіпаємо). Live HTTP без `weightKg` досі **400** `SHIPPING_NOT_READY` (не пускати в Chrome порожню вагу). Якщо `effectiveKg > 30` → **400**.
 
 **Descripción vs IA:** після photos CRM **завжди перезаписує** textarea опису (не `fillIfEmpty` — Wallapop AI часто вже підставляє свій текст). Перед кліком Publicar повторна перевірка: нормалізований текст форми має збігатися з CRM. Якщо IA переписала — ще одна спроба fill; якщо знову чужий текст → `PUBLISH_FAILED` («La descripción en Wallapop no coincide con la del CRM…»), listing ревертиться з `POSTING` (Publicar не натиснуто).
 
-**Перед зміною селекторів publish:** перевірити живу форму через **MCP Playwright** (`browser_evaluate` / snapshot на `…/upload/consumer-goods`), не лише CDP-логи.
+**Логи publish (VPS `server/logs/server.log`, без дебагера):** `wallapop_publish_start` (peso/cm/категорія) → `wallapop_publish_step` з `phase` → `wallapop_publish_weight_try` / `_selector_missing` (skip, не abort) / `_selected` → `wallapop_publish_measures_skip|_filled` → `wallapop_publish_continuar_round` → `wallapop_publish_before_publicar` → `wallapop_publish_done`. Будь-який throw: `wallapop_publish_abort` + snapshot (`hasCuantoPesa`, `toggleChecked`, `radios`, condition/price/leaf).
 
 ### Chrome lifecycle
 
