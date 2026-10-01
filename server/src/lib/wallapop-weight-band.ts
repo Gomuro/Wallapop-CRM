@@ -35,7 +35,14 @@ export function wallapopStandardWeightBandLabel(
 export function wallapopStandardWeightBandFromCrm(
   weightKg: number,
 ): string | null {
-  return wallapopStandardWeightBandLabel(wallapopEffectiveWeightKg(weightKg))
+  if (!Number.isFinite(weightKg) || weightKg < 0) return null
+  if (weightKg > STANDARD_WEIGHT_MAX_KG) return null
+  const labeled = wallapopStandardWeightBandLabel(
+    wallapopEffectiveWeightKg(weightKg),
+  )
+  if (labeled) return labeled
+  // 30 kg in CRM + 0.25 wrapping is still the last Estándar band, not "too heavy".
+  return STANDARD_WEIGHT_BANDS[STANDARD_WEIGHT_BANDS.length - 1].needle
 }
 
 /**

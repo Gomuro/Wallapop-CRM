@@ -42,6 +42,9 @@ describe("wallapopStandardWeightBandFromCrm", () => {
     expect(wallapopStandardWeightBandFromCrm(7)).toBe("5 a 10 kg")
     expect(wallapopStandardWeightBandFromCrm(7.5)).toBe("5 a 10 kg")
     expect(wallapopStandardWeightBandFromCrm(9.8)).toBe("10 a 20 kg")
+    expect(wallapopStandardWeightBandFromCrm(30)).toBe("20 a 30 kg")
+    expect(wallapopStandardWeightBandFromCrm(29.9)).toBe("20 a 30 kg")
+    expect(wallapopStandardWeightBandFromCrm(30.01)).toBeNull()
   })
 })
 
