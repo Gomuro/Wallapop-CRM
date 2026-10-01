@@ -725,110 +725,51 @@ async function shippingRadioChecked(
   page: Page,
   which: "delivery" | "bulky",
 ): Promise<boolean> {
-  if (await roleRadioIsChecked(page, which)) return true
-  const id = which === "bulky" ? "#bulky" : "#delivery"
-  return Boolean(
-    await page
-      .evaluate(`Boolean(document.querySelector(${JSON.stringify(id)})?.checked)`)
-      .catch(() => false),
-  )
+  return roleRadioIsChecked(page, which)
 }
 
-const PACKAGE_SIZE_UI =
-  "#standardDescription1, #bulkyDescription1, #standardShippingIcon, walla-radio[arialabel='delivery'], walla-radio[arialabel='bulky']"
-
-async function packageSizeUiVisible(page: Page): Promise<boolean> {
-  const loc = page.locator(PACKAGE_SIZE_UI).first()
-  return Boolean(await loc.isVisible().catch(() => false))
-}
-
-async function dumpShippingDom(page: Page): Promise<Record<string, unknown>> {
-  return (await page
-    .evaluate(`(() => {
-      const radios = [...document.querySelectorAll("input[type=radio], walla-radio")]
-        .slice(0, 20)
-        .map((el) => ({
-          tag: el.tagName,
-          id: el.id || null,
-          aria: el.getAttribute("aria-label") || el.getAttribute("arialabel"),
-          checked: el instanceof HTMLInputElement ? el.checked : null,
-        }));
-      const toggles = [...document.querySelectorAll("wallapop-toggle, [role=switch]")].map((el) => ({
-        tag: el.tagName,
-        text: (el.textContent || "").trim().slice(0, 60),
-        checked: el.querySelector("input[type=checkbox]")?.checked ?? el.getAttribute("aria-checked"),
-      }));
-      return {
-        activarVisible: /Activar envío|Enable shipping/i.test(document.body.innerText || ""),
-        hasStandard: Boolean(document.querySelector("#standardDescription1")),
-        hasDelivery: Boolean(document.querySelector("#delivery")),
-        hasBulky: Boolean(document.querySelector("#bulky")),
-        toggles,
-        radios,
-      };
-    })()`)
-    .catch(() => ({}))) as Record<string, unknown>
-}
-
-async function clickControlNearActivarEnvio(page: Page): Promise<boolean> {
-  const label = page.getByText(/Activar envío|Enable shipping|Активувати доставку/i).first()
-  if (await label.count()) {
-    await label.scrollIntoViewIfNeeded().catch(() => {})
-  }
-  return Boolean(
-    await page.evaluate(`(() => {
-      const needle = /Activar envío|Enable shipping|Активувати доставку/i;
-      const nodes = [...document.querySelectorAll("body *")];
-      const label = nodes.find((el) => {
-        const t = (el.textContent || "").replace(/\\s+/g, " ").trim();
-        return needle.test(t) && t.length < 80;
-      });
-      const findControl = (start) => {
-        for (let n = start; n; n = n.parentElement) {
-          const hit =
-            n.querySelector("wallapop-toggle") ||
-            n.querySelector("[role=switch]") ||
-            n.querySelector("input[type=checkbox]");
-          if (hit) return hit;
-        }
-        return document.querySelector("wallapop-toggle");
-      };
-      const host = findControl(label || document.body);
-      if (!host) return false;
-      const box =
-        host.matches("input, [role=switch]")
-          ? host
-          : host.querySelector("input[type=checkbox], [role=switch]") || host;
-      box.click();
-      return true;
-    })()`),
-  )
+async function shippingToggleCheckbox(page: Page) {
+  const labeled = page
+    .locator("wallapop-toggle")
+    .filter({ hasText: /Activar envío|Enable shipping|Активувати доставку/i })
+    .locator("input[type=checkbox]")
+    .first()
+  if ((await labeled.count().catch(() => 0)) > 0) return labeled
+  return page.locator("wallapop-toggle input[type=checkbox]").last()
 }
 
 async function isShippingToggleOn(page: Page): Promise<boolean> {
-  if (await packageSizeUiVisible(page)) return true
-  return Boolean(
-    await page
-      .evaluate(`(() => {
-        const boxes = [...document.querySelectorAll("wallapop-toggle input[type=checkbox], [role=switch]")];
-        return boxes.some((el) =>
-          el instanceof HTMLInputElement ? el.checked : el.getAttribute("aria-checked") === "true",
-        );
-      })()`)
-      .catch(() => false),
-  )
+  const toggle = await shippingToggleCheckbox(page)
+  if (!(await toggle.count().catch(() => 0))) return false
+  return Boolean(await toggle.isChecked().catch(() => false))
 }
 
 async function ensureShippingToggleOff(page: Page): Promise<void> {
   if (!(await isShippingToggleOn(page))) return
-  await clickControlNearActivarEnvio(page)
+  const toggle = await shippingToggleCheckbox(page)
+  await toggle.scrollIntoViewIfNeeded().catch(() => {})
+  await toggle.click({ force: true }).catch(() => {})
   await page.waitForTimeout(SHIPPING_SETTLE_MS)
 }
 
 async function ensureShippingToggleOn(page: Page): Promise<void> {
-  if (await packageSizeUiVisible(page)) return
-  const clicked = await clickControlNearActivarEnvio(page)
-  log("info", "wallapop_publish_shipping_toggle_click", { clicked })
+  if (await isShippingToggleOn(page)) return
+  const toggle = await shippingToggleCheckbox(page)
+  await toggle.scrollIntoViewIfNeeded().catch(() => {})
+  await toggle.click({ force: true }).catch(() => {})
+  await page.waitForTimeout(SHIPPING_SETTLE_MS)
+  if (await isShippingToggleOn(page)) return
+  await page
+    .evaluate(`(() => {
+      const labels = [...document.querySelectorAll("wallapop-toggle")];
+      const host = labels.find((el) =>
+        /Activar envío|Enable shipping/i.test(el.textContent || ""),
+      );
+      const box = host?.querySelector("input[type=checkbox]")
+        ?? document.querySelector("wallapop-toggle input[type=checkbox]");
+      if (box && !box.checked) box.click();
+    })()`)
+    .catch(() => {})
   await page.waitForTimeout(SHIPPING_SETTLE_MS)
 }
 
@@ -836,20 +777,6 @@ async function clickShippingPackageRadio(
   page: Page,
   which: "delivery" | "bulky",
 ): Promise<void> {
-  const row =
-    which === "bulky"
-      ? page.locator(
-          "#bulkyDescription1, walla-radio[arialabel='bulky'], #bulky",
-        )
-      : page.locator(
-          "#standardDescription1, #standardShippingIcon, walla-radio[arialabel='delivery'], #delivery",
-        )
-  const target = row.first()
-  if ((await target.count().catch(() => 0)) > 0) {
-    await target.scrollIntoViewIfNeeded().catch(() => {})
-    await target.click({ force: true, timeout: 5_000 })
-    return
-  }
   await clickRoleRadio(page, which)
 }
 
@@ -969,40 +896,21 @@ async function ensureShippingPackageSize(
   page: Page,
   packageType: ShippingPackageType,
 ): Promise<void> {
-  const label = page.getByText(/Activar envío|Enable shipping|Активувати доставку/i).first()
-  if (await label.count()) {
-    await label.scrollIntoViewIfNeeded().catch(() => {})
-  } else {
-    await page.evaluate(`window.scrollBy(0, 500)`).catch(() => {})
-  }
+  await page.evaluate(`window.scrollBy(0, 500)`).catch(() => {})
   await page.waitForTimeout(SHIPPING_SETTLE_MS)
-
-  if (!(await packageSizeUiVisible(page))) {
-    await ensureShippingToggleOn(page)
-  }
+  await ensureShippingToggleOn(page)
 
   const which = packageType === "BULKY" ? "bulky" : "delivery"
   try {
     await page
-      .locator(PACKAGE_SIZE_UI)
+      .getByRole("radio", { name: which, exact: true })
       .first()
       .waitFor({ state: "visible", timeout: 12_000 })
   } catch {
-    await ensureShippingToggleOn(page)
-    try {
-      await page
-        .locator(PACKAGE_SIZE_UI)
-        .first()
-        .waitFor({ state: "visible", timeout: 8_000 })
-    } catch {
-      log("warn", "wallapop_publish_package_ui_missing", {
-        ...(await dumpShippingDom(page)),
-      })
-      throw new WallapopPublishError(
-        "form",
-        "No se encontró el selector de tamaño del paquete (Estándar / Voluminoso).",
-      )
-    }
+    throw new WallapopPublishError(
+      "form",
+      "No se encontró el selector de tamaño del paquete (Estándar / Voluminoso).",
+    )
   }
 
   if (await shippingRadioChecked(page, which)) return
@@ -1021,10 +929,6 @@ async function ensureShippingPackageSize(
     if (await shippingRadioChecked(page, which)) return
   }
 
-  log("warn", "wallapop_publish_package_not_checked", {
-    which,
-    ...(await dumpShippingDom(page)),
-  })
   throw new WallapopPublishError(
     "form",
     `No se pudo seleccionar el tamaño del paquete (${packageType === "BULKY" ? "Voluminoso" : "Estándar"}).`,
