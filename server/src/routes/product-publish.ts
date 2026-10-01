@@ -47,13 +47,13 @@ function decimalToNumberOrNull(
   return Number.isFinite(n) ? n : null
 }
 
-export function isPublishShippingEnabled(_product: {
+function isPublishShippingEnabled(product: {
   shippingPackageSize: string | null
   listings: { shippingEnabled: boolean }[]
 }): boolean {
-  // Listing.shippingEnabled defaults to false and the CRM has no opt-out.
-  // Treat envío as on so we select Estándar + tramo de peso instead of
-  // toggling «Activar envío» off after Wallapop briefly shows the picker.
+  const listing = product.listings[0]
+  if (listing?.shippingEnabled === true) return true
+  if (listing?.shippingEnabled === false) return false
   return true
 }
 
