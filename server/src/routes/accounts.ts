@@ -11,6 +11,7 @@ import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import {
   loadAutopostStatus,
+  rescheduleAutopostLoop,
 } from "../lib/wallapop-autopost"
 import {
   connectWallapopSession,
@@ -117,6 +118,7 @@ export async function patchDefaultAccountAutopost(req: Request, res: Response) {
     data: { autopostIntervalMs: intervalMs },
   })
 
+  await rescheduleAutopostLoop()
   const autopost = await loadAutopostStatus(prisma)
   res.json({
     account: toAccountJson(updated),
@@ -173,6 +175,7 @@ export async function startDefaultAccountAutopost(
     return
   }
 
+  await rescheduleAutopostLoop()
   await jsonDefaultAutopost(res)
 }
 

@@ -13,6 +13,7 @@ import {
   pickNextAutopostListing,
   readAutopostIntervalMs,
   resolveAutopostInterval,
+  rescheduleAutopostLoop,
   resetWallapopAutopostLoopForTests,
   runAutopostTick,
   startWallapopAutopostLoop,
@@ -287,6 +288,34 @@ describe("startWallapopAutopostLoop", () => {
     const at = getNextAutopostTickAt()
     expect(at).not.toBeNull()
     const remainingMs = new Date(at!).getTime() - Date.now()
+    const minMs = DEFAULT_AUTOPOST_INTERVAL_MS * (1 - AUTOPOST_JITTER_FRACTION)
+    const maxMs = DEFAULT_AUTOPOST_INTERVAL_MS * (1 + AUTOPOST_JITTER_FRACTION)
+    expect(remainingMs).toBeGreaterThanOrEqual(Math.floor(minMs) - 1)
+    expect(remainingMs).toBeLessThanOrEqual(Math.ceil(maxMs) + 1)
+
+    vi.clearAllTimers()
+  })
+
+  it("rescheduleAutopostLoop restarts the wait from now", async () => {
+    vi.useFakeTimers()
+    vi.setSystemTime(new Date("2026-01-01T12:00:00.000Z"))
+    resetWallapopAutopostLoopForTests()
+    delete process.env.WALLAPOP_AUTOPOST_INTERVAL_MS
+    startWallapopAutopostLoop()
+    await vi.waitFor(() => {
+      expect(getNextAutopostTickAt()).not.toBeNull()
+    })
+
+    const firstRemaining =
+      new Date(getNextAutopostTickAt()!).getTime() - Date.now()
+    await vi.advanceTimersByTimeAsync(5 * 60 * 1000)
+    const midRemaining =
+      new Date(getNextAutopostTickAt()!).getTime() - Date.now()
+    expect(midRemaining).toBeLessThan(firstRemaining)
+
+    await rescheduleAutopostLoop()
+    const remainingMs = new Date(getNextAutopostTickAt()!).getTime() - Date.now()
+    expect(remainingMs).toBeGreaterThan(midRemaining)
     const minMs = DEFAULT_AUTOPOST_INTERVAL_MS * (1 - AUTOPOST_JITTER_FRACTION)
     const maxMs = DEFAULT_AUTOPOST_INTERVAL_MS * (1 + AUTOPOST_JITTER_FRACTION)
     expect(remainingMs).toBeGreaterThanOrEqual(Math.floor(minMs) - 1)

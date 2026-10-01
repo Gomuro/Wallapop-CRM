@@ -37,6 +37,8 @@ export type AutopostIntervalResolution = {
 
 let started = false
 let scheduling = false
+let scheduleTimer: ReturnType<typeof setTimeout> | null = null
+let scheduleGeneration = 0
 /** Wall clock when the in-process timer will run `runAutopostTick` (not publish finish). */
 let nextAutopostTickAtMs: number | null = null
 
@@ -311,11 +313,20 @@ export function isWallapopAutopostLoopScheduling(): boolean {
   return scheduling
 }
 
-/** Tests only — drop in-process loop flags. Does not clear pending timeouts. */
+function clearScheduledTick(): void {
+  if (scheduleTimer != null) {
+    clearTimeout(scheduleTimer)
+    scheduleTimer = null
+  }
+  nextAutopostTickAtMs = null
+}
+
+/** Tests only — drop in-process loop flags and pending timeouts. */
 export function resetWallapopAutopostLoopForTests(): void {
+  scheduleGeneration += 1
+  clearScheduledTick()
   started = false
   scheduling = false
-  nextAutopostTickAtMs = null
 }
 
 /**
@@ -335,34 +346,52 @@ export function startWallapopAutopostLoop(): void {
     log("info", "wallapop_autopost_started", {
       livePublish: isAutopostLivePublishEnabled(),
     })
-    scheduleNext()
+    void scheduleNextAsync()
   } catch (error) {
     log("error", "wallapop_autopost_start_failed", serializeError(error))
   }
 }
 
-function scheduleNext(): void {
-  void resolveAutopostIntervalMs()
-    .catch((error) => {
-      log(
-        "error",
-        "wallapop_autopost_interval_resolve_failed",
-        serializeError(error),
-      )
-      return DEFAULT_AUTOPOST_INTERVAL_MS
-    })
-    .then((intervalMs) => {
-      const delayMs = autopostDelayWithJitter(intervalMs)
-      nextAutopostTickAtMs = Date.now() + delayMs
-      setTimeout(() => {
-        nextAutopostTickAtMs = null
-        void runAutopostTick()
-          .catch((error) => {
-            log("error", "wallapop_autopost_tick_failed", serializeError(error))
-          })
-          .finally(() => scheduleNext())
-      }, delayMs)
-    })
+/**
+ * Drop the pending wait and start a new one from the current interval.
+ * Used after PATCH interval / Start so the countdown is not leftover from
+ * a previous (longer) timeout.
+ */
+export async function rescheduleAutopostLoop(): Promise<void> {
+  if (!started || !scheduling) return
+  await scheduleNextAsync()
+}
+
+async function scheduleNextAsync(): Promise<void> {
+  const generation = ++scheduleGeneration
+  clearScheduledTick()
+
+  let intervalMs = DEFAULT_AUTOPOST_INTERVAL_MS
+  try {
+    intervalMs = await resolveAutopostIntervalMs()
+  } catch (error) {
+    log(
+      "error",
+      "wallapop_autopost_interval_resolve_failed",
+      serializeError(error),
+    )
+  }
+  if (generation !== scheduleGeneration) return
+
+  const delayMs = autopostDelayWithJitter(intervalMs)
+  nextAutopostTickAtMs = Date.now() + delayMs
+  scheduleTimer = setTimeout(() => {
+    if (generation !== scheduleGeneration) return
+    scheduleTimer = null
+    nextAutopostTickAtMs = null
+    void runAutopostTick()
+      .catch((error) => {
+        log("error", "wallapop_autopost_tick_failed", serializeError(error))
+      })
+      .finally(() => {
+        if (generation === scheduleGeneration) void scheduleNextAsync()
+      })
+  }, delayMs)
 }
 
 /**

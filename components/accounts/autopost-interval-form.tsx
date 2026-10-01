@@ -56,7 +56,7 @@ function formatIntervalHint(autopost: ApiAutopostStatus): string {
     autopost.effectiveIntervalMs,
   )
   const jitterPct = Math.round(autopost.jitterFraction * 100)
-  return `Entre publicaciones: ~${value} ${UNIT_SHORT[unit]} (±${jitterPct} %)`
+  return `Entre publicaciones: ~${value} ${UNIT_SHORT[unit]} (varía un ±${jitterPct} %)`
 }
 
 function useAutopostNextTickLabel(
