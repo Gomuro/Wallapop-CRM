@@ -283,7 +283,7 @@ export function AutopostIntervalForm() {
         <div className="mb-4 rounded-lg border border-border px-3 py-2">
           <p className="text-sm font-medium">Omitidos (envío)</p>
           <p className="mt-0.5 text-xs text-muted-foreground">
-            Sin peso o medidas: no se publican y la cola sigue con el siguiente.
+            Sin peso: no se publican y la cola sigue con el siguiente.
           </p>
           <ul className="mt-2 space-y-1.5">
             {autopost.recentSkips.slice(0, 8).map((skip) => (

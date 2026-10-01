@@ -300,9 +300,6 @@ export async function runProductPublish(
 
   const shippingReady = validateShippingForPublish({
     weightKg,
-    widthCm,
-    lengthCm,
-    heightCm,
   })
   if (!dryRun && !shippingReady.ok) {
     return {

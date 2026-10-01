@@ -274,9 +274,6 @@ export async function pickNextAutopostListing(
     const product = listing.product
     const ready = isShippingPublishReady({
       weightKg: decimalToNumberOrNull(product.weightKg),
-      widthCm: decimalToNumberOrNull(product.widthCm),
-      lengthCm: decimalToNumberOrNull(product.lengthCm),
-      heightCm: decimalToNumberOrNull(product.heightCm),
     })
     if (ready) {
       return {

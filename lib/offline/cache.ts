@@ -311,9 +311,6 @@ export function upsertOfflineProduct(
     listingActive: prev?.listingActive,
     shippingPublishReady: isShippingPublishReady({
       weightKg: weight,
-      widthCm,
-      lengthCm,
-      heightCm,
     }),
   }
 

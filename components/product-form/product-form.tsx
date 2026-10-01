@@ -384,7 +384,7 @@ export function ProductForm({
         <div id="widthCm" tabIndex={-1} className="scroll-mt-28 outline-none">
           <p className="text-sm font-medium">Dimensiones del producto (en cm)</p>
           <p className="mt-1 text-xs text-muted-foreground">
-            Las opciones de envío pueden variar según el tamaño del artículo.
+            Opcional. Las opciones de envío pueden variar según el tamaño del artículo.
           </p>
           <div className="mt-2 grid grid-cols-3 gap-2">
             <Field label="Ancho" htmlFor="widthCmInput" error={state.fieldErrors?.widthCm}>

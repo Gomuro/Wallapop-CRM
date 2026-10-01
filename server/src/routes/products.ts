@@ -208,9 +208,6 @@ function toProductListItemJson(row: {
     lastPostedAt: row.listings[0]?.lastPostedAt?.toISOString() ?? null,
     shippingPublishReady: isShippingPublishReady({
       weightKg: decimalJson(row.weightKg),
-      widthCm: decimalJson(row.widthCm),
-      lengthCm: decimalJson(row.lengthCm),
-      heightCm: decimalJson(row.heightCm),
     }),
   }
 }

@@ -207,9 +207,6 @@ export function mapProductToInventory(
     listingActive: listing?.status === "ACTIVE",
     shippingPublishReady: isShippingPublishReady({
       weightKg: asNullableNumber(product?.weightKg),
-      widthCm: asNullableNumber(product?.widthCm),
-      lengthCm: asNullableNumber(product?.lengthCm),
-      heightCm: asNullableNumber(product?.heightCm),
     }),
   }
 }

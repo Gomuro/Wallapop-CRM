@@ -185,7 +185,7 @@ describe("pickNextAutopostListing", () => {
     resetAutopostRecentSkipsForTests()
   })
 
-  it("skips listings without peso/medidas and returns the next ready one", async () => {
+  it("skips listings without peso and returns the next ready one", async () => {
     const prisma = {
       productListing: {
         findMany: vi.fn().mockResolvedValue([
@@ -195,7 +195,7 @@ describe("pickNextAutopostListing", () => {
             createdAt: new Date("2026-01-01"),
             product: {
               sku: "SKU-BAD",
-              title: "Caja sin medidas",
+              title: "Caja sin peso",
               weightKg: null,
               widthCm: null,
               lengthCm: null,
@@ -208,11 +208,11 @@ describe("pickNextAutopostListing", () => {
             createdAt: new Date("2026-01-02"),
             product: {
               sku: "SKU-GOOD",
-              title: "Caja lista",
+              title: "Caja con peso",
               weightKg: 1.2,
-              widthCm: 10,
-              lengthCm: 20,
-              heightCm: 15,
+              widthCm: null,
+              lengthCm: null,
+              heightCm: null,
             },
           },
         ]),

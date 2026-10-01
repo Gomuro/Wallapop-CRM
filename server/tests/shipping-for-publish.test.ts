@@ -11,20 +11,12 @@ import {
 } from "../../lib/inventory/shipping-for-publish"
 
 describe("validateShippingForPublish", () => {
-  it("requires peso and three dimensions", () => {
-    expect(missingShippingPublishFields({})).toEqual([
-      "weightKg",
-      "widthCm",
-      "lengthCm",
-      "heightCm",
-    ])
+  it("requires peso only; dimensiones are optional", () => {
+    expect(missingShippingPublishFields({})).toEqual(["weightKg"])
     expect(isShippingPublishReady({})).toBe(false)
 
     const missingWeight = validateShippingForPublish({
       weightKg: null,
-      widthCm: 10,
-      lengthCm: 10,
-      heightCm: 10,
     })
     expect(missingWeight).toEqual({
       ok: false,
@@ -32,39 +24,20 @@ describe("validateShippingForPublish", () => {
       message: SHIPPING_NOT_READY_MESSAGE,
     })
 
-    expect(
-      validateShippingForPublish({
-        weightKg: 1.2,
-        widthCm: 10,
-        lengthCm: 20,
-        heightCm: 15,
-      }),
-    ).toEqual({ ok: true })
+    expect(validateShippingForPublish({ weightKg: 1.2 })).toEqual({
+      ok: true,
+    })
   })
 
-  it("rejects zero or non-finite measures", () => {
-    expect(
-      isShippingPublishReady({
-        weightKg: 0,
-        widthCm: 10,
-        lengthCm: 10,
-        heightCm: 10,
-      }),
-    ).toBe(false)
-    expect(
-      isShippingPublishReady({
-        weightKg: 1,
-        widthCm: Number.NaN,
-        lengthCm: 10,
-        heightCm: 10,
-      }),
-    ).toBe(false)
+  it("rejects zero or non-finite peso", () => {
+    expect(isShippingPublishReady({ weightKg: 0 })).toBe(false)
+    expect(isShippingPublishReady({ weightKg: Number.NaN })).toBe(false)
   })
 })
 
 describe("showShippingIncompleteBadge", () => {
-  it("shows on READY_TO_POST without shipping data", () => {
-    expect(SHIPPING_INCOMPLETE_BADGE).toBe("Faltan peso o medidas")
+  it("shows on READY_TO_POST without peso", () => {
+    expect(SHIPPING_INCOMPLETE_BADGE).toBe("Falta peso")
     expect(
       showShippingIncompleteBadge({
         status: "ACTIVE",
@@ -74,7 +47,7 @@ describe("showShippingIncompleteBadge", () => {
     ).toBe(true)
   })
 
-  it("shows on En Wallapop when shipping data is missing", () => {
+  it("shows on En Wallapop when peso is missing", () => {
     expect(
       showShippingIncompleteBadge({
         status: "ACTIVE",
@@ -84,7 +57,7 @@ describe("showShippingIncompleteBadge", () => {
     ).toBe(true)
   })
 
-  it("hides when data is complete, warehouse inactive, or posting", () => {
+  it("hides when peso is set, warehouse inactive, or posting", () => {
     expect(
       showShippingIncompleteBadge({
         status: "ACTIVE",

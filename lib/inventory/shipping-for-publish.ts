@@ -1,21 +1,14 @@
 export const SHIPPING_NOT_READY_CODE = "SHIPPING_NOT_READY" as const
 
 export const SHIPPING_NOT_READY_MESSAGE =
-  "No se puede preparar el envío: indica peso y dimensiones (ancho, fondo, alto en cm)."
+  "No se puede preparar el envío: indica el peso."
 
-export const SHIPPING_INCOMPLETE_BADGE = "Faltan peso o medidas"
+export const SHIPPING_INCOMPLETE_BADGE = "Falta peso"
 
-export type ShippingPublishField =
-  | "weightKg"
-  | "widthCm"
-  | "lengthCm"
-  | "heightCm"
+export type ShippingPublishField = "weightKg"
 
 export type ShippingPublishProductFields = {
   weightKg: number | null | undefined
-  widthCm: number | null | undefined
-  lengthCm: number | null | undefined
-  heightCm: number | null | undefined
 }
 
 function isPositiveMeasure(value: number | null | undefined): boolean {
@@ -25,12 +18,7 @@ function isPositiveMeasure(value: number | null | undefined): boolean {
 export function missingShippingPublishFields(
   product: ShippingPublishProductFields,
 ): ShippingPublishField[] {
-  const missing: ShippingPublishField[] = []
-  if (!isPositiveMeasure(product.weightKg)) missing.push("weightKg")
-  if (!isPositiveMeasure(product.widthCm)) missing.push("widthCm")
-  if (!isPositiveMeasure(product.lengthCm)) missing.push("lengthCm")
-  if (!isPositiveMeasure(product.heightCm)) missing.push("heightCm")
-  return missing
+  return isPositiveMeasure(product.weightKg) ? [] : ["weightKg"]
 }
 
 export function isShippingPublishReady(
@@ -52,7 +40,7 @@ export function validateShippingForPublish(
   }
 }
 
-/** Catalog badge: en venta product missing weight or dimensions (any listing state except POSTING). */
+/** Catalog badge: en venta product missing weight (any listing state except POSTING). */
 export function showShippingIncompleteBadge(product: {
   status: string
   listing?: { status: string; externalUrl?: string | null } | null

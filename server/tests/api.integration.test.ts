@@ -362,7 +362,7 @@ describe("API v1 integration (Express + Postgres)", () => {
   })
 
   describe("publish shipping gate", () => {
-    it("live-path HTTP refuses missing peso/medidas before claim", async () => {
+    it("live-path HTTP refuses missing peso before claim", async () => {
       const categoryId = await findLeafCategoryId(agent)
       const created = await agent.post("/api/v1/products").send({
         sku: `API-SHIP-${Date.now()}`,

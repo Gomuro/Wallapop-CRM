@@ -15,6 +15,7 @@ import {
   runWithBrowserBusy,
 } from "./wallapop-cdp"
 import { log } from "./log"
+import { crmDescriptionMatchesForm } from "./wallapop-description"
 import {
   wallapopStandardWeightBandAriaName,
   wallapopStandardWeightBandFromCrm,
@@ -488,6 +489,74 @@ async function fillIfEmpty(
     return true
   }
   return false
+}
+
+async function readPublishDescription(page: Page): Promise<string> {
+  for (const sel of PUBLISH_SELECTORS.description) {
+    const el = page.locator(sel).first()
+    if (!(await el.count())) continue
+    const value = await el.inputValue().catch(() => "")
+    if (typeof value === "string") return value
+  }
+  return ""
+}
+
+async function fillPublishDescription(
+  page: Page,
+  value: string,
+): Promise<boolean> {
+  for (const sel of PUBLISH_SELECTORS.description) {
+    const el = page.locator(sel).first()
+    if (!(await el.count())) continue
+    if (!(await el.isVisible().catch(() => false))) continue
+    await el.scrollIntoViewIfNeeded().catch(() => {})
+    await el.click({ force: true }).catch(() => {})
+    await el.fill(value, { force: true }).catch(() => {})
+    if (crmDescriptionMatchesForm(await el.inputValue().catch(() => ""), value)) {
+      return true
+    }
+    const ok = (await page.evaluate(`((sel, v) => {
+      const el = document.querySelector(sel);
+      if (!el) return false;
+      const proto =
+        el instanceof HTMLTextAreaElement
+          ? window.HTMLTextAreaElement.prototype
+          : window.HTMLInputElement.prototype;
+      const setter = Object.getOwnPropertyDescriptor(proto, "value")?.set;
+      el.focus();
+      setter ? setter.call(el, v) : (el.value = v);
+      el.dispatchEvent(new InputEvent("input", { bubbles: true, data: v, inputType: "insertText" }));
+      el.dispatchEvent(new Event("change", { bubbles: true }));
+      el.blur();
+      return (el.value || "").trim() === v.trim();
+    })(${JSON.stringify(sel)}, ${JSON.stringify(value)})`)) as boolean
+    if (ok) return true
+  }
+  return false
+}
+
+async function ensureCrmDescriptionOnForm(
+  page: Page,
+  expected: string,
+  step: PublishStep,
+): Promise<void> {
+  const want = expected.trim()
+  if (!want) return
+  if (crmDescriptionMatchesForm(await readPublishDescription(page), want)) {
+    return
+  }
+  log("info", "wallapop_publish_description_rewrite", { step })
+  const filled = await fillPublishDescription(page, want)
+  if (
+    filled &&
+    crmDescriptionMatchesForm(await readPublishDescription(page), want)
+  ) {
+    return
+  }
+  throw new WallapopPublishError(
+    step,
+    "La descripción en Wallapop no coincide con la del CRM (posible reescritura de IA).",
+  )
 }
 
 async function readPriceAmount(page: Page): Promise<string> {
@@ -1072,12 +1141,9 @@ async function publishWallapopInBrowserAfterAttach(
   logPublishStep(step, page, { phase: "form_start" })
   await ensureCategorySelected(page, input.categoryLabels)
 
+  const descriptionText = input.description?.trim() || summaryText
   await fillIfEmpty(page, PUBLISH_SELECTORS.title, summaryText)
-  await fillIfEmpty(
-    page,
-    PUBLISH_SELECTORS.description,
-    input.description?.trim() || summaryText,
-  )
+  await fillPublishDescription(page, descriptionText)
   // Estado first: product-info section is stable; then Precio (#price_amount).
   await ensureEstado(page, estadoLabel(input.condition))
   await fillPrice(page, input.price)
@@ -1199,6 +1265,7 @@ async function publishWallapopInBrowserAfterAttach(
     packageType,
     weightBandLabel,
   )
+  await ensureCrmDescriptionOnForm(page, descriptionText, "before_publicar")
 
   log("info", "wallapop_publish_before_publicar", {
     dryRun: input.dryRun,
