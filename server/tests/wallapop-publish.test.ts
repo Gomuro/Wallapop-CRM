@@ -5,7 +5,7 @@ import {
   listingUrlFromPageUrl,
   readUrlAfterPublicarClick,
 } from "../src/lib/wallapop-publish"
-import { shouldRevertPublishClaim } from "../src/routes/product-publish"
+import { shouldRevertPublishClaim, isPublishShippingEnabled } from "../src/routes/product-publish"
 
 describe("readUrlAfterPublicarClick", () => {
   it("returns the listing URL when the page stays open", async () => {
@@ -79,5 +79,16 @@ describe("clicked Publicar revert policy", () => {
 
   it("reverts only when claimed and Publicar was never clicked", () => {
     expect(shouldRevertPublishClaim(true, false, false)).toBe(true)
+  })
+})
+
+describe("isPublishShippingEnabled", () => {
+  it("keeps envío on even when listing.shippingEnabled is the DB default false", () => {
+    expect(
+      isPublishShippingEnabled({
+        shippingPackageSize: "STANDARD",
+        listings: [{ shippingEnabled: false }],
+      }),
+    ).toBe(true)
   })
 })

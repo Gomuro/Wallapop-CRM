@@ -353,6 +353,7 @@ export async function createProduct(req: Request, res: Response) {
           productId: product.id,
           accountId: defaultAccountId,
           status: "READY_TO_POST",
+          shippingEnabled: true,
         },
       })
       return product.id

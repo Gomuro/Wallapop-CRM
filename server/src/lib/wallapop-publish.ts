@@ -23,6 +23,9 @@ import {
 
 const UPLOAD_URL = "https://es.wallapop.com/app/catalog/upload"
 const SUMMARY_MAX = 50
+/** Give Wallapop time to open Estándar / ¿Cuánto pesa? after each click. */
+const SHIPPING_SETTLE_MS = 2_500
+const WEIGHT_BAND_SETTLE_MS = 2_000
 
 const FINAL_RE =
   /^(Publicar|Publicar anuncio|Crear producto|Subir anuncio|Subir producto|Опублікувати|Пост|Publish|Post)$/i
@@ -725,60 +728,49 @@ async function shippingRadioChecked(
   return roleRadioIsChecked(page, which)
 }
 
+async function shippingToggleCheckbox(page: Page) {
+  const labeled = page
+    .locator("wallapop-toggle")
+    .filter({ hasText: /Activar envío|Enable shipping|Активувати доставку/i })
+    .locator("input[type=checkbox]")
+    .first()
+  if ((await labeled.count().catch(() => 0)) > 0) return labeled
+  return page.locator("wallapop-toggle input[type=checkbox]").last()
+}
+
 async function isShippingToggleOn(page: Page): Promise<boolean> {
-  return Boolean(
-    await page
-      .evaluate(`(() => {
-        const boxes = [...document.querySelectorAll("wallapop-toggle input[type=checkbox]")];
-        return boxes.some((el) => el.checked);
-      })()`)
-      .catch(() => false),
-  )
+  const toggle = await shippingToggleCheckbox(page)
+  if (!(await toggle.count().catch(() => 0))) return false
+  return Boolean(await toggle.isChecked().catch(() => false))
 }
 
 async function ensureShippingToggleOff(page: Page): Promise<void> {
   if (!(await isShippingToggleOn(page))) return
-  const toggle = page.locator("wallapop-toggle input[type=checkbox]").first()
-  if (await toggle.count()) {
-    await toggle.scrollIntoViewIfNeeded().catch(() => {})
-    await toggle.click({ force: true }).catch(() => {})
-    await page.waitForTimeout(800)
-  }
-  if (await isShippingToggleOn(page)) {
-    await page
-      .evaluate(`(() => {
-        const box = document.querySelector("wallapop-toggle input[type=checkbox]");
-        if (box?.checked) box.click();
-      })()`)
-      .catch(() => {})
-    await page.waitForTimeout(800)
-  }
+  const toggle = await shippingToggleCheckbox(page)
+  await toggle.scrollIntoViewIfNeeded().catch(() => {})
+  await toggle.click({ force: true }).catch(() => {})
+  await page.waitForTimeout(SHIPPING_SETTLE_MS)
 }
 
 async function ensureShippingToggleOn(page: Page): Promise<void> {
-  const already = await page
-    .evaluate(`(() => {
-      const boxes = [...document.querySelectorAll("wallapop-toggle input[type=checkbox]")];
-      return boxes.some((el) => el.checked);
-    })()`)
-    .catch(() => false)
-  if (already) return
-
-  const toggle = page.locator("wallapop-toggle input[type=checkbox]").first()
-  if (await toggle.count()) {
-    await toggle.scrollIntoViewIfNeeded().catch(() => {})
-    await toggle.click({ force: true }).catch(() => {})
-    await page.waitForTimeout(800)
-    return
-  }
-
+  if (await isShippingToggleOn(page)) return
+  const toggle = await shippingToggleCheckbox(page)
+  await toggle.scrollIntoViewIfNeeded().catch(() => {})
+  await toggle.click({ force: true }).catch(() => {})
+  await page.waitForTimeout(SHIPPING_SETTLE_MS)
+  if (await isShippingToggleOn(page)) return
   await page
     .evaluate(`(() => {
-      const box = document.querySelector("wallapop-toggle input[type=checkbox]");
+      const labels = [...document.querySelectorAll("wallapop-toggle")];
+      const host = labels.find((el) =>
+        /Activar envío|Enable shipping/i.test(el.textContent || ""),
+      );
+      const box = host?.querySelector("input[type=checkbox]")
+        ?? document.querySelector("wallapop-toggle input[type=checkbox]");
       if (box && !box.checked) box.click();
     })()`)
     .catch(() => {})
-  await page.waitForTimeout(800)
+  await page.waitForTimeout(SHIPPING_SETTLE_MS)
 }
 
 async function clickShippingPackageRadio(
@@ -851,7 +843,7 @@ async function ensureStandardWeightBand(
         message: err instanceof Error ? err.message : String(err),
       })
     }
-    await page.waitForTimeout(700)
+    await page.waitForTimeout(WEIGHT_BAND_SETTLE_MS)
     if (await isStandardWeightBandSelected(page, labelNeedle)) return labelNeedle
   }
 
@@ -905,7 +897,7 @@ async function ensureShippingPackageSize(
   packageType: ShippingPackageType,
 ): Promise<void> {
   await page.evaluate(`window.scrollBy(0, 500)`).catch(() => {})
-  await page.waitForTimeout(400)
+  await page.waitForTimeout(SHIPPING_SETTLE_MS)
   await ensureShippingToggleOn(page)
 
   const which = packageType === "BULKY" ? "bulky" : "delivery"
@@ -933,7 +925,7 @@ async function ensureShippingPackageSize(
         message: err instanceof Error ? err.message : String(err),
       })
     }
-    await page.waitForTimeout(800)
+    await page.waitForTimeout(WEIGHT_BAND_SETTLE_MS)
     if (await shippingRadioChecked(page, which)) return
   }
 
@@ -941,6 +933,29 @@ async function ensureShippingPackageSize(
     "form",
     `No se pudo seleccionar el tamaño del paquete (${packageType === "BULKY" ? "Voluminoso" : "Estándar"}).`,
   )
+}
+
+async function applyShippingOnForm(
+  page: Page,
+  packageType: ShippingPackageType,
+  weightKg: number | null | undefined,
+): Promise<string | null> {
+  await ensureShippingPackageSize(page, packageType)
+  if (packageType !== "STANDARD") return null
+  if (weightKg == null) {
+    throw new WallapopPublishError(
+      "form",
+      "Indica el peso del producto antes de publicar con envío.",
+    )
+  }
+  await page.waitForTimeout(SHIPPING_SETTLE_MS)
+  const label = await ensureStandardWeightBand(page, weightKg)
+  log("info", "wallapop_publish_weight_band_selected", {
+    weightKg,
+    label,
+    toggleOn: await isShippingToggleOn(page),
+  })
+  return label
 }
 
 async function ensureMaterialOtro(page: Page): Promise<void> {
@@ -1152,16 +1167,11 @@ async function publishWallapopInBrowserAfterAttach(
   const shippingEnabled = input.shippingEnabled !== false
   let weightBandLabel: string | null = null
   if (shippingEnabled) {
-    await ensureShippingPackageSize(page, packageType)
-    if (packageType === "STANDARD") {
-      if (input.weightKg == null) {
-        throw new WallapopPublishError(
-          "form",
-          "Indica el peso del producto antes de publicar con envío.",
-        )
-      }
-      weightBandLabel = await ensureStandardWeightBand(page, input.weightKg)
-    }
+    weightBandLabel = await applyShippingOnForm(
+      page,
+      packageType,
+      input.weightKg,
+    )
   } else {
     await ensureShippingToggleOff(page)
   }
@@ -1258,6 +1268,14 @@ async function publishWallapopInBrowserAfterAttach(
     )
   }
   step = "before_publicar"
+
+  if (shippingEnabled) {
+    weightBandLabel = await applyShippingOnForm(
+      page,
+      packageType,
+      input.weightKg,
+    )
+  }
 
   await assertShippingReadyForPublish(
     page,
