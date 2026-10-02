@@ -21,6 +21,7 @@ import {
   wallapopStandardWeightBandFromCrm,
 } from "./wallapop-weight-band";
 import { wallapopItemUrlOrNull } from "../../../lib/inventory/wallapop-item-url";
+import { wallapopBrandFromProduct } from "../../../lib/inventory/wallapop-brand";
 
 const UPLOAD_URL = "https://es.wallapop.com/app/catalog/upload";
 const SUMMARY_MAX = 50;
@@ -852,15 +853,35 @@ async function ensureEstado(page: Page, label: string): Promise<void> {
   );
 }
 
+async function queryMarcaCombo(page: Page): Promise<{
+  id: string;
+  value: string;
+} | null> {
+  return (await page.evaluate(`(() => {
+    const labels = [...document.querySelectorAll("label")];
+    const label = labels.find((el) => /Marca\\s*\\*/i.test(el.textContent || ""));
+    if (!label) return null;
+    const forId = label.getAttribute("for");
+    const input =
+      (forId && document.getElementById(forId)) ||
+      label.closest(".inputWrapper")?.querySelector("input") ||
+      null;
+    if (!(input instanceof HTMLInputElement)) return null;
+    return { id: input.id || "", value: String(input.value || "").trim() };
+  })()`)) as { id: string; value: string } | null;
+}
+
 async function readBrandValue(page: Page): Promise<string> {
   for (const sel of ["#brand", 'input[name="brand"]']) {
     const value = await page.locator(sel).first().inputValue().catch(() => "");
     if (value?.trim()) return value.trim();
   }
-  return "";
+  const combo = await queryMarcaCombo(page);
+  return combo?.value?.trim() || "";
 }
 
 async function marcaFieldShown(page: Page): Promise<boolean> {
+  if (await queryMarcaCombo(page)) return true;
   return Boolean(
     await page.evaluate(`(() => {
       if (document.querySelector("#brand, input[name='brand'], [formcontrolname='brand']")) {
@@ -870,6 +891,20 @@ async function marcaFieldShown(page: Page): Promise<boolean> {
       return /Marca\\s*\\*/.test(text);
     })()`),
   );
+}
+
+async function typeMarcaCombo(
+  page: Page,
+  inputId: string,
+  wanted: string,
+): Promise<void> {
+  const input = page.locator("input[id=" + JSON.stringify(inputId) + "]").first();
+  await input.scrollIntoViewIfNeeded().catch(() => {});
+  await input.click({ force: true });
+  await page.waitForTimeout(300);
+  await input.fill("");
+  await page.keyboard.type(wanted, { delay: 40 });
+  await page.waitForTimeout(1_000);
 }
 
 async function ensureMarcaIfShown(
@@ -886,12 +921,50 @@ async function ensureMarcaIfShown(
     });
     return;
   }
-  const wanted = brand?.trim() || "";
+
+  await closeOpenDropdowns(page);
+  const wanted =
+    brand?.trim() ||
+    wallapopBrandFromProduct({
+      description: await readPublishDescription(page),
+    }) ||
+    "";
+  const combo = await queryMarcaCombo(page);
+  log("info", "wallapop_publish_marca_field", {
+    wanted: wanted || null,
+    comboId: combo?.id || null,
+    hasHiddenBrand: Boolean(await page.locator("#brand").count()),
+  });
   if (!wanted) {
     throw new WallapopPublishError(
       "form",
       "Wallapop exige Marca en esta categoría. Añádela en el CRM antes de publicar.",
     );
+  }
+
+  if (combo?.id) {
+    await typeMarcaCombo(page, combo.id, wanted);
+    let options = await listOpenDropdownOptions(page);
+    log("info", "wallapop_publish_marca_try", {
+      wanted,
+      via: "combo",
+      options,
+    });
+    const picked =
+      (await clickOpenListboxOption(page, wanted)) ||
+      (await clickOpenListboxOption(page, "Otras marcas")) ||
+      (await clickOpenListboxOption(page, "Otra marca")) ||
+      (await clickOpenListboxOption(page, "Otro"));
+    if (!picked) await page.keyboard.press("Enter").catch(() => {});
+    await page.waitForTimeout(400);
+    if ((await readBrandValue(page)).trim()) {
+      log("info", "wallapop_publish_marca_selected", {
+        wanted,
+        value: await readBrandValue(page),
+        picked,
+      });
+      return;
+    }
   }
 
   await fillIfEmpty(
@@ -923,7 +996,13 @@ async function ensureMarcaIfShown(
   })(${JSON.stringify(wanted)})`);
   if (typed) await page.keyboard.type(wanted, { delay: 25 }).catch(() => {});
   const options = await listOpenDropdownOptions(page);
-  log("info", "wallapop_publish_marca_try", { wanted, opened, typed, options });
+  log("info", "wallapop_publish_marca_try", {
+    wanted,
+    opened,
+    typed,
+    via: "hidden",
+    options,
+  });
   await clickOpenListboxOption(page, wanted);
   await page.waitForTimeout(400);
   if ((await readBrandValue(page)).trim()) {

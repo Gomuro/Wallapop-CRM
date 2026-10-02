@@ -32,6 +32,16 @@ describe("wallapopBrandFromProduct", () => {
     ).toBe("QUIRUMED")
   })
 
+  it("reads a leading ALLCAPS token when there is no Marca line", () => {
+    expect(
+      wallapopBrandFromProduct({
+        brand: null,
+        description:
+          "QUIRUMED Andador con asiento, Plegable, Aluminio, Color Azul",
+      }),
+    ).toBe("QUIRUMED")
+  })
+
   it("returns null when nothing usable is present", () => {
     expect(
       wallapopBrandFromProduct({
