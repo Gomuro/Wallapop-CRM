@@ -1361,6 +1361,7 @@ async function publishWallapopInBrowserAfterAttach(
     lengthCm: input.lengthCm ?? null,
     heightCm: input.heightCm ?? null,
     categoryLabels: input.categoryLabels,
+    brand: input.brand ?? null,
     url: page.url(),
   });
   try {

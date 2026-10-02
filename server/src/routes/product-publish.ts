@@ -22,6 +22,7 @@ import {
 import { wallapopStandardWeightBandFromCrm } from "../lib/wallapop-weight-band"
 import { categoryBreadcrumbLabelsEs } from "../lib/category-breadcrumb"
 import { validateShippingForPublish } from "../../../lib/inventory/shipping-for-publish"
+import { wallapopBrandFromProduct } from "../../../lib/inventory/wallapop-brand"
 import {
   listingWithoutPublicItemUrlWhere,
   wallapopItemUrlOrNull,
@@ -361,7 +362,11 @@ export async function runProductPublish(
       description: product.description,
       price: decimalToNumber(product.price),
       condition: product.condition,
-      brand: product.brand,
+      brand: wallapopBrandFromProduct({
+        brand: product.brand,
+        description: product.description,
+        typeAttributes: product.typeAttributes,
+      }),
       imagePaths,
       categoryLabels,
       dryRun,
