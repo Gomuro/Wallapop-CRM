@@ -434,6 +434,19 @@ describe("API v1 integration (Express + Postgres)", () => {
           externalUrl: "https://es.wallapop.com/item/x",
         }),
       ).toBe(true)
+      expect(
+        listingBlocksDryRun({
+          status: "READY_TO_POST",
+          externalUrl: "https://es.wallapop.com",
+        }),
+      ).toBe(false)
+      expect(
+        listingBlocksDryRun({
+          status: "READY_TO_POST",
+          externalUrl:
+            "https://es.wallapop.com/app/catalog/upload/consumer-goods",
+        }),
+      ).toBe(false)
     })
 
     it("claims READY_TO_POST → POSTING and refuses a second claim", async () => {

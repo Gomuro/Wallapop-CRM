@@ -181,6 +181,19 @@ describe("autopostDelayWithJitter", () => {
   })
 })
 
+describe("autopostEligibleListingWhere", () => {
+  it("allows READY_TO_POST without a public /item/ URL", () => {
+    expect(autopostEligibleListingWhere("acc-1")).toMatchObject({
+      accountId: "acc-1",
+      status: "READY_TO_POST",
+      OR: [
+        { externalUrl: null },
+        { NOT: { externalUrl: { contains: "/item/" } } },
+      ],
+    })
+  })
+})
+
 describe("pickNextAutopostListing", () => {
   afterEach(() => {
     resetAutopostRecentSkipsForTests()

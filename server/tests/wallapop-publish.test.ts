@@ -1,5 +1,6 @@
 import { describe, expect, it } from "vitest"
 
+import { productListingApiPutBodySchema } from "../../lib/validations/listing"
 import {
   isPublicarContextDestroyedError,
   listingUrlFromPageUrl,
@@ -59,6 +60,11 @@ describe("listingUrlFromPageUrl", () => {
     ).toBeNull()
   })
 
+  it("rejects the Wallapop homepage (not a listing)", () => {
+    expect(listingUrlFromPageUrl("https://es.wallapop.com")).toBeNull()
+    expect(listingUrlFromPageUrl("https://es.wallapop.com/")).toBeNull()
+  })
+
   it("drops other hosts", () => {
     expect(listingUrlFromPageUrl("https://example.com/x")).toBeNull()
   })
@@ -90,5 +96,29 @@ describe("clicked Publicar revert policy", () => {
 
   it("reverts only when claimed and Publicar was never clicked", () => {
     expect(shouldRevertPublishClaim(true, false, false)).toBe(true)
+  })
+})
+
+describe("productListingApiPutBodySchema", () => {
+  it("keeps public /item/ URLs and coerces junk to null", () => {
+    expect(
+      productListingApiPutBodySchema.parse({
+        externalUrl: "https://es.wallapop.com/item/andador",
+      }).externalUrl,
+    ).toBe("https://es.wallapop.com/item/andador")
+    expect(
+      productListingApiPutBodySchema.parse({
+        externalUrl: "https://es.wallapop.com",
+      }).externalUrl,
+    ).toBeNull()
+    expect(
+      productListingApiPutBodySchema.parse({
+        externalUrl:
+          "https://es.wallapop.com/app/catalog/upload/consumer-goods",
+      }).externalUrl,
+    ).toBeNull()
+    expect(
+      productListingApiPutBodySchema.parse({ externalUrl: "" }).externalUrl,
+    ).toBeNull()
   })
 })

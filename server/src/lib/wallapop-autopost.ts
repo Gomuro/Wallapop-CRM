@@ -1,5 +1,6 @@
 import type { Prisma, PrismaClient } from "../../generated/prisma/client"
 
+import { listingWithoutPublicItemUrlWhere } from "../../../lib/inventory/wallapop-item-url"
 import {
   AUTOPOST_INTERVAL_MS_MAX,
   AUTOPOST_INTERVAL_MS_MIN,
@@ -203,6 +204,7 @@ export function autopostDelayWithJitter(
  * Eligible queue row on the default account.
  * Only `READY_TO_POST` — never POSTING / ACTIVE / DEACTIVATED (anti-duplicate
  * after crash-after-Publicar; POSTING is not retried even if the enum exists).
+ * A leftover upload/home URL is not a published item — still eligible.
  */
 export function autopostEligibleListingWhere(
   accountId: string,
@@ -210,7 +212,7 @@ export function autopostEligibleListingWhere(
   return {
     accountId,
     status: "READY_TO_POST",
-    externalUrl: null,
+    ...listingWithoutPublicItemUrlWhere,
     product: {
       status: "ACTIVE",
       images: { some: {} },

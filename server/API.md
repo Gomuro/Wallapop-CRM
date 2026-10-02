@@ -167,7 +167,7 @@ Body (JSON, camelCase): усі поля опційні, **хоча б одне**
 
 | Поле | Тип |
 |------|-----|
-| `externalUrl` | URL string або `null` (очистити) |
+| `externalUrl` | публічний URL `/item/…` або `null` (очистити). Головна Wallapop, `/upload…` і будь-який інший рядок **стають `null`** |
 | `status` | `READY_TO_POST` \| `ACTIVE` \| `DEACTIVATED` (не `POSTING`) |
 | `shippingEnabled` | `boolean` |
 | `shippingUpToKg` | позитивне ціле або `null` |
@@ -386,7 +386,7 @@ Chrome / вкладки Wallapop відкриваються коли потрі�
 
 **200** live (`WALLAPOP_PUBLISH_DRY_RUN=false`): `{ ok, dryRun: false, listing, error: null, step: "published" }` — listing `ACTIVE`, `externalUrl` best-effort.
 
-Перед Chrome live publish атомарно claim-ить listing: `READY_TO_POST` → `POSTING` де `productId+accountId` і `externalUrl` IS NULL. 0 рядків → **409** `ALREADY_POSTED` (вже `ACTIVE` / `POSTING` / `DEACTIVATED` / є URL). Після live-успіху браузера (`dryRun: false`) пише `ACTIVE` **лише якщо** listing ще `POSTING` (не форсить `ACTIVE` поверх `DEACTIVATED` / sold). Якщо браузер уже опублікував, а DB-запис упав — статус лишається `POSTING`, **500** `PUBLISH_FAILED`, revert **немає** (як crash-kill після Publicar). Клік Publicar = posted: wait/`page.url()` після кліку best-effort (`externalUrl` може бути null); Target closed після кліку (wait/`page.url()` **або** `evaluate` кліку, якщо вкладка вже зникла) **не** ревертить у `READY_TO_POST`. Revert `POSTING` → `READY_TO_POST` лише якщо був claim і Publicar **не** натиснули (BrowserBusy / фейл до Publicar). Авто-ретрай `POSTING` немає. Dry-run **не** claim-ить; **409** `ALREADY_POSTED` якщо listing уже `ACTIVE` або є `externalUrl` (`POSTING` для dry-run дозволений, read-only).
+Перед Chrome live publish атомарно claim-ить listing: `READY_TO_POST` → `POSTING` де `productId+accountId` і **немає** публічного URL `/item/…` (upload/home URL не рахується; claim також обнуляє junk URL). 0 рядків → **409** `ALREADY_POSTED` (вже `ACTIVE` / `POSTING` / `DEACTIVATED` / є `/item/…`). Після live-успіху браузера (`dryRun: false`) пише `ACTIVE` **лише якщо** listing ще `POSTING` (не форсить `ACTIVE` поверх `DEACTIVATED` / sold). Якщо браузер уже опублікував, а DB-запис упав — статус лишається `POSTING`, **500** `PUBLISH_FAILED`, revert **немає** (як crash-kill після Publicar). Клік Publicar = posted: wait/`page.url()` після кліку best-effort (`externalUrl` може бути null); Target closed після кліку (wait/`page.url()` **або** `evaluate` кліку, якщо вкладка вже зникла) **не** ревертить у `READY_TO_POST`. Revert `POSTING` → `READY_TO_POST` лише якщо був claim і Publicar **не** натиснули (BrowserBusy / фейл до Publicar). Авто-ретрай `POSTING` немає. Dry-run **не** claim-ить; **409** `ALREADY_POSTED` якщо listing уже `ACTIVE` або є публічний `/item/…` (`POSTING` для dry-run дозволений, read-only).
 
 | HTTP | code | Коли |
 |------|------|------|
@@ -394,7 +394,7 @@ Chrome / вкладки Wallapop відкриваються коли потрі�
 | 404 | `NOT_FOUND` | Продукт / default account |
 | 409 | `NOT_ACTIVE` | Session не ACTIVE |
 | 409 | `BROWSER_BUSY` | Chrome зайнятий іншою дією (login / logout / publish / rehydrate) |
-| 409 | `ALREADY_POSTED` | Listing уже опублікований / claimed / має `externalUrl` |
+| 409 | `ALREADY_POSTED` | Listing уже опублікований / claimed / має публічний `/item/…` |
 | 409 | `NOT_PUBLISHABLE` | Складський статус продукту `SOLD` або `INACTIVE` |
 | 400 | `SHIPPING_NOT_READY` | Немає peso (live publish, до claim). Medidas не обов’язкові. |
 | 400 | `VALIDATION_ERROR` | Немає фото / файл відсутній на диску / вага > 30 kg Estándar |
@@ -402,7 +402,7 @@ Chrome / вкладки Wallapop відкриваються коли потрі�
 
 ### Autopost queue
 
-In-process цикл по `product_listings` (без Redis / нової таблиці). Таймери стартують на буті завжди. Тік **не** поститить, доки UI Start не поставить `accounts.autopost_enabled` **і** `WALLAPOP_PUBLISH_DRY_RUN=false`. `{ dryRun: false }` у воркері **не** обходить env. Якщо live: session `ACTIVE` і Chrome idle (`getBrowserBusy() === "idle"`) → FIFO eligible listings на **default** акаунті (`status: READY_TO_POST`, `externalUrl` null, продукт `ACTIVE` з ≥1 image, `orderBy: createdAt asc`, batch 30). Listings без peso **пропускаються** (`wallapop_autopost_skip_shipping`, `recentSkips` у GET default) і тік бере **наступний** ready. Один publish на тік. Не вибирає `POSTING` / `ACTIVE` / `DEACTIVATED` і не ретраїть `POSTING`. Інтервал: `account.autopostIntervalMs` → env `WALLAPOP_AUTOPOST_INTERVAL_MS` → default 15 хв; + ±20% jitter. PATCH інтервалу і Start **перезапускають** поточний `setTimeout` (`rescheduleAutopostLoop`), щоб countdown не лишався від старого (довшого) інтервалу. Після кожного тіка loop знову читає інтервал. Інший email Wallapop на connect скидає listings цього default-акаунта. Модуль: [`server/src/lib/wallapop-autopost.ts`](./src/lib/wallapop-autopost.ts). Старт: [`runStartupHooks()`](./src/startup.ts).
+In-process цикл по `product_listings` (без Redis / нової таблиці). Таймери стартують на буті завжди. Тік **не** поститить, доки UI Start не поставить `accounts.autopost_enabled` **і** `WALLAPOP_PUBLISH_DRY_RUN=false`. `{ dryRun: false }` у воркері **не** обходить env. Якщо live: session `ACTIVE` і Chrome idle (`getBrowserBusy() === "idle"`) → FIFO eligible listings на **default** акаунті (`status: READY_TO_POST`, без публічного `/item/…`, продукт `ACTIVE` з ≥1 image, `orderBy: createdAt asc`, batch 30). Listings без peso **пропускаються** (`wallapop_autopost_skip_shipping`, `recentSkips` у GET default) і тік бере **наступний** ready. Один publish на тік. Не вибирає `POSTING` / `ACTIVE` / `DEACTIVATED` і не ретраїть `POSTING`. Інтервал: `account.autopostIntervalMs` → env `WALLAPOP_AUTOPOST_INTERVAL_MS` → default 15 хв; + ±20% jitter. PATCH інтервалу і Start **перезапускають** поточний `setTimeout` (`rescheduleAutopostLoop`), щоб countdown не лишався від старого (довшого) інтервалу. Після кожного тіка loop знову читає інтервал. Інший email Wallapop на connect скидає listings цього default-акаунта. Модуль: [`server/src/lib/wallapop-autopost.ts`](./src/lib/wallapop-autopost.ts). Старт: [`runStartupHooks()`](./src/startup.ts).
 
 ### Manual verify (dry-run)
 

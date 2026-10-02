@@ -1,5 +1,7 @@
 import { z } from "zod"
 
+import { wallapopItemUrlOrNull } from "../inventory/wallapop-item-url"
+
 /** Public PUT / create status. `POSTING` is internal (publish claim) and is rejected here. */
 export const listingStatusSchema = z.enum([
   "READY_TO_POST",
@@ -31,7 +33,10 @@ export const productListingUpdateSchema = productListingCreateSchema
 
 export const productListingApiPutBodySchema = z
   .object({
-    externalUrl: z.string().trim().url().nullable().optional(),
+    externalUrl: z
+      .union([z.string(), z.null()])
+      .optional()
+      .transform((value) => wallapopItemUrlOrNull(value)),
     status: listingStatusSchema.optional(),
     shippingEnabled: z.boolean().optional(),
     shippingUpToKg: z.number().int().positive().nullable().optional(),

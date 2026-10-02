@@ -37,13 +37,16 @@ function formToListingBody(formData: FormData) {
   const externalUrlRaw = String(formData.get("externalUrl") ?? "").trim()
   const statusRaw = String(formData.get("listingStatus") ?? "").trim()
   const keepUrlIfEmpty = String(formData.get("keepUrlIfEmpty") ?? "") === "1"
+  const clearListingUrl = String(formData.get("clearListingUrl") ?? "") === "1"
 
   const body: {
     externalUrl?: string | null
     status?: string
   } = {}
 
-  if (externalUrlRaw !== "") {
+  if (clearListingUrl) {
+    body.externalUrl = null
+  } else if (externalUrlRaw !== "") {
     body.externalUrl = externalUrlRaw
   } else if (!keepUrlIfEmpty) {
     body.externalUrl = null

@@ -20,6 +20,7 @@ import {
   wallapopStandardWeightBandAriaName,
   wallapopStandardWeightBandFromCrm,
 } from "./wallapop-weight-band";
+import { wallapopItemUrlOrNull } from "../../../lib/inventory/wallapop-item-url";
 
 const UPLOAD_URL = "https://es.wallapop.com/app/catalog/upload";
 const SUMMARY_MAX = 50;
@@ -125,16 +126,7 @@ export type PageUrlReader = {
 };
 
 export function listingUrlFromPageUrl(url: string): string | null {
-  try {
-    const parsed = new URL(url)
-    const host = parsed.hostname.toLowerCase()
-    if (host !== "wallapop.com" && !host.endsWith(".wallapop.com")) return null
-    if (/\/upload(\/|$)/i.test(parsed.pathname)) return null
-    if (!/\/item\//i.test(parsed.pathname)) return null
-    return parsed.href
-  } catch {
-    return null
-  }
+  return wallapopItemUrlOrNull(url);
 }
 
 /**

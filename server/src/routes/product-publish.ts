@@ -22,6 +22,10 @@ import {
 import { wallapopStandardWeightBandFromCrm } from "../lib/wallapop-weight-band"
 import { categoryBreadcrumbLabelsEs } from "../lib/category-breadcrumb"
 import { validateShippingForPublish } from "../../../lib/inventory/shipping-for-publish"
+import {
+  listingWithoutPublicItemUrlWhere,
+  wallapopItemUrlOrNull,
+} from "../../../lib/inventory/wallapop-item-url"
 import { loadProductCard, paramId } from "./products"
 
 const ALREADY_POSTED_MESSAGE =
@@ -62,10 +66,10 @@ export function listingBlocksDryRun(listing: {
   externalUrl: string | null
 } | null | undefined): boolean {
   if (!listing) return false
-  return listing.status === "ACTIVE" || Boolean(listing.externalUrl)
+  return listing.status === "ACTIVE" || wallapopItemUrlOrNull(listing.externalUrl) != null
 }
 
-/** Atomic READY_TO_POST → POSTING for (product, account) with no external URL. */
+/** Atomic READY_TO_POST → POSTING for (product, account) without a public item URL. */
 export async function claimListingForPublish(
   prisma: PrismaClient,
   productId: string,
@@ -76,9 +80,9 @@ export async function claimListingForPublish(
       productId,
       accountId,
       status: "READY_TO_POST",
-      externalUrl: null,
+      ...listingWithoutPublicItemUrlWhere,
     },
-    data: { status: "POSTING" },
+    data: { status: "POSTING", externalUrl: null },
   })
   return result.count > 0
 }
@@ -243,7 +247,7 @@ export async function runProductPublish(
   } else if (
     !listing ||
     listing.status !== "READY_TO_POST" ||
-    listing.externalUrl
+    wallapopItemUrlOrNull(listing.externalUrl)
   ) {
     return {
       ok: false,

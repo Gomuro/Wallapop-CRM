@@ -109,6 +109,7 @@ export default async function ProductDetailPage({
             ) : null}
           </div>
           <ListingDetailSection
+            productId={product.id}
             listing={product.listing}
             listingActive={product.listingActive}
             shippingIncomplete={!product.shippingPublishReady}
