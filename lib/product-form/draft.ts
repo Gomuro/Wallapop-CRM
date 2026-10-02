@@ -15,6 +15,7 @@ export type ProductDraftFields = {
   categoryId: string
   condition: string
   status: string
+  brand?: string
 }
 
 export function loadDraftFields(): ProductDraftFields | null {

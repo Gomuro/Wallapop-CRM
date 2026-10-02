@@ -47,6 +47,7 @@ function warehouseCreateBody(input: ProductCreateInput) {
     currency: "EUR" as const,
     categoryId: input.categoryId,
     condition: input.condition,
+    brand: input.brand ?? null,
     weightKg: input.weight ?? null,
     shippingPackageSize: input.shippingPackageSize ?? "STANDARD",
     widthCm: input.widthCm ?? null,
@@ -65,6 +66,7 @@ function warehousePatchBody(input: ProductUpdateInput) {
   if (input.price !== undefined) body.price = input.price
   if (input.categoryId !== undefined) body.categoryId = input.categoryId
   if (input.condition !== undefined) body.condition = input.condition
+  if (input.brand !== undefined) body.brand = input.brand
   if (input.weight !== undefined) body.weightKg = input.weight
   if (input.shippingPackageSize !== undefined) {
     body.shippingPackageSize = input.shippingPackageSize

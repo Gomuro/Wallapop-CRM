@@ -70,6 +70,12 @@ const productFieldsSchema = z.object({
     .nonnegative("El precio no puede ser negativo."),
   categoryId: z.string().trim().min(1, "Elige una categoría."),
   condition: productConditionSchema,
+  brand: z
+    .string()
+    .trim()
+    .max(100, "La marca es demasiado larga.")
+    .nullable()
+    .optional(),
   weight: z
     .number({ error: "Introduce un peso válido." })
     .finite("Introduce un peso válido.")

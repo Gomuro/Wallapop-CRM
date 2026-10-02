@@ -45,10 +45,21 @@ describe("readUrlAfterPublicarClick", () => {
 })
 
 describe("listingUrlFromPageUrl", () => {
-  it("keeps wallapop.com URLs and drops others", () => {
+  it("keeps Wallapop item URLs", () => {
     expect(listingUrlFromPageUrl("https://es.wallapop.com/item/1")).toBe(
       "https://es.wallapop.com/item/1",
     )
+  })
+
+  it("rejects the upload form URL (Publicar bounced, not posted)", () => {
+    expect(
+      listingUrlFromPageUrl(
+        "https://es.wallapop.com/app/catalog/upload/consumer-goods",
+      ),
+    ).toBeNull()
+  })
+
+  it("drops other hosts", () => {
     expect(listingUrlFromPageUrl("https://example.com/x")).toBeNull()
   })
 })

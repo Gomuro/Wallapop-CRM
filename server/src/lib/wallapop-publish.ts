@@ -125,7 +125,16 @@ export type PageUrlReader = {
 };
 
 export function listingUrlFromPageUrl(url: string): string | null {
-  return url.includes("wallapop.com") ? url : null;
+  try {
+    const parsed = new URL(url)
+    const host = parsed.hostname.toLowerCase()
+    if (host !== "wallapop.com" && !host.endsWith(".wallapop.com")) return null
+    if (/\/upload(\/|$)/i.test(parsed.pathname)) return null
+    if (!/\/item\//i.test(parsed.pathname)) return null
+    return parsed.href
+  } catch {
+    return null
+  }
 }
 
 /**
@@ -743,14 +752,17 @@ async function listOpenDropdownOptions(page: Page): Promise<string[]> {
   })()`)) as string[];
 }
 
-/** Open the Estado control next to hidden #condition — not the header / vacation «Nuevo». */
-async function openEstadoDropdown(page: Page): Promise<boolean> {
+/** Open the dropdown bound to a hidden input (#condition, #brand). */
+async function openHiddenFieldDropdown(
+  page: Page,
+  hiddenId: string,
+): Promise<boolean> {
   await closeOpenDropdowns(page);
-  const opened = (await page.evaluate(`(() => {
-    const hidden = document.querySelector("#condition");
+  const opened = (await page.evaluate(`((hiddenId) => {
+    const hidden = document.querySelector("#" + hiddenId);
     if (!hidden) return false;
     const host =
-      hidden.closest("tsl-dropdown-form, [formcontrolname='condition']") ||
+      hidden.closest("tsl-dropdown-form, [formcontrolname]") ||
       hidden.parentElement;
     const dd =
       hidden.closest("walla-dropdown") ||
@@ -764,12 +776,15 @@ async function openEstadoDropdown(page: Page): Promise<boolean> {
     btn.scrollIntoView?.({ block: "center" });
     btn.click?.();
     return true;
-  })()`)) as boolean;
+  })(${JSON.stringify(hiddenId)})`)) as boolean;
   await page.waitForTimeout(900);
   return Boolean(opened);
 }
 
-async function clickEstadoOption(page: Page, label: string): Promise<boolean> {
+async function clickOpenListboxOption(
+  page: Page,
+  label: string,
+): Promise<boolean> {
   const clicked = (await page.evaluate(`((label) => {
     const norm = (s) =>
       (s || "")
@@ -790,7 +805,9 @@ async function clickEstadoOption(page: Page, label: string): Promise<boolean> {
         aria === wanted ||
         text === wanted ||
         aria.startsWith(wanted) ||
-        text.startsWith(wanted)
+        text.startsWith(wanted) ||
+        aria.includes(wanted) ||
+        text.includes(wanted)
       );
     });
     if (!match) return false;
@@ -799,6 +816,14 @@ async function clickEstadoOption(page: Page, label: string): Promise<boolean> {
   })(${JSON.stringify(label)})`)) as boolean;
   if (clicked) await page.waitForTimeout(1_000);
   return Boolean(clicked);
+}
+
+async function openEstadoDropdown(page: Page): Promise<boolean> {
+  return openHiddenFieldDropdown(page, "condition");
+}
+
+async function clickEstadoOption(page: Page, label: string): Promise<boolean> {
+  return clickOpenListboxOption(page, label);
 }
 
 async function ensureEstado(page: Page, label: string): Promise<void> {
@@ -833,6 +858,120 @@ async function ensureEstado(page: Page, label: string): Promise<void> {
     "form",
     `No se pudo seleccionar el estado (${label}).`,
   );
+}
+
+async function readBrandValue(page: Page): Promise<string> {
+  for (const sel of ["#brand", 'input[name="brand"]']) {
+    const value = await page.locator(sel).first().inputValue().catch(() => "");
+    if (value?.trim()) return value.trim();
+  }
+  return "";
+}
+
+async function marcaFieldShown(page: Page): Promise<boolean> {
+  return Boolean(
+    await page.evaluate(`(() => {
+      if (document.querySelector("#brand, input[name='brand'], [formcontrolname='brand']")) {
+        return true;
+      }
+      const text = document.body ? document.body.innerText : "";
+      return /Marca\\s*\\*/.test(text);
+    })()`),
+  );
+}
+
+async function ensureMarcaIfShown(
+  page: Page,
+  brand?: string | null,
+): Promise<void> {
+  if (!(await marcaFieldShown(page))) {
+    log("info", "wallapop_publish_marca_skip", { reason: "field_absent" });
+    return;
+  }
+  if ((await readBrandValue(page)).trim()) {
+    log("info", "wallapop_publish_marca_already", {
+      value: await readBrandValue(page),
+    });
+    return;
+  }
+  const wanted = brand?.trim() || "";
+  if (!wanted) {
+    throw new WallapopPublishError(
+      "form",
+      "Wallapop exige Marca en esta categoría. Añádela en el CRM antes de publicar.",
+    );
+  }
+
+  await fillIfEmpty(
+    page,
+    [
+      'input[name="brand"]',
+      "#brand",
+      'input[aria-label*="Marca" i]',
+      'input[placeholder*="Marca" i]',
+    ],
+    wanted,
+  );
+  if ((await readBrandValue(page)).trim()) return;
+
+  const opened = await openHiddenFieldDropdown(page, "brand");
+  const typed = await page.evaluate(`((v) => {
+    const el = document.querySelector(
+      "#brand, input[name=brand], input[aria-label*='Marca' i]",
+    );
+    if (!el) return false;
+    el.focus();
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    setter ? setter.call(el, v) : (el.value = v);
+    el.dispatchEvent(new InputEvent("input", { bubbles: true, data: v, inputType: "insertText" }));
+    return true;
+  })(${JSON.stringify(wanted)})`);
+  if (typed) await page.keyboard.type(wanted, { delay: 25 }).catch(() => {});
+  const options = await listOpenDropdownOptions(page);
+  log("info", "wallapop_publish_marca_try", { wanted, opened, typed, options });
+  await clickOpenListboxOption(page, wanted);
+  await page.waitForTimeout(400);
+  if ((await readBrandValue(page)).trim()) {
+    log("info", "wallapop_publish_marca_selected", {
+      wanted,
+      value: await readBrandValue(page),
+    });
+    return;
+  }
+  throw new WallapopPublishError(
+    "form",
+    `No se pudo seleccionar la marca (${wanted}).`,
+  );
+}
+
+async function wallapopUploadStillOpen(page: Page): Promise<boolean> {
+  try {
+    return /\/upload/i.test(page.url());
+  } catch {
+    return false;
+  }
+}
+
+async function wallapopUploadReviewMessage(
+  page: Page,
+): Promise<string | null> {
+  try {
+    return (await page.evaluate(`(() => {
+      const text = document.body ? document.body.innerText : "";
+      if (/Revisa los campos/i.test(text) || /Revisa la información/i.test(text)) {
+        return "Wallapop pidió revisar campos en rojo (Marca u otros). El anuncio no se publicó.";
+      }
+      if (/Campo obligatorio/i.test(text) && /Marca/i.test(text)) {
+        return "Falta Marca en Wallapop. El anuncio no se publicó.";
+      }
+      return null;
+    })()`)) as string | null;
+  } catch {
+    return null;
+  }
 }
 
 async function fillWallaTextInput(
@@ -1247,7 +1386,9 @@ async function publishWallapopInBrowserAfterAttach(
       url: page.url(),
       ...(await snapshotPublishForm(
         page,
-        /estado/i.test(message) ? 'id="condition"' : undefined,
+        /estado|marca|revisa/i.test(message)
+          ? 'id="condition"'
+          : undefined,
       )),
     });
     throw error;
@@ -1354,6 +1495,7 @@ async function runPublishAfterAttach(
   await ensureEstado(page, estadoLabel(input.condition));
   await fillPrice(page, input.price);
   logPublishStep(step, page, { phase: "after_estado_price" });
+  await ensureMarcaIfShown(page, input.brand);
   await ensureMaterialOtro(page);
   const packageType = input.packageType ?? "STANDARD";
   let weightBandLabel: string | null = null;
@@ -1382,18 +1524,6 @@ async function runPublishAfterAttach(
     input.lengthCm,
     input.heightCm,
   );
-
-  if (input.brand?.trim()) {
-    await fillIfEmpty(
-      page,
-      [
-        'input[name="brand"]',
-        'input[aria-label*="Marca" i]',
-        'input[placeholder*="Marca" i]',
-      ],
-      input.brand.trim(),
-    );
-  }
 
   await clickMainText(page, "No lo es");
 
@@ -1504,6 +1634,16 @@ async function runPublishAfterAttach(
   }
 
   const externalUrl = await readUrlAfterPublicarClick(page);
+  if (!externalUrl) {
+    const review = await wallapopUploadReviewMessage(page);
+    if (review || (await wallapopUploadStillOpen(page))) {
+      throw new WallapopPublishError(
+        "form",
+        review ??
+          "Wallapop no publicó el anuncio; el formulario de alta sigue abierto.",
+      );
+    }
+  }
   log("info", "wallapop_publish_done", {
     step: "published",
     externalUrl,

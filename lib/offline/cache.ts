@@ -286,6 +286,7 @@ export function upsertOfflineProduct(
     category: category?.nameEs ?? prev?.category ?? "",
     condition: conditionLabel(draft.condition),
     conditionCode: draft.condition,
+    brand: prev?.brand ?? null,
     weight,
     shippingPackageSize:
       draft.shippingPackageSize === undefined

@@ -174,6 +174,7 @@ export function ProductForm({
       categoryId,
       condition,
       status,
+      brand: current?.brand ?? "",
     })
   }, [categoryId, condition, draftReady, isNew, restoreDraft, shippingPackageSize, status])
 
@@ -203,6 +204,7 @@ export function ProductForm({
       categoryId,
       condition,
       status,
+      brand: String(formData.get("brand") ?? ""),
     })
   }
 
@@ -467,6 +469,16 @@ export function ProductForm({
               ))}
             </SelectContent>
           </Select>
+        </Field>
+        <Field label="Marca" htmlFor="brand" error={state.fieldErrors?.brand}>
+          <Input
+            id="brand"
+            name="brand"
+            defaultValue={product?.brand ?? draft?.brand ?? ""}
+            className="h-11"
+            placeholder="Obligatoria en Moda y accesorios"
+            aria-invalid={Boolean(state.fieldErrors?.brand)}
+          />
         </Field>
         <Field label="Estado de venta" htmlFor="status" error={state.fieldErrors?.status}>
           <Select

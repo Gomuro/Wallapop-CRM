@@ -29,6 +29,7 @@ export type InventoryProduct = {
   category: string
   condition: string
   conditionCode: ProductCondition
+  brand: string | null
   weight: number | null
   shippingPackageSize: ShippingPackageSize | null
   widthCm: number | null
