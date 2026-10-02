@@ -344,7 +344,7 @@ Google / Apple / Facebook SSO на onboarding — окремі `walla-button`; e
 
 **Envío:** **не клікати** «Activar envío». Дві живі розкладки: (1) одразу «¿Cuánto pesa?» — лише tramo ваги; (2) «Tamaño del producto» Estándar/Voluminoso без kg (jardín тощо) — клікнути radio `delivery`/`bulky` з CRM `shippingPackageSize`, тоді вага. Немає жодного з блоків — не фейлити.
 
-**Envío / tramo de peso:** CRM `weightKg` як є (без +0.25) → смуга `0 a 1` … `20 a 30` kg, **верхня межа включно** (2 → `1 a 2`, 10 → `5 a 10`). Якщо блок **«¿Cuánto pesa?»** на формі **немає** — **не фейлити** (лог `wallapop_publish_weight_selector_missing`), іти далі до Publicar. Medidas `#width`/`#length`/`#height` **опційні** (немає cm у CRM → поля не чіпаємо). Live HTTP без `weightKg` досі **400** `SHIPPING_NOT_READY` (не пускати в Chrome порожню вагу). Якщо `weightKg > 30` → **400**.
+**Envío / tramo de peso:** CRM `weightKg` + buffer **0.25 kg** → смуга `0 a 1` … `20 a 30` kg. Якщо блок **«¿Cuánto pesa?»** на формі **немає** — **не фейлити** (лог `wallapop_publish_weight_selector_missing`), іти далі до Publicar. Medidas `#width`/`#length`/`#height` **опційні** (немає cm у CRM → поля не чіпаємо). Live HTTP без `weightKg` досі **400** `SHIPPING_NOT_READY` (не пускати в Chrome порожню вагу). Якщо `effectiveKg > 30` → **400**.
 
 **Descripción vs IA:** після photos CRM **завжди перезаписує** textarea опису (не `fillIfEmpty` — Wallapop AI часто вже підставляє свій текст). Перед кліком Publicar повторна перевірка: нормалізований текст форми має збігатися з CRM. Якщо IA переписала — ще одна спроба fill; якщо знову чужий текст → `PUBLISH_FAILED` («La descripción en Wallapop no coincide con la del CRM…»), listing ревертиться з `POSTING` (Publicar не натиснуто).
 
