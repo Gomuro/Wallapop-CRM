@@ -188,9 +188,10 @@ function logPublishStep(
 /** Compact DOM snapshot for VPS logs — no debugger on the Windows box. */
 async function snapshotPublishForm(
   page: Page,
+  preferredNeedle?: string,
 ): Promise<Record<string, unknown>> {
   try {
-    return (await page.evaluate(`(() => {
+    return (await page.evaluate(`((preferredNeedle) => {
       const RADIUS = 100;
       const text = document.body ? document.body.innerText : "";
       const boxes = [...document.querySelectorAll("wallapop-toggle input[type=checkbox]")];
@@ -201,6 +202,7 @@ async function snapshotPublishForm(
         value: el.value,
       }));
       const needles = [
+        preferredNeedle,
         "cuánto pesa",
         "cuanto pesa",
         "activar envío",
@@ -214,7 +216,9 @@ async function snapshotPublishForm(
         'id="delivery"',
         "estándar",
         "voluminoso",
-      ];
+        'id="condition"',
+        "como nuevo",
+      ].filter(Boolean);
       const raw = document.documentElement ? document.documentElement.outerHTML : "";
       const pretty = raw.replace(/></g, ">\\n<");
       const lines = pretty.split("\\n");
@@ -250,7 +254,7 @@ async function snapshotPublishForm(
         htmlTotalLines: lines.length,
         htmlAround,
       };
-    })()`)) as Record<string, unknown>;
+    })(${JSON.stringify(preferredNeedle ?? "")})`)) as Record<string, unknown>;
   } catch (error) {
     return {
       snapshotError: error instanceof Error ? error.message : String(error),
@@ -712,36 +716,117 @@ async function fillPrice(page: Page, price: number): Promise<void> {
   }
 }
 
-async function openEstadoDropdown(page: Page): Promise<void> {
-  const btn = page.getByRole("button", { name: /^Estado/i });
-  if (
-    await btn
-      .first()
-      .isVisible()
-      .catch(() => false)
-  ) {
-    await btn.first().click({ force: true });
-    await page.waitForTimeout(900);
-    return;
-  }
-  const dd = page.locator('walla-dropdown[aria-label*="Estado" i]').first();
-  if (await dd.isVisible().catch(() => false)) {
-    await dd.click({ force: true });
-    await page.waitForTimeout(900);
-  }
+async function readConditionValue(page: Page): Promise<string> {
+  return (await page.locator("#condition").first().inputValue().catch(() => "")) || "";
+}
+
+async function closeOpenDropdowns(page: Page): Promise<void> {
+  await page.keyboard.press("Escape").catch(() => {});
+  await page.waitForTimeout(250);
+}
+
+async function listOpenDropdownOptions(page: Page): Promise<string[]> {
+  return (await page.evaluate(`(() => {
+    const items = [
+      ...document.querySelectorAll(
+        '[role="listbox"] [role="option"], walla-dropdown-item[role="option"]',
+      ),
+    ];
+    return items
+      .map((el) =>
+        (el.getAttribute("aria-label") || el.textContent || "")
+          .replace(/\\s+/g, " ")
+          .trim(),
+      )
+      .filter(Boolean)
+      .slice(0, 20);
+  })()`)) as string[];
+}
+
+/** Open the Estado control next to hidden #condition — not the header / vacation «Nuevo». */
+async function openEstadoDropdown(page: Page): Promise<boolean> {
+  await closeOpenDropdowns(page);
+  const opened = (await page.evaluate(`(() => {
+    const hidden = document.querySelector("#condition");
+    if (!hidden) return false;
+    const host =
+      hidden.closest("tsl-dropdown-form, [formcontrolname='condition']") ||
+      hidden.parentElement;
+    const dd =
+      hidden.closest("walla-dropdown") ||
+      host?.querySelector?.("walla-dropdown") ||
+      host?.parentElement?.querySelector?.("walla-dropdown");
+    const btn =
+      dd?.querySelector?.('[role="button"]') ||
+      host?.querySelector?.('[role="button"]') ||
+      dd;
+    if (!btn) return false;
+    btn.scrollIntoView?.({ block: "center" });
+    btn.click?.();
+    return true;
+  })()`)) as boolean;
+  await page.waitForTimeout(900);
+  return Boolean(opened);
+}
+
+async function clickEstadoOption(page: Page, label: string): Promise<boolean> {
+  const clicked = (await page.evaluate(`((label) => {
+    const norm = (s) =>
+      (s || "")
+        .replace(/[\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/g, "")
+        .replace(/\\s+/g, " ")
+        .trim()
+        .toLowerCase();
+    const wanted = norm(label);
+    const items = [
+      ...document.querySelectorAll(
+        '[role="listbox"] [role="option"], walla-dropdown-item[role="option"]',
+      ),
+    ];
+    const match = items.find((el) => {
+      const aria = norm(el.getAttribute("aria-label"));
+      const text = norm(el.textContent);
+      return (
+        aria === wanted ||
+        text === wanted ||
+        aria.startsWith(wanted) ||
+        text.startsWith(wanted)
+      );
+    });
+    if (!match) return false;
+    match.click();
+    return true;
+  })(${JSON.stringify(label)})`)) as boolean;
+  if (clicked) await page.waitForTimeout(1_000);
+  return Boolean(clicked);
 }
 
 async function ensureEstado(page: Page, label: string): Promise<void> {
-  const hidden = page.locator("#condition").first();
-  const cur = await hidden.inputValue().catch(() => "");
-  if (cur?.trim()) return;
+  await page
+    .locator("#condition")
+    .first()
+    .waitFor({ state: "attached", timeout: 12_000 })
+    .catch(() => {});
+  if ((await readConditionValue(page)).trim()) return;
 
-  for (let attempt = 0; attempt < 2; attempt++) {
-    await openEstadoDropdown(page);
-    if (await clickWallaDropdownOption(page, label)) {
-      const after = await hidden.inputValue().catch(() => "");
-      if (after?.trim()) return;
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const opened = await openEstadoDropdown(page);
+    const options = await listOpenDropdownOptions(page);
+    log("info", "wallapop_publish_estado_try", {
+      label,
+      attempt,
+      opened,
+      options,
+    });
+    if (await clickEstadoOption(page, label)) {
+      await page.waitForTimeout(400);
+      const value = await readConditionValue(page);
+      if (value.trim()) {
+        log("info", "wallapop_publish_estado_selected", { label, value });
+        return;
+      }
     }
+    await closeOpenDropdowns(page);
     await page.waitForTimeout(400);
   }
   throw new WallapopPublishError(
@@ -1160,7 +1245,10 @@ async function publishWallapopInBrowserAfterAttach(
       message,
       unexpected: !(error instanceof WallapopPublishError),
       url: page.url(),
-      ...(await snapshotPublishForm(page)),
+      ...(await snapshotPublishForm(
+        page,
+        /estado/i.test(message) ? 'id="condition"' : undefined,
+      )),
     });
     throw error;
   }
@@ -1256,6 +1344,7 @@ async function runPublishAfterAttach(
   mark("form");
   logPublishStep(step, page, { phase: "form_start" });
   await ensureCategorySelected(page, input.categoryLabels);
+  await closeOpenDropdowns(page);
   logPublishStep(step, page, { phase: "after_category" });
 
   const descriptionText = input.description?.trim() || summaryText;
