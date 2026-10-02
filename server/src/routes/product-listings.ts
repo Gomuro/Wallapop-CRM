@@ -137,6 +137,22 @@ export async function putProductListing(req: Request, res: Response) {
 
   if (!(await assertProductExists(prisma, productId, res))) return
 
+  if (body.status === "READY_TO_POST") {
+    const product = await prisma.product.findUnique({
+      where: { id: productId },
+      select: { brand: true },
+    })
+    if (!product?.brand?.trim()) {
+      sendError(
+        res,
+        400,
+        "BRAND_REQUIRED",
+        "Introduce una marca. Wallapop no deja publicar el anuncio sin Marca.",
+      )
+      return
+    }
+  }
+
   const existing = await prisma.productListing.findUnique({
     where: {
       productId_accountId: { productId, accountId },

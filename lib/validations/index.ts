@@ -59,6 +59,7 @@ export {
   PRODUCT_IMAGE_MAX,
   PRODUCT_IMAGE_MIN,
   parseWarehouseProductCreate,
+  productBrandSchema,
   productConditionSchema,
   productCreateSchema,
   productImagesSchema,

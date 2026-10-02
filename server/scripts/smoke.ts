@@ -197,6 +197,7 @@ async function main() {
       currency: "EUR",
       categoryId,
       condition: "GOOD",
+      brand: "Acme",
     },
   })
   expectStatus("POST /api/v1/products (smoke)", created.status, 201, created.body)

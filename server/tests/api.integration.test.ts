@@ -200,6 +200,7 @@ describe("API v1 integration (Express + Postgres)", () => {
         currency: "EUR",
         categoryId,
         condition: "GOOD",
+        brand: "Acme",
       })
       expect(res.status).toBe(201)
       productId = res.body.product?.id as string
@@ -372,6 +373,7 @@ describe("API v1 integration (Express + Postgres)", () => {
         currency: "EUR",
         categoryId,
         condition: "GOOD",
+        brand: "Acme",
       })
       expect(created.status).toBe(201)
       const id = created.body.product?.id as string
@@ -412,6 +414,7 @@ describe("API v1 integration (Express + Postgres)", () => {
         currency: "EUR",
         categoryId,
         condition: "GOOD",
+        brand: "Acme",
       })
       expect(res.status).toBe(201)
       claimProductId = res.body.product?.id as string
@@ -544,6 +547,7 @@ describe("API v1 integration (Express + Postgres)", () => {
         currency: "EUR",
         categoryId,
         condition: "GOOD",
+        brand: "Acme",
       })
       expect(created.status).toBe(201)
       const id = created.body.product?.id as string
@@ -587,6 +591,7 @@ describe("API v1 integration (Express + Postgres)", () => {
         currency: "EUR",
         categoryId,
         condition: "GOOD",
+        brand: "Acme",
       })
       expect(created.status).toBe(201)
       const id = created.body.product?.id as string
@@ -635,6 +640,7 @@ describe("API v1 integration (Express + Postgres)", () => {
         currency: "EUR",
         categoryId,
         condition: "GOOD",
+        brand: "Acme",
       })
       expect(created.status).toBe(201)
       const id = created.body.product?.id as string
@@ -727,6 +733,7 @@ describe("API v1 integration (Express + Postgres)", () => {
         currency: "EUR",
         categoryId,
         condition: "GOOD",
+        brand: "Acme",
       })
       expect(created.status).toBe(201)
       id = created.body.product?.id as string

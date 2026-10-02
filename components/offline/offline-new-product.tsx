@@ -36,6 +36,7 @@ function payloadFromForm(formData: FormData) {
     price: optionalNumber("price") ?? Number.NaN,
     categoryId: String(formData.get("categoryId") ?? ""),
     condition: conditionRaw as ProductCondition,
+    brand: String(formData.get("brand") ?? "").trim(),
     weight: optionalNumber("weight"),
     shippingPackageSize:
       packageRaw === "STANDARD" || packageRaw === "BULKY" ? packageRaw : null,

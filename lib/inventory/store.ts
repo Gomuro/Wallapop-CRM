@@ -47,13 +47,12 @@ function warehouseCreateBody(input: ProductCreateInput) {
     currency: "EUR" as const,
     categoryId: input.categoryId,
     condition: input.condition,
-    brand: input.brand ?? null,
+    brand: input.brand,
     weightKg: input.weight ?? null,
     shippingPackageSize: input.shippingPackageSize ?? "STANDARD",
     widthCm: input.widthCm ?? null,
     lengthCm: input.lengthCm ?? null,
     heightCm: input.heightCm ?? null,
-    brand: null,
     typeAttributes: {},
   }
 }

@@ -216,6 +216,7 @@ export function autopostEligibleListingWhere(
     product: {
       status: "ACTIVE",
       images: { some: {} },
+      AND: [{ brand: { not: null } }, { NOT: { brand: "" } }],
     },
   }
 }

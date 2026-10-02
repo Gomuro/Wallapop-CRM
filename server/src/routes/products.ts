@@ -338,7 +338,7 @@ export async function createProduct(req: Request, res: Response) {
           currency: body.currency,
           categoryId: body.categoryId,
           condition: body.condition,
-          brand: body.brand ?? null,
+          brand: body.brand,
           weightKg: body.weightKg ?? null,
           shippingPackageSize: body.shippingPackageSize ?? null,
           widthCm: body.widthCm ?? null,

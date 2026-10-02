@@ -470,14 +470,25 @@ export function ProductForm({
             </SelectContent>
           </Select>
         </Field>
-        <Field label="Marca" htmlFor="brand" error={state.fieldErrors?.brand}>
+        <Field
+          label="Marca"
+          htmlFor="brand"
+          required
+          error={state.fieldErrors?.brand}
+        >
           <Input
             id="brand"
             name="brand"
+            required
+            aria-required="true"
+            maxLength={100}
             defaultValue={product?.brand ?? draft?.brand ?? ""}
             className="h-11"
-            placeholder="Obligatoria en Moda y accesorios"
+            placeholder="Quirumed, Nike…"
             aria-invalid={Boolean(state.fieldErrors?.brand)}
+            aria-describedby={
+              state.fieldErrors?.brand ? "brand-error" : undefined
+            }
           />
         </Field>
         <Field label="Estado de venta" htmlFor="status" error={state.fieldErrors?.status}>
@@ -555,16 +566,26 @@ function Field({
   label,
   htmlFor,
   error,
+  required,
   children,
 }: {
   label: string
   htmlFor?: string
   error?: string
+  required?: boolean
   children: ReactNode
 }) {
   return (
     <div className="space-y-1.5">
-      <Label htmlFor={htmlFor}>{label}</Label>
+      <Label htmlFor={htmlFor}>
+        {label}
+        {required ? (
+          <span className="text-destructive" aria-hidden="true">
+            {" "}
+            *
+          </span>
+        ) : null}
+      </Label>
       {children}
       {error ? (
         <p id={htmlFor ? `${htmlFor}-error` : undefined} className="text-xs text-destructive" role="alert">

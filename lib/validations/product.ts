@@ -44,6 +44,12 @@ export const productConditionSchema = z.enum([
 
 export const shippingPackageSizeSchema = z.enum(["STANDARD", "BULKY"])
 
+export const productBrandSchema = z
+  .string({ error: "Introduce una marca." })
+  .trim()
+  .min(1, "Introduce una marca.")
+  .max(100, "La marca es demasiado larga.")
+
 const optionalMeasureCm = z
   .number({ error: "Introduce unas medidas válidas." })
   .finite("Introduce unas medidas válidas.")
@@ -70,12 +76,7 @@ const productFieldsSchema = z.object({
     .nonnegative("El precio no puede ser negativo."),
   categoryId: z.string().trim().min(1, "Elige una categoría."),
   condition: productConditionSchema,
-  brand: z
-    .string()
-    .trim()
-    .max(100, "La marca es demasiado larga.")
-    .nullable()
-    .optional(),
+  brand: productBrandSchema,
   weight: z
     .number({ error: "Introduce un peso válido." })
     .finite("Introduce un peso válido.")
@@ -140,7 +141,7 @@ export const warehouseProductCreateSchema = z.object({
   currency: z.literal("EUR").default("EUR"),
   categoryId: z.string().trim().min(1, "Elige una categoría."),
   condition: productConditionSchema,
-  brand: z.string().trim().max(100).nullable().optional(),
+  brand: productBrandSchema,
   weightKg: z
     .number({ error: "Introduce un peso válido." })
     .finite("Introduce un peso válido.")

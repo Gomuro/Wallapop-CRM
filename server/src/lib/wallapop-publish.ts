@@ -14,7 +14,7 @@ import {
   quitWallapopChrome,
   runWithBrowserBusy,
 } from "./wallapop-cdp";
-import { log } from "./log";
+import { log, serializeError } from "./log";
 import { crmDescriptionMatchesForm } from "./wallapop-description";
 import {
   wallapopStandardWeightBandAriaName,
@@ -727,22 +727,63 @@ async function closeOpenDropdowns(page: Page): Promise<void> {
   await page.waitForTimeout(250);
 }
 
-async function listOpenDropdownOptions(page: Page): Promise<string[]> {
-  return (await page.evaluate(`(() => {
-    const items = [
-      ...document.querySelectorAll(
-        '[role="listbox"] [role="option"], walla-dropdown-item[role="option"]',
+/** Options inside one Wallapop field. Never scans photo drop-areas. */
+const DROPDOWN_ROOT_JS: Record<"condition" | "marca", string> = {
+  condition: `document.querySelector("#condition")?.closest("walla-dropdown, tsl-upload-form-dropdown") || document.querySelector('walla-dropdown[data-testid="condition"]')`,
+  marca: `(() => {
+    const labels = [...document.querySelectorAll("label")];
+    const lab = labels.find((el) => /Marca\\s*\\*/i.test(el.textContent || ""));
+    const forId = lab?.getAttribute("for");
+    const input =
+      (forId && document.getElementById(forId)) ||
+      lab?.closest(".inputWrapper")?.querySelector("input") ||
+      null;
+    return (
+      input?.closest(
+        "wallapop-combo-box, walla-combo-box, .sc-wallapop-combo-box, tsl-upload-form-field-host",
+      ) ||
+      null
+    );
+  })()`,
+};
+
+function optionScanJs(rootExpr: string): string {
+  return `(() => {
+    const root = ${rootExpr};
+    if (!root) return [];
+    const text = (el) =>
+      (el.getAttribute("aria-label") || el.textContent || "")
+        .replace(/\\s+/g, " ")
+        .trim();
+    return [
+      ...root.querySelectorAll(
+        'walla-dropdown-item[role="option"], [role="listbox"] [role="option"]',
       ),
-    ];
-    return items
-      .map((el) =>
-        (el.getAttribute("aria-label") || el.textContent || "")
-          .replace(/\\s+/g, " ")
-          .trim(),
+    ]
+      .filter(
+        (el) =>
+          el.getAttribute("aria-disabled") !== "true" &&
+          !/drop area/i.test(text(el)),
       )
+      .map(text)
       .filter(Boolean)
       .slice(0, 20);
-  })()`)) as string[];
+  })()`;
+}
+
+async function listOpenDropdownOptions(page: Page): Promise<string[]> {
+  return (await page.evaluate(
+    optionScanJs(`document`),
+  )) as string[];
+}
+
+async function listFieldDropdownOptions(
+  page: Page,
+  field: "condition" | "marca",
+): Promise<string[]> {
+  return (await page.evaluate(
+    optionScanJs(DROPDOWN_ROOT_JS[field]),
+  )) as string[];
 }
 
 /** Open the dropdown bound to a hidden input (#condition, #brand). */
@@ -774,11 +815,14 @@ async function openHiddenFieldDropdown(
   return Boolean(opened);
 }
 
-async function clickOpenListboxOption(
+async function clickListboxOptionInRoot(
   page: Page,
   label: string,
+  rootExpr: string,
 ): Promise<boolean> {
   const clicked = (await page.evaluate(`((label) => {
+    const root = ${rootExpr};
+    if (!root) return false;
     const norm = (s) =>
       (s || "")
         .replace(/[\\u200e\\u200f\\u202a-\\u202e\\u2066-\\u2069]/g, "")
@@ -786,21 +830,29 @@ async function clickOpenListboxOption(
         .trim()
         .toLowerCase();
     const wanted = norm(label);
+    const text = (el) =>
+      (el.getAttribute("aria-label") || el.textContent || "")
+        .replace(/\\s+/g, " ")
+        .trim();
     const items = [
-      ...document.querySelectorAll(
-        '[role="listbox"] [role="option"], walla-dropdown-item[role="option"]',
+      ...root.querySelectorAll(
+        'walla-dropdown-item[role="option"], [role="listbox"] [role="option"]',
       ),
-    ];
+    ].filter(
+      (el) =>
+        el.getAttribute("aria-disabled") !== "true" &&
+        !/drop area/i.test(text(el)),
+    );
     const match = items.find((el) => {
       const aria = norm(el.getAttribute("aria-label"));
-      const text = norm(el.textContent);
+      const body = norm(el.textContent);
       return (
         aria === wanted ||
-        text === wanted ||
+        body === wanted ||
         aria.startsWith(wanted) ||
-        text.startsWith(wanted) ||
+        body.startsWith(wanted) ||
         aria.includes(wanted) ||
-        text.includes(wanted)
+        body.includes(wanted)
       );
     });
     if (!match) return false;
@@ -811,12 +863,27 @@ async function clickOpenListboxOption(
   return Boolean(clicked);
 }
 
+async function clickOpenListboxOption(
+  page: Page,
+  label: string,
+): Promise<boolean> {
+  return clickListboxOptionInRoot(page, label, "document");
+}
+
+async function clickFieldDropdownOption(
+  page: Page,
+  field: "condition" | "marca",
+  label: string,
+): Promise<boolean> {
+  return clickListboxOptionInRoot(page, label, DROPDOWN_ROOT_JS[field]);
+}
+
 async function openEstadoDropdown(page: Page): Promise<boolean> {
   return openHiddenFieldDropdown(page, "condition");
 }
 
 async function clickEstadoOption(page: Page, label: string): Promise<boolean> {
-  return clickOpenListboxOption(page, label);
+  return clickFieldDropdownOption(page, "condition", label);
 }
 
 async function ensureEstado(page: Page, label: string): Promise<void> {
@@ -829,7 +896,7 @@ async function ensureEstado(page: Page, label: string): Promise<void> {
 
   for (let attempt = 0; attempt < 3; attempt++) {
     const opened = await openEstadoDropdown(page);
-    const options = await listOpenDropdownOptions(page);
+    const options = await listFieldDropdownOptions(page, "condition");
     log("info", "wallapop_publish_estado_try", {
       label,
       attempt,
@@ -872,12 +939,25 @@ async function queryMarcaCombo(page: Page): Promise<{
 }
 
 async function readBrandValue(page: Page): Promise<string> {
-  for (const sel of ["#brand", 'input[name="brand"]']) {
-    const value = await page.locator(sel).first().inputValue().catch(() => "");
-    if (value?.trim()) return value.trim();
-  }
-  const combo = await queryMarcaCombo(page);
-  return combo?.value?.trim() || "";
+  return (
+    ((await page.evaluate(`(() => {
+      const clip = (s) => String(s || "").replace(/\\s+/g, " ").trim();
+      const hidden = document.querySelector("#brand, input[name='brand']");
+      if (hidden instanceof HTMLInputElement && clip(hidden.value)) {
+        return clip(hidden.value);
+      }
+      const selected = [
+        ...document.querySelectorAll(
+          "wallapop-combo-box-item[aria-selected='true'], wallapop-combo-box-item[aria-checked='true']",
+        ),
+      ][0];
+      const fromItem = clip(
+        selected?.getAttribute("aria-label") || selected?.textContent,
+      );
+      if (fromItem) return fromItem;
+      return "";
+    })()`)) as string) || ""
+  );
 }
 
 async function marcaFieldShown(page: Page): Promise<boolean> {
@@ -893,18 +973,229 @@ async function marcaFieldShown(page: Page): Promise<boolean> {
   );
 }
 
+async function dumpMarcaCombo(page: Page, phase: string): Promise<void> {
+  try {
+    const dump = (await page.evaluate(`(() => {
+      const clip = (s, n) => String(s || "").replace(/\\s+/g, " ").trim().slice(0, n);
+      const vis = (el) => {
+        const r = el.getBoundingClientRect();
+        const s = getComputedStyle(el);
+        return (
+          r.width > 2 &&
+          r.height > 2 &&
+          s.visibility !== "hidden" &&
+          s.display !== "none" &&
+          Number(s.opacity || "1") > 0
+        );
+      };
+      const labels = [...document.querySelectorAll("label")];
+      const lab = labels.find((el) => /Marca\\s*\\*/i.test(el.textContent || ""));
+      const forId = lab?.getAttribute("for") || "";
+      const input = forId ? document.getElementById(forId) : null;
+      const host =
+        input?.closest(
+          "tsl-upload-form-field-host, wallapop-combo-box, walla-combo-box, walla-text-input",
+        ) || null;
+      const bodyText = document.body ? document.body.innerText : "";
+      const floating = [...document.querySelectorAll("walla-floating-area")].map((el) => ({
+        cls: clip(el.className, 160),
+        closed: /wrapper--closed|wrapper--hidden/.test(String(el.className || "")),
+        vis: vis(el),
+        text: clip(el.innerText, 220),
+        optionCount: el.querySelectorAll(
+          '[role="option"], walla-dropdown-item, walla-list-item, wallapop-combo-box-item',
+        ).length,
+      }));
+      const roleOptions = [...document.querySelectorAll('[role="option"]')]
+        .slice(0, 25)
+        .map((el) => ({
+          tag: el.tagName,
+          aria: clip(el.getAttribute("aria-label"), 80),
+          text: clip(el.textContent, 80),
+          vis: vis(el),
+        }));
+      const openPanel = [...document.querySelectorAll("walla-floating-area")].find(
+        (el) => vis(el) && !/wrapper--closed/.test(String(el.className || "")),
+      );
+      const panelLines = clip(openPanel?.innerText, 500)
+        .split(/(?<=\\S)\\s{2,}|(?=Seleccione)/)
+        .map((t) => clip(t, 80))
+        .filter(Boolean)
+        .slice(0, 20);
+      return {
+        inputId: input && "id" in input ? String(input.id || forId) : forId || null,
+        inputValue:
+          input instanceof HTMLInputElement ? String(input.value || "") : "",
+        inputMode: input?.getAttribute?.("inputmode") || null,
+        hostTag: host?.tagName || null,
+        hostClass: clip(host?.className, 120),
+        hasSeleccioneHasta: /Seleccione hasta/i.test(bodyText),
+        comboBoxCount: document.querySelectorAll(
+          "wallapop-combo-box, walla-combo-box",
+        ).length,
+        roleOptionCount: document.querySelectorAll('[role="option"]').length,
+        dropdownItemCount: document.querySelectorAll("walla-dropdown-item").length,
+        listItemCount: document.querySelectorAll("walla-list-item").length,
+        comboItemCount: document.querySelectorAll("wallapop-combo-box-item").length,
+        hasCrear: /Crear\\s/i.test(bodyText),
+        hasNoResult: /No se ha encontrado/i.test(bodyText),
+        comboItemSample: [...document.querySelectorAll("wallapop-combo-box-item")]
+          .slice(0, 8)
+          .map((el) => clip(el.getAttribute("aria-label") || el.textContent, 60)),
+        floating,
+        roleOptions,
+        panelLines,
+        panelHtml: clip(openPanel?.outerHTML, 900),
+        hostHtml: clip(host?.outerHTML, 700),
+      };
+    })()`)) as Record<string, unknown>;
+    log("info", "wallapop_publish_marca_dump", { phase, ...dump });
+  } catch (err) {
+    log("warn", "wallapop_publish_marca_dump_failed", {
+      phase,
+      message: err instanceof Error ? err.message : String(err),
+    });
+  }
+}
+
 async function typeMarcaCombo(
   page: Page,
   inputId: string,
   wanted: string,
 ): Promise<void> {
-  const input = page.locator("input[id=" + JSON.stringify(inputId) + "]").first();
-  await input.scrollIntoViewIfNeeded().catch(() => {});
-  await input.click({ force: true });
-  await page.waitForTimeout(300);
-  await input.fill("");
+  await page.evaluate(`((id) => {
+    const el = document.getElementById(id);
+    if (!(el instanceof HTMLInputElement)) return false;
+    const header = document.querySelector(".PrivateLayout__header, tsl-topbar");
+    const headerH = header ? header.getBoundingClientRect().height : 0;
+    el.scrollIntoView({ block: "center", inline: "nearest" });
+    const top = el.getBoundingClientRect().top;
+    if (top < headerH + 12) window.scrollBy(0, top - headerH - 24);
+    el.focus();
+    const setter = Object.getOwnPropertyDescriptor(
+      window.HTMLInputElement.prototype,
+      "value",
+    )?.set;
+    setter ? setter.call(el, "") : (el.value = "");
+    el.dispatchEvent(new InputEvent("input", { bubbles: true, inputType: "deleteContentBackward" }));
+    return true;
+  })(${JSON.stringify(inputId)})`);
   await page.keyboard.type(wanted, { delay: 40 });
-  await page.waitForTimeout(1_000);
+  const typed = await page.evaluate(
+    `((id) => {
+      const el = document.getElementById(id);
+      return el instanceof HTMLInputElement ? el.value : "";
+    })(${JSON.stringify(inputId)})`,
+  );
+  log("info", "wallapop_publish_marca_type", {
+    step: "typed",
+    inputId,
+    wanted,
+    value: typed,
+  });
+  await page.waitForTimeout(800);
+  await dumpMarcaCombo(page, "after_type");
+}
+
+function marcaCrearScanJs(wanted: string): string {
+  return `((wanted) => {
+    const want = String(wanted || "").toLowerCase();
+    const clip = (s) => String(s || "").replace(/\\s+/g, " ").trim();
+    const walk = (root, acc) => {
+      if (!root || !root.querySelectorAll) return acc;
+      for (const el of root.querySelectorAll("*")) {
+        acc.push(el);
+        if (el.shadowRoot) walk(el.shadowRoot, acc);
+      }
+      return acc;
+    };
+    const nodes = walk(document, []);
+    const hits = nodes
+      .map((el) => ({ el, text: clip(el.textContent) }))
+      .filter((row) => /^Crear\\b/i.test(row.text) && row.text.length < 80);
+    const match =
+      hits.find((row) => row.text.toLowerCase().includes(want)) || hits[0];
+    if (!match) {
+      return { clicked: false, hits: hits.map((row) => row.text).slice(0, 8) };
+    }
+    match.el.click();
+    match.el.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+    );
+    return { clicked: true, text: match.text, hits: hits.map((row) => row.text).slice(0, 8) };
+  })(${JSON.stringify(wanted)})`;
+}
+
+async function clickMarcaCatalogItem(
+  page: Page,
+  wanted: string,
+): Promise<boolean> {
+  const clicked = (await page.evaluate(`((wanted) => {
+    const want = String(wanted || "").toLowerCase();
+    const items = [...document.querySelectorAll("wallapop-combo-box-item")];
+    const match = items.find((el) => {
+      const aria = (el.getAttribute("aria-label") || "").trim().toLowerCase();
+      return aria === want;
+    });
+    if (!match) return false;
+    match.click();
+    return true;
+  })(${JSON.stringify(wanted)})`)) as boolean;
+  if (clicked) await page.waitForTimeout(500);
+  return Boolean(clicked);
+}
+
+async function clickMarcaCrear(page: Page, wanted: string): Promise<boolean> {
+  const result = (await page.evaluate(marcaCrearScanJs(wanted))) as {
+    clicked?: boolean;
+    text?: string;
+    hits?: string[];
+  };
+  log("info", "wallapop_publish_marca_crear_scan", {
+    wanted,
+    clicked: Boolean(result?.clicked),
+    text: result?.text || null,
+    hits: result?.hits || [],
+  });
+  if (result?.clicked) {
+    await page.waitForTimeout(700);
+    log("info", "wallapop_publish_marca_crear_clicked", {
+      wanted,
+      via: "shadow",
+      text: result.text,
+    });
+    return true;
+  }
+  return false;
+}
+
+async function pickMarcaSuggestion(
+  page: Page,
+  wanted: string,
+): Promise<boolean> {
+  if (await clickMarcaCatalogItem(page, wanted)) return true;
+  for (let attempt = 0; attempt < 6; attempt++) {
+    if (await clickMarcaCrear(page, wanted)) return true;
+    await page.waitForTimeout(400);
+  }
+  return Boolean((await readBrandValue(page)).trim());
+}
+
+async function marcaLooksSelected(page: Page, wanted: string): Promise<boolean> {
+  if ((await readBrandValue(page)).toLowerCase() === wanted.toLowerCase()) {
+    return true;
+  }
+  return Boolean(
+    await page.evaluate(`((wanted) => {
+      const want = String(wanted || "").toLowerCase();
+      const combo = document.querySelector("wallapop-combo-box");
+      const text = (combo?.innerText || "").replace(/\\s+/g, " ").toLowerCase();
+      if (!text.includes(want)) return false;
+      if (/no se ha encontrado/.test(text)) return false;
+      const host = combo?.querySelector(".inputWrapper");
+      return Boolean(host && /inputWrapper--filled/.test(host.className || ""));
+    })(${JSON.stringify(wanted)})`),
+  );
 }
 
 async function ensureMarcaIfShown(
@@ -930,11 +1221,12 @@ async function ensureMarcaIfShown(
     }) ||
     "";
   const combo = await queryMarcaCombo(page);
-  log("info", "wallapop_publish_marca_field", {
+    log("info", "wallapop_publish_marca_field", {
     wanted: wanted || null,
     comboId: combo?.id || null,
     hasHiddenBrand: Boolean(await page.locator("#brand").count()),
   });
+  await dumpMarcaCombo(page, "field_found");
   if (!wanted) {
     throw new WallapopPublishError(
       "form",
@@ -944,27 +1236,36 @@ async function ensureMarcaIfShown(
 
   if (combo?.id) {
     await typeMarcaCombo(page, combo.id, wanted);
-    let options = await listOpenDropdownOptions(page);
+    const options = await listFieldDropdownOptions(page, "marca");
     log("info", "wallapop_publish_marca_try", {
       wanted,
       via: "combo",
       options,
     });
-    const picked =
-      (await clickOpenListboxOption(page, wanted)) ||
-      (await clickOpenListboxOption(page, "Otras marcas")) ||
-      (await clickOpenListboxOption(page, "Otra marca")) ||
-      (await clickOpenListboxOption(page, "Otro"));
-    if (!picked) await page.keyboard.press("Enter").catch(() => {});
-    await page.waitForTimeout(400);
-    if ((await readBrandValue(page)).trim()) {
+    const picked = await pickMarcaSuggestion(page, wanted);
+    await dumpMarcaCombo(page, "after_pick");
+    const afterPick = await readBrandValue(page);
+    const looksSelected = await marcaLooksSelected(page, wanted);
+    log("info", "wallapop_publish_marca_pick_result", {
+      wanted,
+      picked,
+      value: afterPick,
+      looksSelected,
+    });
+    if (afterPick.trim() || looksSelected) {
       log("info", "wallapop_publish_marca_selected", {
         wanted,
-        value: await readBrandValue(page),
+        value: afterPick || wanted,
         picked,
+        looksSelected,
       });
       return;
     }
+    await dumpMarcaCombo(page, "before_fail");
+    throw new WallapopPublishError(
+      "form",
+      `No se pudo seleccionar la marca (${wanted}).`,
+    );
   }
 
   await fillIfEmpty(
@@ -1012,6 +1313,7 @@ async function ensureMarcaIfShown(
     });
     return;
   }
+  await dumpMarcaCombo(page, "before_fail");
   throw new WallapopPublishError(
     "form",
     `No se pudo seleccionar la marca (${wanted}).`,
@@ -1455,6 +1757,7 @@ async function publishWallapopInBrowserAfterAttach(
       step: failStep,
       message,
       unexpected: !(error instanceof WallapopPublishError),
+      err: serializeError(error),
       url: page.url(),
       ...(await snapshotPublishForm(
         page,

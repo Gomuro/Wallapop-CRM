@@ -12,7 +12,7 @@ import {
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import { listingJsonSelect, toListingJson } from "../lib/listing-json"
-import { log } from "../lib/log"
+import { log, serializeError } from "../lib/log"
 import { getWallapopSessionSnapshot } from "../lib/wallapop-session"
 import { isBrowserBusyError } from "../lib/wallapop-cdp"
 import {
@@ -267,6 +267,22 @@ export async function runProductPublish(
     }
   }
 
+  if (
+    !wallapopBrandFromProduct({
+      brand: product.brand,
+      description: product.description,
+      typeAttributes: product.typeAttributes,
+    })
+  ) {
+    return {
+      ok: false,
+      httpStatus: 400,
+      code: "BRAND_REQUIRED",
+      message:
+        "Introduce una marca. Wallapop no deja publicar el anuncio sin Marca.",
+    }
+  }
+
   const imagePaths: string[] = []
   for (const image of product.images) {
     const diskPath = path.join(UPLOAD_DIR, image.storageKey)
@@ -443,7 +459,12 @@ export async function runProductPublish(
     const step = error instanceof WallapopPublishError ? error.step : "attach"
     const message =
       error instanceof Error ? error.message : "Error al publicar."
-    log("error", "wallapop_publish_failed", { productId, step, message })
+    log("error", "wallapop_publish_failed", {
+      productId,
+      step,
+      message,
+      err: serializeError(error),
+    })
     return {
       ok: false,
       httpStatus: 500,

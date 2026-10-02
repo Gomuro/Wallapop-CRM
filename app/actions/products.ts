@@ -60,7 +60,7 @@ function formToPayload(formData: FormData, fallbackSku?: string) {
     price: optionalFormNumber(formData, "price") ?? Number.NaN,
     categoryId: String(formData.get("categoryId") ?? ""),
     condition: conditionRaw as ProductCondition,
-    brand: String(formData.get("brand") ?? "").trim() || null,
+    brand: String(formData.get("brand") ?? "").trim(),
     weight: optionalFormNumber(formData, "weight"),
     shippingPackageSize:
       packageRaw === "STANDARD" || packageRaw === "BULKY" ? packageRaw : null,
