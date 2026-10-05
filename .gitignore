@@ -66,6 +66,12 @@ references/
 tmp/
 profiles/
 
+# Local dumps / session leftovers
+cookies.txt
+products.json
+source-product.json
+server/scripts/seed-product-once.ts
+
 # Uploaded product photos (keep folder)
 public/uploads/*
 !public/uploads/.gitkeep
