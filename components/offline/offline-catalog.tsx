@@ -4,8 +4,8 @@ import Link from "next/link"
 import { useEffect, useMemo } from "react"
 
 import { CatalogEmpty } from "@/components/catalog/catalog-empty"
+import { CatalogProductList } from "@/components/catalog/catalog-product-list"
 import { CatalogView } from "@/components/catalog/catalog-view"
-import { ProductCard } from "@/components/catalog/product-card"
 import { OfflineBanner } from "@/components/offline/offline-banner"
 import { Button } from "@/components/ui/button"
 import {
@@ -96,28 +96,16 @@ export function OfflineCatalog({
               </Button>
             </div>
           )
-        ) : view === "grid" ? (
-          <div className="grid auto-rows-fr grid-cols-2 items-stretch gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-            {products.map((product, index) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                view="grid"
-                priority={index === 0}
-              />
-            ))}
-          </div>
         ) : (
-          <div className="flex flex-col gap-2">
-            {products.map((product, index) => (
-              <ProductCard
-                key={product.id}
-                product={product}
-                view="list"
-                priority={index === 0}
-              />
-            ))}
-          </div>
+          <CatalogProductList
+            key={`${offline ? "off" : "on"}|${q}|${status}`}
+            initialProducts={offline ? products : serverProducts}
+            total={offline ? products.length : counts[status]}
+            q={q}
+            status={status}
+            view={view}
+            extraProducts={offline ? [] : pending}
+          />
         )}
       </CatalogView>
     </>

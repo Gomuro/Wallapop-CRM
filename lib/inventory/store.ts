@@ -20,12 +20,14 @@ import {
 } from "@/lib/api/products"
 import type { ApiCategory } from "@/lib/api/types"
 import type { ProductCreateInput, ProductUpdateInput } from "@/lib/validations"
-import type {
-  InventoryListing,
-  InventoryProduct,
-  MarkSoldResult,
-  ProductListQuery,
-  StatusCounts,
+import {
+  CATALOG_PAGE_SIZE,
+  type InventoryListing,
+  type InventoryProduct,
+  type MarkSoldResult,
+  type ProductListPage,
+  type ProductListQuery,
+  type StatusCounts,
 } from "@/lib/inventory/types"
 import type { ProductListingApiPutBody } from "@/lib/validations/listing"
 import type { ProductStatus } from "@/lib/validations"
@@ -76,17 +78,30 @@ function warehousePatchBody(input: ProductUpdateInput) {
   return body
 }
 
-export async function listProducts(
+export async function listProductPage(
   query: ProductListQuery = {},
-): Promise<InventoryProduct[]> {
+): Promise<ProductListPage> {
   const response = await apiListProducts({
     page: query.page ?? 1,
-    pageSize: query.pageSize ?? 50,
+    pageSize: query.pageSize ?? CATALOG_PAGE_SIZE,
     status: query.status ?? "ALL",
     q: query.q,
     categoryId: query.categoryId,
   })
-  return response.products.map((row) => mapListItemToInventory(row))
+  return {
+    products: response.products.map((row) => mapListItemToInventory(row)),
+    page: response.page,
+    pageSize: response.pageSize,
+    total: response.total,
+    totalPages: response.totalPages,
+  }
+}
+
+export async function listProducts(
+  query: ProductListQuery = {},
+): Promise<InventoryProduct[]> {
+  const page = await listProductPage(query)
+  return page.products
 }
 
 export async function countProductsByStatus(

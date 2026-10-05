@@ -10,9 +10,14 @@ import {
   createProduct,
   deleteProduct,
   getProduct,
+  listProductPage,
   markProductSold,
   updateProduct,
 } from "@/lib/inventory/store"
+import {
+  CATALOG_PAGE_SIZE,
+  type InventoryProduct,
+} from "@/lib/inventory/types"
 import {
   productCreateSchema,
   productUpdateSchema,
@@ -215,4 +220,40 @@ export async function deleteProductAction(
     return { error: "No se pudo eliminar el producto." }
   }
   redirect("/")
+}
+
+const CATALOG_STATUS = new Set(["ALL", "ACTIVE", "SOLD", "INACTIVE"])
+
+export async function loadCatalogPage(input: {
+  page: number
+  q?: string
+  status?: "ALL" | ProductStatus
+}): Promise<
+  | { ok: true; products: InventoryProduct[]; total: number; page: number }
+  | { ok: false; error: string }
+> {
+  const page = Number(input.page)
+  if (!Number.isInteger(page) || page < 2) {
+    return { ok: false, error: "Página no válida." }
+  }
+  const status = CATALOG_STATUS.has(input.status ?? "ALL")
+    ? (input.status ?? "ALL")
+    : "ALL"
+  try {
+    const result = await listProductPage({
+      page,
+      pageSize: CATALOG_PAGE_SIZE,
+      q: input.q?.trim() || undefined,
+      status,
+    })
+    return {
+      ok: true,
+      products: result.products,
+      total: result.total,
+      page: result.page,
+    }
+  } catch (error) {
+    if (error instanceof ApiError) return { ok: false, error: error.message }
+    return { ok: false, error: "No se han podido cargar más productos." }
+  }
 }

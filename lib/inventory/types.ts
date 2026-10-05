@@ -55,6 +55,17 @@ export type ProductListQuery = {
   categoryId?: string
 }
 
+/** First screen + each infinite-scroll chunk on the catalog. */
+export const CATALOG_PAGE_SIZE = 50
+
+export type ProductListPage = {
+  products: InventoryProduct[]
+  page: number
+  pageSize: number
+  total: number
+  totalPages: number
+}
+
 export type StatusCounts = {
   ALL: number
   ACTIVE: number

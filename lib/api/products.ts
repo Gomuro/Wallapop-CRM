@@ -6,7 +6,7 @@ import type {
   ApiProduct,
   ApiProductListResponse,
 } from "@/lib/api/types"
-import type { ProductListQuery } from "@/lib/inventory/types"
+import { CATALOG_PAGE_SIZE, type ProductListQuery } from "@/lib/inventory/types"
 import type {
   WarehouseProductCreateInput,
   WarehouseProductUpdateInput,
@@ -28,7 +28,7 @@ export async function apiListProducts(
 ): Promise<ApiProductListResponse> {
   const qs = toQueryString({
     page: query.page ?? 1,
-    pageSize: query.pageSize ?? 50,
+    pageSize: query.pageSize ?? CATALOG_PAGE_SIZE,
     status: query.status ?? "ALL",
     q: query.q,
     categoryId: query.categoryId,
@@ -39,7 +39,10 @@ export async function apiListProducts(
   return {
     products: Array.isArray(response?.products) ? response.products : [],
     page: typeof response?.page === "number" ? response.page : 1,
-    pageSize: typeof response?.pageSize === "number" ? response.pageSize : 50,
+    pageSize:
+      typeof response?.pageSize === "number"
+        ? response.pageSize
+        : CATALOG_PAGE_SIZE,
     total: typeof response?.total === "number" ? response.total : 0,
     totalPages: typeof response?.totalPages === "number" ? response.totalPages : 0,
   }
