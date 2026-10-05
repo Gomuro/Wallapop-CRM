@@ -1,7 +1,6 @@
 "use client"
 
 import { useEffect, useRef, useState } from "react"
-import { ChevronLeftIcon, ChevronRightIcon } from "lucide-react"
 
 import { ImageLightbox } from "@/components/catalog/image-lightbox"
 import { GALLERY_SIZES, ProductImage } from "@/components/catalog/product-image"
@@ -122,47 +121,27 @@ export function ProductGallery({
           )}
         </div>
         {count > 1 ? (
-          <>
-            <button
-              type="button"
-              aria-label="Foto anterior"
-              disabled={active === 0}
-              onClick={() => scrollToIndex(active - 1)}
-              className="absolute top-1/2 left-3 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-background/95 text-foreground shadow-sm ring-1 ring-border transition-opacity hover:bg-background focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-40 md:inline-flex md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
-            >
-              <ChevronLeftIcon className="size-5" />
-            </button>
-            <button
-              type="button"
-              aria-label="Foto siguiente"
-              disabled={active === count - 1}
-              onClick={() => scrollToIndex(active + 1)}
-              className="absolute top-1/2 right-3 hidden size-11 -translate-y-1/2 items-center justify-center rounded-full bg-background/95 text-foreground shadow-sm ring-1 ring-border transition-opacity hover:bg-background focus-visible:opacity-100 focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-40 md:inline-flex md:opacity-0 md:group-hover:opacity-100 md:group-focus-within:opacity-100"
-            >
-              <ChevronRightIcon className="size-5" />
-            </button>
-            <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-4">
-              <div className="pointer-events-auto flex max-w-full flex-wrap justify-center gap-1 rounded-full bg-background/90 px-1.5 py-1 shadow-sm ring-1 ring-border backdrop-blur-sm">
-                {safeImages.map((_, index) => (
-                  <button
-                    key={index}
-                    type="button"
-                    aria-label={`Foto ${index + 1}`}
-                    aria-current={index === active ? "true" : undefined}
-                    onClick={() => scrollToIndex(index)}
-                    className="flex size-6 items-center justify-center"
-                  >
-                    <span
-                      className={cn(
-                        "size-1.5 rounded-full transition-colors",
-                        index === active ? "bg-primary" : "bg-muted-foreground/50",
-                      )}
-                    />
-                  </button>
-                ))}
-              </div>
+          <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-4">
+            <div className="pointer-events-auto flex max-w-full flex-wrap justify-center gap-1 rounded-full bg-background/90 px-1.5 py-1 shadow-sm ring-1 ring-border backdrop-blur-sm">
+              {safeImages.map((_, index) => (
+                <button
+                  key={index}
+                  type="button"
+                  aria-label={`Foto ${index + 1}`}
+                  aria-current={index === active ? "true" : undefined}
+                  onClick={() => scrollToIndex(index)}
+                  className="flex size-6 items-center justify-center"
+                >
+                  <span
+                    className={cn(
+                      "size-1.5 rounded-full transition-colors",
+                      index === active ? "bg-primary" : "bg-muted-foreground/50",
+                    )}
+                  />
+                </button>
+              ))}
             </div>
-          </>
+          </div>
         ) : null}
       </div>
 

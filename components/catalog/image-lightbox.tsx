@@ -2,7 +2,7 @@
 
 import { useEffect, useRef, useState, type TouchEvent } from "react"
 import { createPortal } from "react-dom"
-import { ChevronLeftIcon, ChevronRightIcon, XIcon } from "lucide-react"
+import { XIcon } from "lucide-react"
 
 import { cn } from "@/lib/utils"
 
@@ -169,38 +169,6 @@ export function ImageLightbox({
             className="max-h-[82vh] max-w-full select-none object-contain shadow-2xl transition-transform duration-150"
             draggable={false}
           />
-        ) : null}
-
-        {/* Previous button */}
-        {count > 1 ? (
-          <button
-            type="button"
-            aria-label="Foto anterior"
-            disabled={currentIndex === 0}
-            onClick={(e) => {
-              e.stopPropagation()
-              goTo(currentIndex - 1)
-            }}
-            className="absolute left-3 top-1/2 -translate-y-1/2 z-20 flex size-11 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm ring-1 ring-white/15 transition-opacity hover:bg-black/60 active:scale-95 disabled:pointer-events-none disabled:opacity-20 focus-visible:ring-2 focus-visible:ring-white"
-          >
-            <ChevronLeftIcon className="size-6" />
-          </button>
-        ) : null}
-
-        {/* Next button */}
-        {count > 1 ? (
-          <button
-            type="button"
-            aria-label="Foto siguiente"
-            disabled={currentIndex === count - 1}
-            onClick={(e) => {
-              e.stopPropagation()
-              goTo(currentIndex + 1)
-            }}
-            className="absolute right-3 top-1/2 -translate-y-1/2 z-20 flex size-11 items-center justify-center rounded-full bg-black/40 text-white backdrop-blur-sm ring-1 ring-white/15 transition-opacity hover:bg-black/60 active:scale-95 disabled:pointer-events-none disabled:opacity-20 focus-visible:ring-2 focus-visible:ring-white"
-          >
-            <ChevronRightIcon className="size-6" />
-          </button>
         ) : null}
       </div>
 
