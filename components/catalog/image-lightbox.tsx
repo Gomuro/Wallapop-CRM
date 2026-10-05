@@ -1,20 +1,10 @@
 "use client"
 
-import {
-  useCallback,
-  useEffect,
-  useRef,
-  useState,
-  type PointerEvent,
-} from "react"
+import { useEffect, useRef, useState } from "react"
 import { createPortal } from "react-dom"
 import { XIcon } from "lucide-react"
 
-import {
-  rubberbandOffset,
-  setSlideTrack,
-  settleSwipeIndex,
-} from "@/lib/ui/swipe-carousel"
+import { useSwipeCarousel } from "@/lib/ui/swipe-carousel"
 import { cn } from "@/lib/utils"
 
 export function ImageLightbox({
@@ -34,32 +24,25 @@ export function ImageLightbox({
 }) {
   const viewportRef = useRef<HTMLDivElement>(null)
   const trackRef = useRef<HTMLDivElement>(null)
-  const dragRef = useRef<{
-    pointerId: number
-    startX: number
-    startY: number
-    lastX: number
-    lastT: number
-    vx: number
-    axis: "undecided" | "x" | "y"
-    moved: boolean
-  } | null>(null)
+  const onIndexChangeRef = useRef(onIndexChange)
   const [mounted, setMounted] = useState(false)
   const [currentIndex, setCurrentIndex] = useState(initialIndex)
-  const [dragging, setDragging] = useState(false)
 
   const count = images.length
+  onIndexChangeRef.current = onIndexChange
 
-  const goTo = useCallback(
-    (index: number, animate = true) => {
-      if (count === 0) return
-      const next = Math.min(count - 1, Math.max(0, index))
+  const swipe = useSwipeCarousel({
+    index: currentIndex,
+    count,
+    enabled: open && count > 0,
+    trackRef,
+    viewportRef,
+    onIndex: (next) => {
       setCurrentIndex(next)
-      setSlideTrack(trackRef.current, next, 0, animate)
-      if (next !== currentIndex) onIndexChange?.(next)
+      onIndexChangeRef.current?.(next)
     },
-    [count, currentIndex, onIndexChange],
-  )
+    onVerticalDismiss: onClose,
+  })
 
   useEffect(() => {
     setMounted(true)
@@ -67,12 +50,7 @@ export function ImageLightbox({
 
   useEffect(() => {
     if (!open) return
-    const next = Math.min(Math.max(0, initialIndex), Math.max(0, count - 1))
-    setCurrentIndex(next)
-    const frame = requestAnimationFrame(() => {
-      setSlideTrack(trackRef.current, next, 0, false)
-    })
-    return () => cancelAnimationFrame(frame)
+    setCurrentIndex(Math.min(Math.max(0, initialIndex), Math.max(0, count - 1)))
     // Sync only when opening so parent index updates do not cancel the slide.
     // eslint-disable-next-line react-hooks/exhaustive-deps -- initialIndex/count read on open
   }, [open])
@@ -95,86 +73,24 @@ export function ImageLightbox({
         onClose()
       } else if (event.key === "ArrowLeft") {
         event.preventDefault()
-        goTo(currentIndex - 1)
+        setCurrentIndex((current) => {
+          const next = Math.max(0, current - 1)
+          if (next !== current) onIndexChangeRef.current?.(next)
+          return next
+        })
       } else if (event.key === "ArrowRight") {
         event.preventDefault()
-        goTo(currentIndex + 1)
+        setCurrentIndex((current) => {
+          const next = Math.min(count - 1, current + 1)
+          if (next !== current) onIndexChangeRef.current?.(next)
+          return next
+        })
       }
     }
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [open, currentIndex, goTo, onClose])
-
-  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
-    if (event.button !== 0) return
-    dragRef.current = {
-      pointerId: event.pointerId,
-      startX: event.clientX,
-      startY: event.clientY,
-      lastX: event.clientX,
-      lastT: performance.now(),
-      vx: 0,
-      axis: "undecided",
-      moved: false,
-    }
-    try {
-      event.currentTarget.setPointerCapture(event.pointerId)
-    } catch {
-      // Synthetic or already-released pointers have no capture target.
-    }
-  }
-
-  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
-    const drag = dragRef.current
-    if (!drag || drag.pointerId !== event.pointerId) return
-
-    const dx = event.clientX - drag.startX
-    const dy = event.clientY - drag.startY
-    if (drag.axis === "undecided" && Math.hypot(dx, dy) > 8) {
-      drag.axis = Math.abs(dx) > Math.abs(dy) ? "x" : "y"
-      drag.moved = true
-      setDragging(true)
-    }
-    if (drag.axis !== "x") return
-
-    const now = performance.now()
-    drag.vx = (event.clientX - drag.lastX) / Math.max(1, now - drag.lastT)
-    drag.lastX = event.clientX
-    drag.lastT = now
-
-    const resist =
-      (currentIndex === 0 && dx > 0) || (currentIndex === count - 1 && dx < 0)
-    setSlideTrack(
-      trackRef.current,
-      currentIndex,
-      rubberbandOffset(dx, resist),
-      false,
-    )
-  }
-
-  function finishPointer(event: PointerEvent<HTMLDivElement>, cancelled: boolean) {
-    const drag = dragRef.current
-    if (!drag || drag.pointerId !== event.pointerId) return
-    dragRef.current = null
-    setDragging(false)
-
-    const dx = event.clientX - drag.startX
-    const dy = event.clientY - drag.startY
-
-    if (!cancelled && drag.axis === "y" && dy > 90 && Math.abs(dy) > Math.abs(dx)) {
-      onClose()
-      return
-    }
-
-    if (drag.axis !== "x") {
-      setSlideTrack(trackRef.current, currentIndex, 0, true)
-      return
-    }
-
-    const width = viewportRef.current?.clientWidth ?? 0
-    goTo(settleSwipeIndex({ active: currentIndex, count, dx, width, vx: drag.vx }))
-  }
+  }, [open, count, onClose])
 
   if (!mounted || !open || count === 0) return null
 
@@ -205,16 +121,16 @@ export function ImageLightbox({
 
       <div
         ref={viewportRef}
-        onPointerDown={handlePointerDown}
-        onPointerMove={handlePointerMove}
-        onPointerUp={(event) => finishPointer(event, false)}
-        onPointerCancel={(event) => finishPointer(event, true)}
         className={cn(
-          "relative flex flex-1 w-full items-center overflow-hidden",
-          dragging ? "cursor-grabbing" : count > 1 ? "cursor-grab" : "cursor-default",
+          "relative flex flex-1 w-full items-center overflow-hidden overscroll-none touch-none",
+          count > 1 ? "cursor-grab active:cursor-grabbing" : "cursor-default",
         )}
+        onPointerDown={swipe.onPointerDown}
+        onPointerMove={swipe.onPointerMove}
+        onPointerUp={swipe.onPointerUp}
+        onPointerCancel={swipe.onPointerCancel}
       >
-        <div ref={trackRef} className="flex h-full w-full touch-pan-x">
+        <div ref={trackRef} className="flex h-full w-full">
           {images.map((src, index) => (
             <div
               key={`${index}-${src}`}
@@ -241,7 +157,10 @@ export function ImageLightbox({
                 type="button"
                 aria-label={`Ver foto ${idx + 1}`}
                 aria-current={idx === currentIndex ? "true" : undefined}
-                onClick={() => goTo(idx)}
+                onClick={() => {
+                  setCurrentIndex(idx)
+                  onIndexChangeRef.current?.(idx)
+                }}
                 className="flex size-5 items-center justify-center"
               >
                 <span
