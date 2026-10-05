@@ -1,9 +1,20 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import {
+  useCallback,
+  useEffect,
+  useRef,
+  useState,
+  type PointerEvent,
+} from "react"
 
 import { ImageLightbox } from "@/components/catalog/image-lightbox"
 import { GALLERY_SIZES, ProductImage } from "@/components/catalog/product-image"
+import {
+  rubberbandOffset,
+  setSlideTrack,
+  settleSwipeIndex,
+} from "@/lib/ui/swipe-carousel"
 import { cn } from "@/lib/utils"
 
 export function ProductGallery({
@@ -13,12 +24,21 @@ export function ProductGallery({
   images?: string[]
   alt: string
 }) {
-  const scrollerRef = useRef<HTMLDivElement>(null)
-  const frame = useRef(0)
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const trackRef = useRef<HTMLDivElement>(null)
+  const dragRef = useRef<{
+    pointerId: number
+    startX: number
+    startY: number
+    lastX: number
+    lastT: number
+    vx: number
+    moved: boolean
+  } | null>(null)
   const [active, setActive] = useState(0)
+  const [dragging, setDragging] = useState(false)
   const [lightboxOpen, setLightboxOpen] = useState(false)
   const [lightboxIndex, setLightboxIndex] = useState(0)
-  const pointerStartRef = useRef<{ x: number; y: number } | null>(null)
 
   const safeImages = Array.isArray(images)
     ? images.filter(
@@ -30,36 +50,84 @@ export function ProductGallery({
     : []
   const count = safeImages.length
 
-  useEffect(() => () => cancelAnimationFrame(frame.current), [])
+  const goTo = useCallback(
+    (index: number, animate = true) => {
+      const next = Math.min(count - 1, Math.max(0, index))
+      setActive(next)
+      setSlideTrack(trackRef.current, next, 0, animate)
+    },
+    [count],
+  )
 
-  function scrollToIndex(index: number) {
-    const el = scrollerRef.current
-    if (!el || count === 0) return
-    const next = Math.min(count - 1, Math.max(0, index))
-    el.scrollTo({ left: next * el.clientWidth, behavior: "smooth" })
-  }
-
-  function handleScroll() {
-    cancelAnimationFrame(frame.current)
-    frame.current = requestAnimationFrame(() => {
-      const el = scrollerRef.current
-      if (!el || count === 0) return
-      const width = el.clientWidth
-      if (width === 0) return
-      const next = Math.round(el.scrollLeft / width)
-      setActive(Math.min(count - 1, Math.max(0, next)))
-    })
-  }
+  useEffect(() => {
+    setSlideTrack(trackRef.current, active, 0, true)
+  }, [active])
 
   function openLightbox(index: number) {
     setLightboxIndex(index)
     setLightboxOpen(true)
   }
 
+  function handlePointerDown(event: PointerEvent<HTMLDivElement>) {
+    if (count === 0 || event.button !== 0) return
+    dragRef.current = {
+      pointerId: event.pointerId,
+      startX: event.clientX,
+      startY: event.clientY,
+      lastX: event.clientX,
+      lastT: performance.now(),
+      vx: 0,
+      moved: false,
+    }
+    try {
+      event.currentTarget.setPointerCapture(event.pointerId)
+    } catch {
+      // Synthetic or already-released pointers have no capture target.
+    }
+  }
+
+  function handlePointerMove(event: PointerEvent<HTMLDivElement>) {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId || count < 2) return
+
+    const dx = event.clientX - drag.startX
+    const dy = event.clientY - drag.startY
+    if (Math.hypot(dx, dy) > 8) {
+      drag.moved = true
+      setDragging(true)
+    }
+    if (!drag.moved) return
+
+    const now = performance.now()
+    drag.vx = (event.clientX - drag.lastX) / Math.max(1, now - drag.lastT)
+    drag.lastX = event.clientX
+    drag.lastT = now
+
+    const resist = (active === 0 && dx > 0) || (active === count - 1 && dx < 0)
+    setSlideTrack(trackRef.current, active, rubberbandOffset(dx, resist), false)
+  }
+
+  function finishPointer(event: PointerEvent<HTMLDivElement>, cancelled: boolean) {
+    const drag = dragRef.current
+    if (!drag || drag.pointerId !== event.pointerId) return
+    dragRef.current = null
+    setDragging(false)
+
+    if (!drag.moved) {
+      if (!cancelled) openLightbox(active)
+      return
+    }
+
+    const dx = event.clientX - drag.startX
+    const width = viewportRef.current?.clientWidth ?? 0
+    goTo(settleSwipeIndex({ active, count, dx, width, vx: drag.vx }))
+  }
+
   return (
     <>
       <div
-        className="group relative min-w-0 overflow-hidden bg-muted lg:rounded-xl"
+        ref={viewportRef}
+        className="group relative min-w-0 overflow-hidden bg-muted select-none lg:rounded-xl"
         tabIndex={count > 1 ? 0 : undefined}
         role={count > 1 ? "region" : undefined}
         aria-roledescription={count > 1 ? "carousel" : undefined}
@@ -68,53 +136,41 @@ export function ProductGallery({
           if (count < 2) return
           if (event.key === "ArrowRight") {
             event.preventDefault()
-            scrollToIndex(active + 1)
+            goTo(active + 1)
           }
           if (event.key === "ArrowLeft") {
             event.preventDefault()
-            scrollToIndex(active - 1)
+            goTo(active - 1)
           }
         }}
       >
         <div
-          ref={scrollerRef}
-          onScroll={handleScroll}
-          className="flex min-w-0 snap-x snap-mandatory overflow-x-auto scroll-smooth overscroll-x-contain [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden"
+          className={cn(
+            "flex w-full touch-pan-x",
+            count > 1 && (dragging ? "cursor-grabbing" : "cursor-grab"),
+            count <= 1 && count > 0 && "cursor-zoom-in",
+          )}
+          ref={trackRef}
+          onPointerDown={handlePointerDown}
+          onPointerMove={handlePointerMove}
+          onPointerUp={(event) => finishPointer(event, false)}
+          onPointerCancel={(event) => finishPointer(event, true)}
         >
           {count === 0 ? (
-            <div className="aspect-square w-full shrink-0 border border-dashed border-border bg-muted" />
+            <div className="aspect-square w-full shrink-0 grow-0 basis-full border border-dashed border-border bg-muted" />
           ) : (
             safeImages.map((src, index) => (
               <div
                 key={`${index}-${src}`}
-                role="button"
-                tabIndex={0}
-                aria-label={`Ver foto ${index + 1} de ${count} en pantalla completa`}
-                onPointerDown={(event) => {
-                  pointerStartRef.current = { x: event.clientX, y: event.clientY }
-                }}
-                onClick={(event) => {
-                  if (pointerStartRef.current) {
-                    const dx = Math.abs(event.clientX - pointerStartRef.current.x)
-                    const dy = Math.abs(event.clientY - pointerStartRef.current.y)
-                    if (Math.hypot(dx, dy) > 10) return
-                  }
-                  openLightbox(index)
-                }}
-                onKeyDown={(event) => {
-                  if (event.key === "Enter" || event.key === " ") {
-                    event.preventDefault()
-                    openLightbox(index)
-                  }
-                }}
-                className="relative aspect-square min-w-0 flex-[0_0_100%] snap-center cursor-zoom-in overflow-hidden bg-muted outline-none focus-visible:ring-2 focus-visible:ring-ring focus-visible:ring-inset"
+                aria-hidden={index !== active}
+                className="relative aspect-square w-full shrink-0 grow-0 basis-full overflow-hidden bg-muted"
               >
                 <ProductImage
                   src={src}
                   alt={index === 0 ? alt : ""}
                   sizes={GALLERY_SIZES}
                   priority={index === 0}
-                  className="object-cover transition-transform duration-200 hover:scale-[1.01]"
+                  className="pointer-events-none object-cover"
                 />
               </div>
             ))
@@ -129,7 +185,7 @@ export function ProductGallery({
                   type="button"
                   aria-label={`Foto ${index + 1}`}
                   aria-current={index === active ? "true" : undefined}
-                  onClick={() => scrollToIndex(index)}
+                  onClick={() => goTo(index)}
                   className="flex size-6 items-center justify-center"
                 >
                   <span
@@ -152,11 +208,11 @@ export function ProductGallery({
         open={lightboxOpen}
         onClose={() => {
           setLightboxOpen(false)
-          scrollToIndex(lightboxIndex)
+          goTo(lightboxIndex)
         }}
         onIndexChange={(nextIndex) => {
           setLightboxIndex(nextIndex)
-          scrollToIndex(nextIndex)
+          goTo(nextIndex)
         }}
       />
     </>
