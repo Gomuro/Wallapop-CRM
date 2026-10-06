@@ -21,7 +21,7 @@ import {
   submitWallapopSession2fa,
   type WallapopSessionSnapshot,
 } from "../lib/wallapop-session"
-import { isBrowserBusyError } from "../lib/wallapop-cdp"
+import { isBrowserBusyError, abortInFlightPublish } from "../lib/wallapop-cdp"
 
 function toAccountJson(row: {
   id: string
@@ -198,6 +198,7 @@ export async function stopDefaultAccountAutopost(
     return
   }
 
+  await abortInFlightPublish()
   await jsonDefaultAutopost(res)
 }
 

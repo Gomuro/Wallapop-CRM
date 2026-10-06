@@ -7,12 +7,17 @@ import type { Page } from "playwright";
 
 import {
   closeWallapopUploadTab,
+  consumeKeepChromeAfterAbort,
   dismissWallapopConsent,
   ensureWallapopPage,
   firstVisible,
+  isInFlightPublishAborted,
+  isPublishAbortedError,
   navigateViaAssign,
+  PublishAbortedError,
   quitWallapopChrome,
   runWithBrowserBusy,
+  throwIfPublishAborted,
 } from "./wallapop-cdp";
 import { log, serializeError } from "./log";
 import { crmDescriptionMatchesForm } from "./wallapop-description";
@@ -128,6 +133,14 @@ export type PageUrlReader = {
 
 export function listingUrlFromPageUrl(url: string): string | null {
   return wallapopItemUrlOrNull(url);
+}
+
+function safePageUrl(page: Page): string {
+  try {
+    return page.url();
+  } catch {
+    return "";
+  }
 }
 
 /**
@@ -1651,6 +1664,7 @@ async function finalButtonVisible(page: Page): Promise<boolean> {
 }
 
 async function clickFinalPublish(page: Page): Promise<boolean> {
+  throwIfPublishAborted();
   const finalPattern = JSON.stringify(FINAL_RE.source);
   const finalFlags = JSON.stringify(FINAL_RE.flags);
   try {
@@ -1686,6 +1700,11 @@ async function clickFinalPublish(page: Page): Promise<boolean> {
   })()`);
     return Boolean(clicked);
   } catch (error) {
+    if (isInFlightPublishAborted() || isPublishAbortedError(error)) {
+      throw isPublishAbortedError(error)
+        ? error
+        : new PublishAbortedError();
+    }
     if (isPublicarContextDestroyedError(error)) {
       log("warn", "wallapop_publish_publicar_evaluate_torn_down", {
         message: error instanceof Error ? error.message : String(error),
@@ -1712,7 +1731,9 @@ export async function publishWallapopInBrowser(
       publishWallapopInBrowserInner(input),
     );
   } finally {
-    if (input.dryRun) {
+    if (consumeKeepChromeAfterAbort()) {
+      log("info", "wallapop_chrome_kept_after_abort", { dryRun: input.dryRun });
+    } else if (input.dryRun) {
       await closeWallapopUploadTab();
     } else {
       await quitWallapopChrome();
@@ -1750,15 +1771,27 @@ async function publishWallapopInBrowserAfterAttach(
       step = next;
     });
   } catch (error) {
-    const message = error instanceof Error ? error.message : String(error);
     const failStep =
       error instanceof WallapopPublishError ? error.step : step;
+    if (isPublishAbortedError(error) || isInFlightPublishAborted()) {
+      log("info", "wallapop_publish_abort", {
+        reason: "stop",
+        step: failStep,
+        message:
+          error instanceof Error ? error.message : "Publicación abortada.",
+        url: safePageUrl(page),
+      });
+      throw isPublishAbortedError(error)
+        ? error
+        : new PublishAbortedError();
+    }
+    const message = error instanceof Error ? error.message : String(error);
     log("error", "wallapop_publish_abort", {
       step: failStep,
       message,
       unexpected: !(error instanceof WallapopPublishError),
       err: serializeError(error),
-      url: page.url(),
+      url: safePageUrl(page),
       ...(await snapshotPublishForm(
         page,
         /estado|marca|revisa/i.test(message)
@@ -1777,9 +1810,11 @@ async function runPublishAfterAttach(
 ): Promise<PublishWallapopResult> {
   let step: PublishStep = "attach";
   const mark = (next: PublishStep) => {
+    throwIfPublishAborted();
     step = next;
     setStep(next);
   };
+  throwIfPublishAborted();
   await dismissWallapopConsent(page);
   await dismissSearchOverlay(page);
 
@@ -1924,6 +1959,7 @@ async function runPublishAfterAttach(
   });
 
   for (let round = 0; round < 14; round++) {
+    throwIfPublishAborted();
     if (await finalButtonVisible(page)) {
       mark("before_publicar");
       logPublishStep(step, page, { phase: "publicar_visible", round });
@@ -1999,6 +2035,7 @@ async function runPublishAfterAttach(
     };
   }
 
+  throwIfPublishAborted();
   const published = await clickFinalPublish(page);
   log("info", "wallapop_publish_publicar_click", { published });
   if (!published) {

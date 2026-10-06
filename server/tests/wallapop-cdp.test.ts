@@ -1,12 +1,20 @@
-import { describe, expect, it } from "vitest"
+import { afterEach, describe, expect, it } from "vitest"
 
 import {
+  abortInFlightPublish,
+  consumeKeepChromeAfterAbort,
   isClosedPage,
   isHandleAlive,
+  isInFlightPublishAborted,
   isLoginOr2faUrl,
+  isPublishAbortedError,
   isWallFeedUrl,
   pickLiveSessionPage,
+  resetWallapopPublishAbortForTests,
+  runWithBrowserBusy,
+  setWallapopHandle,
   shouldCloseUploadTab,
+  throwIfPublishAborted,
   type WallapopBrowserHandle,
 } from "../src/lib/wallapop-cdp"
 
@@ -132,5 +140,91 @@ describe("isWallFeedUrl", () => {
     expect(isWallFeedUrl("https://es.wallapop.com/app/catalog/upload")).toBe(
       false,
     )
+  })
+})
+
+describe("abortInFlightPublish", () => {
+  afterEach(() => {
+    resetWallapopPublishAbortForTests()
+    setWallapopHandle(null)
+  })
+
+  it("is a no-op when Chrome is idle", async () => {
+    await abortInFlightPublish()
+    expect(isInFlightPublishAborted()).toBe(false)
+    expect(consumeKeepChromeAfterAbort()).toBe(false)
+  })
+
+  it("does not close an upload tab when idle", async () => {
+    let closed = false
+    const upload = {
+      isClosed: () => closed,
+      url: () => "https://es.wallapop.com/app/catalog/upload",
+      close: async () => {
+        closed = true
+      },
+    }
+    setWallapopHandle({
+      browser: { isConnected: () => true },
+      context: { pages: () => [upload] },
+      page: upload,
+      ownedPage: true,
+    } as unknown as WallapopBrowserHandle)
+
+    await abortInFlightPublish()
+    expect(closed).toBe(false)
+  })
+
+  it("closes the owned upload tab and keeps Chrome for the next Start", async () => {
+    let closed = false
+    const upload = {
+      isClosed: () => closed,
+      url: () => "https://es.wallapop.com/app/catalog/upload",
+      close: async () => {
+        closed = true
+      },
+      bringToFront: async () => {},
+      setDefaultTimeout: () => {},
+    }
+    const wall = {
+      isClosed: () => false,
+      url: () => "https://es.wallapop.com/wall",
+      bringToFront: async () => {},
+      setDefaultTimeout: () => {},
+      evaluate: async () => {},
+      waitForTimeout: async () => {},
+    }
+    setWallapopHandle({
+      browser: { isConnected: () => true },
+      context: {
+        pages: () => (closed ? [wall] : [wall, upload]),
+        newPage: async () => wall,
+      },
+      page: upload,
+      ownedPage: true,
+    } as unknown as WallapopBrowserHandle)
+
+    let markStarted!: () => void
+    const started = new Promise<void>((resolve) => {
+      markStarted = resolve
+    })
+    let releaseGate!: () => void
+    const gate = new Promise<void>((resolve) => {
+      releaseGate = resolve
+    })
+
+    const run = runWithBrowserBusy("publish", async () => {
+      markStarted()
+      await gate
+      throwIfPublishAborted()
+    })
+
+    await started
+    await abortInFlightPublish()
+    expect(closed).toBe(true)
+    expect(isInFlightPublishAborted()).toBe(true)
+    releaseGate()
+    await expect(run).rejects.toSatisfy(isPublishAbortedError)
+    expect(consumeKeepChromeAfterAbort()).toBe(true)
   })
 })

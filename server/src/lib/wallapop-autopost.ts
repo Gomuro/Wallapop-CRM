@@ -462,6 +462,14 @@ export async function runAutopostTick(
 
   const result = await publishProduct(listing.productId, { dryRun: false })
   if (!result.ok) {
+    if (result.code === "PUBLISH_ABORTED") {
+      log("info", "wallapop_autopost_aborted", {
+        listingId: listing.id,
+        productId: listing.productId,
+        message: result.message,
+      })
+      return
+    }
     log("warn", "wallapop_autopost_publish_failed", {
       listingId: listing.id,
       productId: listing.productId,

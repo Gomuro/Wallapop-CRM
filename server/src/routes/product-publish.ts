@@ -14,7 +14,7 @@ import { sendError } from "../lib/http-error"
 import { listingJsonSelect, toListingJson } from "../lib/listing-json"
 import { log, serializeError } from "../lib/log"
 import { getWallapopSessionSnapshot } from "../lib/wallapop-session"
-import { isBrowserBusyError } from "../lib/wallapop-cdp"
+import { isBrowserBusyError, isPublishAbortedError } from "../lib/wallapop-cdp"
 import {
   publishWallapopInBrowser,
   WallapopPublishError,
@@ -453,6 +453,18 @@ export async function runProductPublish(
         ok: false,
         httpStatus: 409,
         code: "BROWSER_BUSY",
+        message: error.message,
+      }
+    }
+    if (isPublishAbortedError(error)) {
+      log("info", "wallapop_publish_aborted_by_stop", {
+        productId,
+        message: error.message,
+      })
+      return {
+        ok: false,
+        httpStatus: 409,
+        code: "PUBLISH_ABORTED",
         message: error.message,
       }
     }
