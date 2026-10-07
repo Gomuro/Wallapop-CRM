@@ -262,6 +262,7 @@ export async function pickNextAutopostListing(
       id: true,
       productId: true,
       createdAt: true,
+      shippingEnabled: true,
       product: {
         select: {
           sku: true,
@@ -280,6 +281,7 @@ export async function pickNextAutopostListing(
     const product = listing.product
     const ready = isShippingPublishReady({
       weightKg: decimalToNumberOrNull(product.weightKg),
+      shippingEnabled: listing.shippingEnabled,
     })
     if (ready) {
       return {

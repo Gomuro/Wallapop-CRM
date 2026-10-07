@@ -155,7 +155,7 @@ model ProductListing {
   status             ListingStatus @default(READY_TO_POST)
   externalUrl        String?       @map("external_url")
   externalItemId     String?       @map("external_item_id")
-  shippingEnabled    Boolean       @default(false) @map("shipping_enabled")
+  shippingEnabled    Boolean       @default(true) @map("shipping_enabled")
   shippingUpToKg     Int?          @map("shipping_up_to_kg")
   lastPostedAt       DateTime?     @map("last_posted_at")
   lastEditedAt       DateTime?     @map("last_edited_at")

@@ -23,7 +23,7 @@ export const productListingCreateSchema = z.object({
   accountId: z.string().trim().min(1),
   externalUrl: z.string().trim().url().nullable().optional(),
   externalItemId: z.string().trim().min(1).nullable().optional(),
-  shippingEnabled: z.boolean().default(false),
+  shippingEnabled: z.boolean().default(true),
   shippingUpToKg: z.number().int().positive().nullable().optional(),
   status: listingStatusSchema.default("READY_TO_POST"),
 })

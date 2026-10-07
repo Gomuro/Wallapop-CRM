@@ -56,10 +56,7 @@ function isPublishShippingEnabled(product: {
   shippingPackageSize: string | null
   listings: { shippingEnabled: boolean }[]
 }): boolean {
-  const listing = product.listings[0]
-  if (listing?.shippingEnabled === true) return true
-  if (listing?.shippingEnabled === false) return false
-  return true
+  return product.listings[0]?.shippingEnabled !== false
 }
 
 export function listingBlocksDryRun(listing: {
@@ -328,6 +325,7 @@ export async function runProductPublish(
 
   const shippingReady = validateShippingForPublish({
     weightKg,
+    shippingEnabled,
   })
   if (!dryRun && !shippingReady.ok) {
     return {

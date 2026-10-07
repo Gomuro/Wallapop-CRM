@@ -17,6 +17,7 @@ export type InventoryListing = {
   externalUrl: string | null
   status: ListingStatusRead
   lastPostedAt: string | null
+  shippingEnabled: boolean
 }
 
 export type InventoryProduct = {

@@ -39,9 +39,11 @@ function formToListingBody(formData: FormData) {
   const keepUrlIfEmpty = String(formData.get("keepUrlIfEmpty") ?? "") === "1"
   const clearListingUrl = String(formData.get("clearListingUrl") ?? "") === "1"
 
+  const shippingRaw = String(formData.get("shippingEnabled") ?? "").trim()
   const body: {
     externalUrl?: string | null
     status?: string
+    shippingEnabled?: boolean
   } = {}
 
   if (clearListingUrl) {
@@ -53,6 +55,8 @@ function formToListingBody(formData: FormData) {
   }
 
   if (statusRaw) body.status = statusRaw
+  if (shippingRaw === "true") body.shippingEnabled = true
+  if (shippingRaw === "false") body.shippingEnabled = false
   return body
 }
 

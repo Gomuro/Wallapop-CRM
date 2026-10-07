@@ -145,7 +145,7 @@ async function clickPackageSizeUntilChecked(
 /**
  * Some categories (jardín / bulky) show Estándar vs Voluminoso first;
  * «¿Cuánto pesa?» only after Estándar. Other categories already show kg bands
- * with no size radios — do not click anything then (Activar envío stays as Wallapop set it).
+ * with no size radios — do not click anything then (`ensureEnvioToggle` already set envío).
  */
 export async function ensurePackageSizeIfShown(
   page: Page,

@@ -243,6 +243,21 @@ describe("API v1 integration (Express + Postgres)", () => {
       expect(res.status).toBe(200)
       expect(res.body.listing?.status).toBe("READY_TO_POST")
       expect(res.body.listing?.externalUrl).toBeNull()
+      expect(res.body.listing?.shippingEnabled).toBe(true)
+    })
+
+    it("PUT shippingEnabled toggles envío", async () => {
+      const off = await agent
+        .put(`/api/v1/products/${productId}/listing`)
+        .send({ shippingEnabled: false })
+      expect(off.status).toBe(200)
+      expect(off.body.listing?.shippingEnabled).toBe(false)
+
+      const on = await agent
+        .put(`/api/v1/products/${productId}/listing`)
+        .send({ shippingEnabled: true })
+      expect(on.status).toBe(200)
+      expect(on.body.listing?.shippingEnabled).toBe(true)
     })
 
     it("PUT listing rejects internal POSTING", async () => {

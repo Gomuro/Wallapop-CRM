@@ -33,6 +33,18 @@ describe("validateShippingForPublish", () => {
     expect(isShippingPublishReady({ weightKg: 0 })).toBe(false)
     expect(isShippingPublishReady({ weightKg: Number.NaN })).toBe(false)
   })
+
+  it("skips peso when envío is off", () => {
+    expect(
+      isShippingPublishReady({ weightKg: null, shippingEnabled: false }),
+    ).toBe(true)
+    expect(
+      validateShippingForPublish({ weightKg: null, shippingEnabled: false }),
+    ).toEqual({ ok: true })
+    expect(
+      missingShippingPublishFields({ weightKg: null, shippingEnabled: false }),
+    ).toEqual([])
+  })
 })
 
 describe("showShippingIncompleteBadge", () => {

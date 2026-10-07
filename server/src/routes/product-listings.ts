@@ -69,7 +69,7 @@ function buildUpsertCreate(
     product: { connect: { id: productId } },
     account: { connect: { id: accountId } },
     status: body.status ?? "READY_TO_POST",
-    shippingEnabled: body.shippingEnabled ?? false,
+    shippingEnabled: body.shippingEnabled ?? true,
     externalUrl: body.externalUrl ?? null,
     shippingUpToKg: body.shippingUpToKg ?? null,
   }

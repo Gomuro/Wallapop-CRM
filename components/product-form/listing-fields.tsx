@@ -27,6 +27,7 @@ import type { InventoryListing } from "@/lib/inventory/types"
 import { wallapopItemUrlOrNull } from "@/lib/inventory/wallapop-item-url"
 import type { ListingStatus } from "@/lib/validations"
 import { typeMeta, typeSection } from "@/lib/ui/type"
+import { cn } from "@/lib/utils"
 
 const LISTING_STATUS_OPTIONS: ListingStatus[] = [
   "READY_TO_POST",
@@ -39,6 +40,46 @@ function writableListingStatus(
 ): ListingStatus {
   if (status === "ACTIVE" || status === "DEACTIVATED") return status
   return "READY_TO_POST"
+}
+
+function ListingShippingToggle({ defaultEnabled }: { defaultEnabled: boolean }) {
+  const [enabled, setEnabled] = useState(defaultEnabled)
+  return (
+    <div className="flex items-center justify-between gap-3">
+      <div className="min-w-0 space-y-0.5">
+        <Label htmlFor="shippingEnabledSwitch">Envío</Label>
+        <p id="shippingEnabled-hint" className="text-xs text-muted-foreground">
+          {enabled
+            ? "El comprador puede pedir envío por Wallapop."
+            : "Solo recogida. No hace falta peso."}
+        </p>
+      </div>
+      <button
+        type="button"
+        id="shippingEnabledSwitch"
+        role="switch"
+        aria-checked={enabled}
+        aria-describedby="shippingEnabled-hint"
+        onClick={() => setEnabled((on) => !on)}
+        className={cn(
+          "relative h-7 w-12 shrink-0 rounded-full transition-colors",
+          enabled ? "bg-primary" : "bg-muted ring-1 ring-border",
+        )}
+      >
+        <span
+          className={cn(
+            "absolute top-0.5 size-6 rounded-full bg-background shadow-sm transition-[left]",
+            enabled ? "left-[1.35rem]" : "left-0.5",
+          )}
+        />
+      </button>
+      <input
+        type="hidden"
+        name="shippingEnabled"
+        value={enabled ? "true" : "false"}
+      />
+    </div>
+  )
 }
 
 export function ListingFields({
@@ -84,7 +125,7 @@ export function ListingFields({
 
   useEffect(() => {
     if (listing?.status && listing.status !== "POSTING") {
-      setStatus(listing.status)
+      setStatus(writableListingStatus(listing.status))
     }
   }, [listing?.status])
 
@@ -240,6 +281,11 @@ export function ListingFields({
               </>
             )}
           </div>
+
+          <ListingShippingToggle
+            key={`${listing.id}-${listing.shippingEnabled ? "on" : "off"}`}
+            defaultEnabled={listing.shippingEnabled !== false}
+          />
 
           {itemUrl ? (
             <a

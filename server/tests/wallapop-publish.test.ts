@@ -1,12 +1,16 @@
 import fs from "node:fs"
 import path from "node:path"
 
-import { chromium } from "playwright"
+import { chromium, type Page } from "playwright"
 import { describe, expect, it } from "vitest"
 
 import { productListingApiPutBodySchema } from "../../lib/validations/listing"
 import {
   classifyPublishLanding,
+  ensureEnvioToggle,
+  ensurePackageSizeIfShown,
+  ensureStandardWeightBand,
+  envioToggleIsOn,
   isPublicarContextDestroyedError,
   isWallapopPublishedCatalogUrl,
   listingUrlFromPageUrl,
@@ -16,6 +20,7 @@ import {
   PUBLISHED_CATALOG_ITEMS_EVAL,
   readLandingAfterPublicarClick,
   readUrlAfterPublicarClick,
+  roleRadioIsChecked,
   type PublishedCatalogItem,
 } from "../src/lib/wallapop-publish"
 import { shouldRevertPublishClaim } from "../src/routes/product-publish"
@@ -284,5 +289,75 @@ describe("productListingApiPutBodySchema", () => {
     expect(
       productListingApiPutBodySchema.parse({ externalUrl: "" }).externalUrl,
     ).toBeNull()
+  })
+
+  it("accepts shippingEnabled", () => {
+    expect(
+      productListingApiPutBodySchema.parse({ shippingEnabled: false })
+        .shippingEnabled,
+    ).toBe(false)
+    expect(
+      productListingApiPutBodySchema.parse({ shippingEnabled: true })
+        .shippingEnabled,
+    ).toBe(true)
+  })
+})
+
+function envioFixtureSection(id: string) {
+  const html = fs.readFileSync(
+    path.join(__dirname, "fixtures/wallapop-envio-form.html"),
+    "utf8",
+  )
+  const match = html.match(new RegExp(`<section id="${id}"[\\s\\S]*?</section>`))
+  if (!match) throw new Error(`Missing fixture section ${id}`)
+  return match[0]
+}
+
+async function withEnvioPage(html: string, run: (page: Page) => Promise<void>) {
+  const browser = await chromium.launch({ headless: true })
+  try {
+    const page = await browser.newPage()
+    await page.setContent(`<!DOCTYPE html><html><body>${html}</body></html>`)
+    await run(page)
+  } finally {
+    await browser.close()
+  }
+}
+
+describe("Wallapop envío DOM", () => {
+  it("turns Activar envío off and on", async () => {
+    await withEnvioPage(envioFixtureSection("envio-toggle-and-package"), async (page) => {
+      expect(await envioToggleIsOn(page)).toBe(true)
+      await ensureEnvioToggle(page, true)
+      expect(await envioToggleIsOn(page)).toBe(true)
+      await ensureEnvioToggle(page, false)
+      expect(await envioToggleIsOn(page)).toBe(false)
+      await ensureEnvioToggle(page, true)
+      expect(await envioToggleIsOn(page)).toBe(true)
+    })
+  })
+
+  it("selects Estándar (delivery) over bulky", async () => {
+    await withEnvioPage(envioFixtureSection("envio-toggle-and-package"), async (page) => {
+      expect(await roleRadioIsChecked(page, "bulky")).toBe(true)
+      await ensurePackageSizeIfShown(page, "STANDARD")
+      expect(await roleRadioIsChecked(page, "delivery")).toBe(true)
+      expect(await roleRadioIsChecked(page, "bulky")).toBe(false)
+    })
+  })
+
+  it("keeps bulky when package type is BULKY", async () => {
+    await withEnvioPage(envioFixtureSection("envio-toggle-and-package"), async (page) => {
+      await ensurePackageSizeIfShown(page, "BULKY")
+      expect(await roleRadioIsChecked(page, "bulky")).toBe(true)
+    })
+  })
+
+  it("selects Delivery Option N for the CRM peso tramo", async () => {
+    await withEnvioPage(envioFixtureSection("envio-weight"), async (page) => {
+      const label = await ensureStandardWeightBand(page, 0.5)
+      expect(label).toBe("0 a 1 kg")
+      expect(await roleRadioIsChecked(page, "Delivery Option 0")).toBe(true)
+    })
   })
 })

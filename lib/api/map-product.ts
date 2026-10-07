@@ -112,6 +112,7 @@ export function mapApiListing(
       typeof listing.lastPostedAt === "string" && listing.lastPostedAt.trim()
         ? listing.lastPostedAt
         : null,
+    shippingEnabled: listing.shippingEnabled !== false,
   }
 }
 
@@ -130,6 +131,7 @@ export function mapListItemToInventory(row: ApiProductListItem): InventoryProduc
           status: asListingStatus(row.listingStatus),
           externalUrl: null,
           lastPostedAt: row.lastPostedAt ?? null,
+          shippingEnabled: true,
         }
       : null)
 
@@ -210,6 +212,7 @@ export function mapProductToInventory(
     listingActive: listing?.status === "ACTIVE",
     shippingPublishReady: isShippingPublishReady({
       weightKg: asNullableNumber(product?.weightKg),
+      shippingEnabled: listing?.shippingEnabled,
     }),
   }
 }

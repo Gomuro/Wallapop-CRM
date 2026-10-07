@@ -49,12 +49,19 @@ export {
   readLandingAfterPublicarClick,
   readUrlAfterPublicarClick,
 } from "./verify";
+export { ensureEnvioToggle, envioToggleIsOn } from "./envio";
+export {
+  ensurePackageSizeIfShown,
+  ensureStandardWeightBand,
+  roleRadioIsChecked,
+} from "./shipping";
 
 function logPublishStart(input: PublishWallapopInput, page: Page): void {
   log("info", "wallapop_publish_start", {
     title: input.title.slice(0, 80),
     dryRun: input.dryRun,
     photoCount: input.imagePaths.length,
+    shippingEnabled: input.shippingEnabled !== false,
     packageType: input.packageType ?? "STANDARD",
     weightKg: input.weightKg ?? null,
     widthCm: input.widthCm ?? null,

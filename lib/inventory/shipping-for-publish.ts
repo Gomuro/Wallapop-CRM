@@ -9,6 +9,8 @@ export type ShippingPublishField = "weightKg"
 
 export type ShippingPublishProductFields = {
   weightKg: number | null | undefined
+  /** Pickup-only listings do not need peso for Wallapop envío. */
+  shippingEnabled?: boolean
 }
 
 function isPositiveMeasure(value: number | null | undefined): boolean {
@@ -18,6 +20,7 @@ function isPositiveMeasure(value: number | null | undefined): boolean {
 export function missingShippingPublishFields(
   product: ShippingPublishProductFields,
 ): ShippingPublishField[] {
+  if (product.shippingEnabled === false) return []
   return isPositiveMeasure(product.weightKg) ? [] : ["weightKg"]
 }
 

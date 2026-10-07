@@ -31,7 +31,12 @@ const productListInclude = {
     where: { account: { isDefault: true } },
     orderBy: { createdAt: "asc" as const },
     take: 1,
-    select: { status: true, lastPostedAt: true, externalUrl: true },
+    select: {
+      status: true,
+      lastPostedAt: true,
+      externalUrl: true,
+      shippingEnabled: true,
+    },
   },
 }
 
@@ -190,6 +195,7 @@ function toProductListItemJson(row: {
     status: string
     lastPostedAt: Date | null
     externalUrl: string | null
+    shippingEnabled: boolean
   }>
 }) {
   const listingStatus = row.listings[0]?.status ?? null
@@ -208,6 +214,7 @@ function toProductListItemJson(row: {
     lastPostedAt: row.listings[0]?.lastPostedAt?.toISOString() ?? null,
     shippingPublishReady: isShippingPublishReady({
       weightKg: decimalJson(row.weightKg),
+      shippingEnabled: row.listings[0]?.shippingEnabled,
     }),
   }
 }

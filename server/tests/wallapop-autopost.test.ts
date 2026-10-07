@@ -207,6 +207,7 @@ describe("pickNextAutopostListing", () => {
             id: "l-bad",
             productId: "p-bad",
             createdAt: new Date("2026-01-01"),
+            shippingEnabled: true,
             product: {
               sku: "SKU-BAD",
               title: "Caja sin peso",
@@ -220,6 +221,7 @@ describe("pickNextAutopostListing", () => {
             id: "l-good",
             productId: "p-good",
             createdAt: new Date("2026-01-02"),
+            shippingEnabled: true,
             product: {
               sku: "SKU-GOOD",
               title: "Caja con peso",
@@ -247,6 +249,36 @@ describe("pickNextAutopostListing", () => {
       sku: "SKU-BAD",
       code: "SHIPPING_NOT_READY",
     })
+  })
+
+  it("picks pickup-only listings without peso", async () => {
+    const prisma = {
+      productListing: {
+        findMany: vi.fn().mockResolvedValue([
+          {
+            id: "l-pickup",
+            productId: "p-pickup",
+            createdAt: new Date("2026-01-01"),
+            shippingEnabled: false,
+            product: {
+              sku: "SKU-PICKUP",
+              title: "Sin envío",
+              weightKg: null,
+              widthCm: null,
+              lengthCm: null,
+              heightCm: null,
+            },
+          },
+        ]),
+      },
+    }
+
+    const picked = await pickNextAutopostListing(prisma as never, "acc-1")
+    expect(picked.listing).toMatchObject({
+      id: "l-pickup",
+      productId: "p-pickup",
+    })
+    expect(picked.skipped).toBe(0)
   })
 })
 
