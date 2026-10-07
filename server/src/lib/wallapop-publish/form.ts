@@ -49,17 +49,9 @@ async function fillShippingSection(
   page: Page,
   input: PublishWallapopInput,
 ): Promise<string | null> {
-  const shippingOn = input.shippingEnabled !== false;
   const packageType = input.packageType ?? "STANDARD";
   await page.evaluate(`window.scrollBy(0, 500)`).catch(() => {});
-  await ensureEnvioToggle(page, shippingOn);
-  if (!shippingOn) {
-    log("info", "wallapop_publish_shipping_disabled", {
-      packageType,
-      weightKg: input.weightKg ?? null,
-    });
-    return null;
-  }
+  await ensureEnvioToggle(page, true);
   await ensurePackageSizeIfShown(page, packageType);
   if (packageType === "STANDARD" && input.weightKg != null) {
     const weightBandLabel = await ensureStandardWeightBand(
@@ -119,14 +111,12 @@ export async function fillPublishForm(
   logPublishStep("form", page, { phase: "after_category" });
   const descriptionText = await fillCoreFormFields(page, input, summaryText);
   const weightBandLabel = await fillShippingSection(page, input);
-  if (input.shippingEnabled !== false) {
-    await fillMeasuresIfPresent(
-      page,
-      input.widthCm,
-      input.lengthCm,
-      input.heightCm,
-    );
-  }
+  await fillMeasuresIfPresent(
+    page,
+    input.widthCm,
+    input.lengthCm,
+    input.heightCm,
+  );
   await clickMainText(page, "No lo es");
   if (!(await readPriceAmount(page))) {
     await fillPrice(page, input.price);

@@ -34,16 +34,20 @@ describe("validateShippingForPublish", () => {
     expect(isShippingPublishReady({ weightKg: Number.NaN })).toBe(false)
   })
 
-  it("skips peso when envío is off", () => {
+  it("still requires peso when envío was stored off", () => {
     expect(
       isShippingPublishReady({ weightKg: null, shippingEnabled: false }),
-    ).toBe(true)
+    ).toBe(false)
     expect(
       validateShippingForPublish({ weightKg: null, shippingEnabled: false }),
-    ).toEqual({ ok: true })
+    ).toEqual({
+      ok: false,
+      code: SHIPPING_NOT_READY_CODE,
+      message: SHIPPING_NOT_READY_MESSAGE,
+    })
     expect(
       missingShippingPublishFields({ weightKg: null, shippingEnabled: false }),
-    ).toEqual([])
+    ).toEqual(["weightKg"])
   })
 })
 

@@ -250,7 +250,7 @@ describe("pickNextAutopostListing", () => {
     })
   })
 
-  it("picks pickup-only listings without peso", async () => {
+  it("skips pickup-flagged listings that still have no peso", async () => {
     const prisma = {
       productListing: {
         findMany: vi.fn().mockResolvedValue([
@@ -273,11 +273,8 @@ describe("pickNextAutopostListing", () => {
     }
 
     const picked = await pickNextAutopostListing(prisma as never, "acc-1")
-    expect(picked.listing).toMatchObject({
-      id: "l-pickup",
-      productId: "p-pickup",
-    })
-    expect(picked.skipped).toBe(0)
+    expect(picked.listing).toBeNull()
+    expect(picked.skipped).toBe(1)
   })
 })
 

@@ -67,7 +67,7 @@ function logPublishStart(input: PublishWallapopInput, page: Page): void {
     title: input.title.slice(0, 80),
     dryRun: input.dryRun,
     photoCount: input.imagePaths.length,
-    shippingEnabled: input.shippingEnabled !== false,
+    shippingEnabled: true,
     packageType: input.packageType ?? "STANDARD",
     weightKg: input.weightKg ?? null,
     widthCm: input.widthCm ?? null,

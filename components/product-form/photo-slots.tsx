@@ -1,28 +1,26 @@
 "use client"
 
-import {
-  useEffect,
-  useRef,
-  useState,
-  type MutableRefObject,
-  type PointerEvent as ReactPointerEvent,
-  type RefObject,
-} from "react"
-import { LoaderCircleIcon, PlusIcon, XIcon } from "lucide-react"
+import { useEffect, useRef, useState } from "react"
 
 import {
   deleteProductImageAction,
   reorderProductImagesAction,
   uploadProductImages,
 } from "@/app/actions/uploads"
-import { Badge } from "@/components/ui/badge"
 import type { InventoryProductImage } from "@/lib/inventory/types"
 import { PRODUCT_IMAGE_MAX } from "@/lib/validations/product"
 import { loadDraftPhotos } from "@/lib/product-form/draft"
 import { compressImageFiles } from "@/lib/images/compress"
 import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
-import { typeMeta } from "@/lib/ui/type"
-import { cn } from "@/lib/utils"
+
+import {
+  finishPhotoSlotDrag,
+  movePhotoSlotDrag,
+  startPhotoSlotDrag,
+  type DragSession,
+  type PhotoSlotDragRefs,
+} from "./photo-slots-drag"
+import { PhotoSlotsGrid } from "./photo-slots-grid"
 
 const ACCEPTED_TYPES = [
   "image/jpeg",
@@ -32,38 +30,11 @@ const ACCEPTED_TYPES = [
   "image/heic",
   "image/heif",
 ]
-const DRAG_THRESHOLD_PX = 8
-const PRESS_DELAY_MS = 150
 
 type SlotImage = {
   url: string
   id?: string
   file?: File
-}
-
-function reorderSlots(images: SlotImage[], from: number, to: number): SlotImage[] {
-  if (from === to || from < 0 || to < 0 || from >= images.length) return images
-  const next = [...images]
-  const [moved] = next.splice(from, 1)
-  if (!moved) return images
-  next.splice(Math.min(to, next.length), 0, moved)
-  return next
-}
-
-type DragSession = {
-  pointerId: number
-  from: number
-  startX: number
-  startY: number
-  ready: boolean
-  active: boolean
-  timer: number
-}
-
-type PhotoSlotDragRefs = {
-  sessionRef: MutableRefObject<DragSession | null>
-  overIndexRef: MutableRefObject<number | null>
-  gridRef: RefObject<HTMLDivElement | null>
 }
 
 function mapProductImages(productImages: InventoryProductImage[]): SlotImage[] {
@@ -239,264 +210,6 @@ async function removePhotoSlot(ctx: {
   if (ctx.productId) await persistPhotoSlotOrder(ctx.productId, next, ctx.setError)
 }
 
-function slotIndexFromPoint(
-  gridRef: RefObject<HTMLDivElement | null>,
-  x: number,
-  y: number,
-): number | null {
-  const grid = gridRef.current
-  if (!grid) return null
-  const hit = document.elementFromPoint(x, y)
-  const slot = hit?.closest("[data-photo-slot]")
-  if (!slot || !grid.contains(slot)) return null
-  const index = Number(slot.getAttribute("data-photo-slot"))
-  return Number.isInteger(index) ? index : null
-}
-
-function photoSlotDropTarget(index: number | null, imageCount: number): number | null {
-  if (index === null) return null
-  if (index < imageCount) return index
-  return Math.min(index, imageCount)
-}
-
-function clearPhotoSlotDrag(
-  refs: PhotoSlotDragRefs,
-  setDragIndex: (value: number | null) => void,
-  setOverIndex: (value: number | null) => void,
-) {
-  if (refs.sessionRef.current?.timer) {
-    window.clearTimeout(refs.sessionRef.current.timer)
-  }
-  refs.sessionRef.current = null
-  refs.overIndexRef.current = null
-  setDragIndex(null)
-  setOverIndex(null)
-}
-
-export function startPhotoSlotDrag(
-  event: ReactPointerEvent<HTMLDivElement>,
-  index: number,
-  uploading: boolean,
-  sessionRef: MutableRefObject<DragSession | null>,
-) {
-  if (uploading || event.button !== 0) return
-  const pointerId = event.pointerId
-  const isTouch = event.pointerType === "touch"
-  const timer = isTouch
-    ? window.setTimeout(() => {
-        const session = sessionRef.current
-        if (!session || session.pointerId !== pointerId) return
-        session.ready = true
-      }, PRESS_DELAY_MS)
-    : 0
-  sessionRef.current = {
-    pointerId,
-    from: index,
-    startX: event.clientX,
-    startY: event.clientY,
-    ready: !isTouch,
-    active: false,
-    timer,
-  }
-}
-
-export function movePhotoSlotDrag(
-  event: ReactPointerEvent<HTMLDivElement>,
-  refs: PhotoSlotDragRefs,
-  setDragIndex: (value: number | null) => void,
-  setOverIndex: (value: number | null) => void,
-) {
-  const session = refs.sessionRef.current
-  if (!session || session.pointerId !== event.pointerId) return
-  const distance = Math.hypot(
-    event.clientX - session.startX,
-    event.clientY - session.startY,
-  )
-
-  if (!session.active) {
-    if (!session.ready) {
-      if (distance > DRAG_THRESHOLD_PX) {
-        clearPhotoSlotDrag(refs, setDragIndex, setOverIndex)
-      }
-      return
-    }
-    if (distance < DRAG_THRESHOLD_PX) return
-    session.active = true
-    event.currentTarget.setPointerCapture(event.pointerId)
-    setDragIndex(session.from)
-    refs.overIndexRef.current = session.from
-    setOverIndex(session.from)
-  }
-
-  event.preventDefault()
-  const hover = slotIndexFromPoint(refs.gridRef, event.clientX, event.clientY)
-  if (hover !== refs.overIndexRef.current) {
-    refs.overIndexRef.current = hover
-    setOverIndex(hover)
-  }
-}
-
-export function finishPhotoSlotDrag(
-  event: ReactPointerEvent<HTMLDivElement>,
-  ctx: PhotoSlotDragRefs & {
-    safeImages: SlotImage[]
-    productId?: string
-    setDragIndex: (value: number | null) => void
-    setOverIndex: (value: number | null) => void
-    setError: (error: string | null) => void
-    commit: (next: SlotImage[]) => void
-  },
-) {
-  const session = ctx.sessionRef.current
-  if (!session || session.pointerId !== event.pointerId) return
-  if (event.currentTarget.hasPointerCapture(event.pointerId)) {
-    event.currentTarget.releasePointerCapture(event.pointerId)
-  }
-  if (!session.active) {
-    clearPhotoSlotDrag(ctx, ctx.setDragIndex, ctx.setOverIndex)
-    return
-  }
-  const from = session.from
-  const to = photoSlotDropTarget(ctx.overIndexRef.current, ctx.safeImages.length)
-  clearPhotoSlotDrag(ctx, ctx.setDragIndex, ctx.setOverIndex)
-  if (to === null || from === to) return
-  if (from < 0 || from >= ctx.safeImages.length) return
-  const next = reorderSlots(ctx.safeImages, from, to)
-  ctx.commit(next)
-  void persistPhotoSlotOrder(ctx.productId, next, ctx.setError)
-}
-
-export function PhotoSlotCell({
-  index,
-  slot,
-  imageCount,
-  dragIndex,
-  overIndex,
-  uploading,
-  onPointerDown,
-  onPointerMove,
-  onPointerUp,
-  onAddFiles,
-  onRemove,
-  onOpenPicker,
-  onMaxReached,
-}: {
-  index: number
-  slot: SlotImage | null
-  imageCount: number
-  dragIndex: number | null
-  overIndex: number | null
-  uploading: boolean
-  onPointerDown: (event: ReactPointerEvent<HTMLDivElement>, index: number) => void
-  onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void
-  onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void
-  onAddFiles: (files: FileList | null, atIndex?: number) => void
-  onRemove: (index: number) => void
-  onOpenPicker: () => void
-  onMaxReached: () => void
-}) {
-  return (
-    <div
-      data-photo-slot={index}
-      onPointerDown={slot ? (event) => onPointerDown(event, index) : undefined}
-      onPointerMove={slot ? onPointerMove : undefined}
-      onPointerUp={slot ? onPointerUp : undefined}
-      onPointerCancel={slot ? onPointerUp : undefined}
-      onDragOver={(event) => {
-        if (!event.dataTransfer.types.includes("Files")) return
-        event.preventDefault()
-      }}
-      onDrop={(event) => {
-        if (!event.dataTransfer.files.length) return
-        event.preventDefault()
-        void onAddFiles(event.dataTransfer.files, slot ? index : undefined)
-      }}
-      className={cn(
-        "relative aspect-square select-none rounded-lg",
-        slot ? "bg-muted" : "bg-transparent",
-        dragIndex === index && "z-20 scale-105 touch-none opacity-80 shadow-lg",
-        overIndex === index &&
-          dragIndex !== null &&
-          dragIndex !== index &&
-          "ring-2 ring-primary",
-      )}
-    >
-      {slot ? (
-        <>
-          <div className="size-full overflow-hidden rounded-lg">
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img
-              src={slot.url}
-              alt=""
-              draggable={false}
-              className="pointer-events-none size-full object-cover"
-            />
-          </div>
-          {index === 0 ? (
-            <Badge className="pointer-events-none absolute bottom-1 left-1 z-10 h-5 max-w-[calc(100%-0.5rem)] bg-background px-1.5 text-[10px] font-medium text-foreground shadow-sm ring-1 ring-border">
-              Foto principal
-            </Badge>
-          ) : null}
-          <button
-            type="button"
-            aria-label={`Eliminar foto ${index + 1}`}
-            disabled={uploading}
-            onPointerDown={(event) => event.stopPropagation()}
-            onClick={(event) => {
-              event.stopPropagation()
-              void onRemove(index)
-            }}
-            className="absolute top-1 right-1 z-10 flex size-8 items-center justify-center rounded-full bg-background/95 text-foreground shadow-sm ring-1 ring-border backdrop-blur-sm focus-visible:ring-3 focus-visible:ring-ring/50 disabled:pointer-events-none disabled:opacity-40"
-          >
-            <XIcon className="size-3.5" />
-          </button>
-        </>
-      ) : (
-        <button
-          type="button"
-          disabled={uploading}
-          aria-label={`Añadir foto ${index + 1}`}
-          onClick={() => {
-            if (imageCount >= PRODUCT_IMAGE_MAX) {
-              onMaxReached()
-              return
-            }
-            onOpenPicker()
-          }}
-          className="flex size-full items-center justify-center rounded-lg border border-dashed border-border hover:bg-accent disabled:pointer-events-none"
-        >
-          {uploading && index === imageCount ? (
-            <LoaderCircleIcon className="size-5 animate-spin text-primary" />
-          ) : (
-            <PlusIcon className="size-5 text-muted-foreground" />
-          )}
-        </button>
-      )}
-    </div>
-  )
-}
-
-type PhotoSlotsGridProps = {
-  inputRef: RefObject<HTMLInputElement | null>
-  gridRef: RefObject<HTMLDivElement | null>
-  replaceIndexRef: MutableRefObject<number | undefined>
-  gridSlots: (SlotImage | null)[]
-  imageCount: number
-  productId?: string
-  dragIndex: number | null
-  overIndex: number | null
-  uploading: boolean
-  error: string | null
-  onAddFiles: (files: FileList | null, atIndex?: number) => void
-  onRemove: (index: number) => void
-  onClearAll: () => void
-  onOpenPicker: () => void
-  onMaxReached: () => void
-  onPointerDown: (event: ReactPointerEvent<HTMLDivElement>, index: number) => void
-  onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void
-  onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void
-}
-
 function subscribeDraftPhotoSlots(
   productId: string | undefined,
   restoreDraft: boolean,
@@ -513,95 +226,6 @@ function subscribeDraftPhotoSlots(
   return () => {
     cancelled = true
   }
-}
-
-export function PhotoSlotsGrid({
-  inputRef,
-  gridRef,
-  replaceIndexRef,
-  gridSlots,
-  imageCount,
-  productId,
-  dragIndex,
-  overIndex,
-  uploading,
-  error,
-  onAddFiles,
-  onRemove,
-  onClearAll,
-  onOpenPicker,
-  onMaxReached,
-  onPointerDown,
-  onPointerMove,
-  onPointerUp,
-}: PhotoSlotsGridProps) {
-  return (
-    <div className="space-y-2">
-      <p className={cn(typeMeta, "text-muted-foreground")} aria-live="polite">
-        {imageCount}/{PRODUCT_IMAGE_MAX} · 6–10 para publicar
-        {uploading ? " · Subiendo…" : ""}
-      </p>
-      <input
-        ref={inputRef}
-        type="file"
-        accept="image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif,image/*"
-        multiple
-        tabIndex={-1}
-        aria-label="Subir fotos"
-        className="sr-only"
-        onChange={(event) => {
-          void onAddFiles(event.target.files, replaceIndexRef.current)
-          replaceIndexRef.current = undefined
-          event.target.value = ""
-        }}
-      />
-      <div
-        ref={gridRef}
-        className={cn(
-          "grid grid-cols-3 gap-2 md:grid-cols-4",
-          dragIndex !== null && "touch-none",
-        )}
-      >
-        {gridSlots.map((slot, index) => (
-          <PhotoSlotCell
-            key={index}
-            index={index}
-            slot={slot}
-            imageCount={imageCount}
-            dragIndex={dragIndex}
-            overIndex={overIndex}
-            uploading={uploading}
-            onPointerDown={onPointerDown}
-            onPointerMove={onPointerMove}
-            onPointerUp={onPointerUp}
-            onAddFiles={onAddFiles}
-            onRemove={onRemove}
-            onOpenPicker={onOpenPicker}
-            onMaxReached={onMaxReached}
-          />
-        ))}
-      </div>
-      <div className="flex flex-wrap items-center justify-between gap-2">
-        <p className={cn(typeMeta, "text-muted-foreground")}>
-          Toca + para subir. Arrastra para ordenar. Se comprimen al añadir (máx. 1400px).
-        </p>
-        {!productId && imageCount > 1 ? (
-          <button
-            type="button"
-            onClick={onClearAll}
-            className="text-xs font-medium text-destructive hover:underline"
-          >
-            Eliminar todas ({imageCount})
-          </button>
-        ) : null}
-      </div>
-      {error ? (
-        <p className="text-xs text-destructive" role="alert">
-          {error}
-        </p>
-      ) : null}
-    </div>
-  )
 }
 
 export type PhotoSlotsProps = {
@@ -729,11 +353,11 @@ export function PhotoSlots({
         finishPhotoSlotDrag(event, {
           ...dragRefs,
           safeImages,
-          productId,
           setDragIndex,
           setOverIndex,
-          setError,
           commit,
+          persistOrder: (next) =>
+            void persistPhotoSlotOrder(productId, next, setError),
         })
       }
     />

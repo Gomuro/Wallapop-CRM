@@ -27,4 +27,4 @@ export const listingWithoutPublicItemUrlWhere = {
     { externalUrl: null },
     { NOT: { externalUrl: { contains: "/item/" } } },
   ],
-} as const
+}
