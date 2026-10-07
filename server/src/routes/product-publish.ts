@@ -147,7 +147,7 @@ export async function activatePostingListing(
       shippingEnabled: data.shippingEnabled,
       postingAttempts: 0,
       lastPublishError: null,
-      ...(data.externalUrl != null ? { externalUrl: data.externalUrl } : {}),
+      externalUrl: wallapopItemUrlOrNull(data.externalUrl ?? null),
     },
   })
   if (result.count === 0) {

@@ -1,3 +1,7 @@
+import fs from "node:fs"
+import path from "node:path"
+
+import { chromium } from "playwright"
 import { describe, expect, it } from "vitest"
 
 import { productListingApiPutBodySchema } from "../../lib/validations/listing"
@@ -6,8 +10,13 @@ import {
   isPublicarContextDestroyedError,
   isWallapopPublishedCatalogUrl,
   listingUrlFromPageUrl,
+  normalizePublishTitle,
+  parseCatalogPriceEur,
+  pickUniqueCatalogItemUrl,
+  PUBLISHED_CATALOG_ITEMS_EVAL,
   readLandingAfterPublicarClick,
   readUrlAfterPublicarClick,
+  type PublishedCatalogItem,
 } from "../src/lib/wallapop-publish"
 import { shouldRevertPublishClaim } from "../src/routes/product-publish"
 
@@ -132,6 +141,96 @@ describe("classifyPublishLanding", () => {
         reviewMessage: null,
       }).reason,
     ).toBe("unexpected_url")
+  })
+})
+
+describe("pickUniqueCatalogItemUrl", () => {
+  const helmet = {
+    title: "Casco Moto LS2 Advant Carbono XL",
+    href: "https://es.wallapop.com/item/casco-moto-ls2-advant-carbono-xl-1309517660",
+    priceText: "209,95 €",
+  }
+  const other = {
+    title: "Barrera Seguridad Infantil 73–80 cm",
+    href: "https://es.wallapop.com/item/barrera-seguridad-1300000001",
+    priceText: "29,99 €",
+  }
+
+  it("picks the catalog row by title, not the first item", () => {
+    const picked = pickUniqueCatalogItemUrl([other, helmet], {
+      title: "Casco Moto LS2 Advant Carbono XL",
+      price: 209.95,
+    })
+    expect(picked).toEqual({ href: helmet.href, reason: "matched" })
+    expect(parseCatalogPriceEur(helmet.priceText)).toBe(209.95)
+  })
+
+  it("uses price when two rows share the title", () => {
+    const cheap = {
+      ...helmet,
+      href: "https://es.wallapop.com/item/casco-barato-111",
+      priceText: "50 €",
+    }
+    const picked = pickUniqueCatalogItemUrl([cheap, helmet], {
+      title: helmet.title,
+      price: 209.95,
+    })
+    expect(picked).toEqual({ href: helmet.href, reason: "matched_price" })
+  })
+
+  it("does not write upload/published URLs and does not guess", () => {
+    expect(
+      pickUniqueCatalogItemUrl(
+        [
+          {
+            title: helmet.title,
+            href: "https://es.wallapop.com/app/catalog/published",
+            priceText: helmet.priceText,
+          },
+        ],
+        { title: helmet.title, price: 209.95 },
+      ).reason,
+    ).toBe("none")
+    expect(
+      pickUniqueCatalogItemUrl(
+        [
+          { ...helmet, href: "https://es.wallapop.com/item/a-1" },
+          { ...helmet, href: "https://es.wallapop.com/item/a-2" },
+        ],
+        { title: helmet.title, price: 209.95 },
+      ).reason,
+    ).toBe("ambiguous")
+  })
+
+  it("scrapes the captured tsl-catalog-item HTML like live publish", async () => {
+    const html = fs.readFileSync(
+      path.join(__dirname, "fixtures/wallapop-tsl-catalog-item.html"),
+      "utf8",
+    )
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(
+        `<!DOCTYPE html><html><body>${html}</body></html>`,
+      )
+      const rows = (await page.evaluate(
+        PUBLISHED_CATALOG_ITEMS_EVAL,
+      )) as PublishedCatalogItem[]
+      expect(rows).toHaveLength(1)
+      expect(normalizePublishTitle(rows[0]?.title ?? "")).toBe(
+        "Casco Moto LS2 Advant Carbono XL",
+      )
+      const picked = pickUniqueCatalogItemUrl(rows, {
+        title: "Casco Moto LS2 Advant Carbono XL",
+        price: 209.95,
+      })
+      expect(picked.href).toBe(
+        "https://es.wallapop.com/item/casco-moto-ls2-advant-carbono-xl-1309517660",
+      )
+      expect(picked.reason).toBe("matched")
+    } finally {
+      await browser.close()
+    }
   })
 })
 
