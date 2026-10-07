@@ -22,7 +22,7 @@ function assertApiConfigured() {
 }
 
 export type ApiFetchOptions = RequestInit & {
-  /** Forward session to Express from Next middleware (server-only). */
+  /** Forward session to Express from Next proxy (server-only). */
   cookieHeader?: string
 }
 

@@ -7,11 +7,15 @@ import { describe, expect, it } from "vitest"
 import { productListingApiPutBodySchema } from "../../lib/validations/listing"
 import {
   classifyPublishLanding,
+  clickMarcaCatalogItem,
+  clickMarcaCrearOption,
   ensureEnvioToggle,
   ensurePackageSizeIfShown,
   ensureStandardWeightBand,
   envioToggleIsOn,
   isPublicarContextDestroyedError,
+  queryMarcaCombo,
+  readBrandValue,
   isWallapopPublishedCatalogUrl,
   listingUrlFromPageUrl,
   normalizePublishTitle,
@@ -358,6 +362,102 @@ describe("Wallapop envío DOM", () => {
       const label = await ensureStandardWeightBand(page, 0.5)
       expect(label).toBe("0 a 1 kg")
       expect(await roleRadioIsChecked(page, "Delivery Option 0")).toBe(true)
+    })
+  })
+})
+
+const MARCA_UPLOAD_DUMP = fs.readFileSync(
+  path.join(__dirname, "fixtures/wallapop-marca-form.html"),
+  "utf8",
+)
+
+async function plantBrandCatalogItem(page: Page, wanted: string) {
+  await page.evaluate((brand) => {
+    const box = document.querySelector('wallapop-combo-box[data-testid="brand"]')
+    const listbox = box?.querySelector('[role="listbox"]')
+    if (!box || !listbox) throw new Error("captured brand listbox missing")
+    const item = document.createElement("wallapop-combo-box-item")
+    item.setAttribute("aria-label", brand)
+    item.addEventListener("click", () => {
+      let hidden = document.querySelector("#brand")
+      if (!(hidden instanceof HTMLInputElement)) {
+        hidden = document.createElement("input")
+        hidden.id = "brand"
+        hidden.setAttribute("name", "brand")
+        box.after(hidden)
+      }
+      hidden.value = brand
+    })
+    listbox.appendChild(item)
+  }, wanted)
+}
+
+async function plantBrandCrearAndHeader(page: Page, wanted: string) {
+  await page.evaluate((brand) => {
+    const box = document.querySelector('wallapop-combo-box[data-testid="brand"]')
+    const panel = box?.querySelector(".wallapop-combo-box__floating-area-content")
+    if (!box || !panel) throw new Error("captured brand panel missing")
+    const header = document.createElement("header")
+    header.className = "PrivateLayout__header"
+    const decoy = document.createElement("a")
+    decoy.textContent = "Crear cuenta"
+    decoy.addEventListener("click", () => {
+      let hidden = document.querySelector("#brand")
+      if (!(hidden instanceof HTMLInputElement)) {
+        hidden = document.createElement("input")
+        hidden.id = "brand"
+        document.body.prepend(hidden)
+      }
+      hidden.value = "HEADER"
+    })
+    header.appendChild(decoy)
+    document.body.prepend(header)
+
+    const btn = document.createElement("button")
+    btn.type = "button"
+    btn.textContent = `Crear ${brand}`
+    btn.addEventListener("click", () => {
+      let hidden = document.querySelector("#brand")
+      if (!(hidden instanceof HTMLInputElement)) {
+        hidden = document.createElement("input")
+        hidden.id = "brand"
+        hidden.setAttribute("name", "brand")
+        box.after(hidden)
+      }
+      hidden.value = brand
+    })
+    panel.appendChild(btn)
+  }, wanted)
+}
+
+describe("Wallapop Marca DOM", () => {
+  it("finds Marca* on the captured upload form", async () => {
+    await withEnvioPage(MARCA_UPLOAD_DUMP, async (page) => {
+      const combo = await queryMarcaCombo(page)
+      expect(combo?.id).toMatch(
+        /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i,
+      )
+      expect(
+        await page.locator('wallapop-combo-box[data-testid="brand"]').count(),
+      ).toBe(1)
+    })
+  })
+
+  it("picks a catalog item inside the captured brand listbox", async () => {
+    await withEnvioPage(MARCA_UPLOAD_DUMP, async (page) => {
+      await plantBrandCatalogItem(page, "QUIRUMED")
+      expect(await clickMarcaCatalogItem(page, "QUIRUMED")).toBe(true)
+      expect(await readBrandValue(page)).toBe("QUIRUMED")
+    })
+  })
+
+  it("clicks Crear in the captured panel, not the layout header", async () => {
+    await withEnvioPage(MARCA_UPLOAD_DUMP, async (page) => {
+      await plantBrandCrearAndHeader(page, "QUIRUMED")
+      const result = await clickMarcaCrearOption(page, "QUIRUMED")
+      expect(result.clicked).toBe(true)
+      expect(result.text).toMatch(/Crear QUIRUMED/i)
+      expect(await readBrandValue(page)).toBe("QUIRUMED")
     })
   })
 })

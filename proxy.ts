@@ -13,7 +13,7 @@ function isProtectedPath(pathname: string) {
   )
 }
 
-export function middleware(request: NextRequest) {
+export function proxy(request: NextRequest) {
   const { pathname } = request.nextUrl
   if (!isProtectedPath(pathname)) {
     return NextResponse.next()

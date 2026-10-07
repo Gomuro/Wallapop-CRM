@@ -27,7 +27,7 @@ const eslintConfig = defineConfig([
       "app/**/*.{ts,tsx}",
       "components/**/*.{ts,tsx}",
       "lib/**/*.{ts,tsx}",
-      "middleware.ts",
+      "proxy.ts",
       "server/src/**/*.ts",
     ],
     ignores: ["**/*.{test,spec}.ts", "components/ui/**"],

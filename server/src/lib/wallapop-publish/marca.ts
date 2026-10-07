@@ -3,63 +3,23 @@ import type { Page } from "playwright";
 import { wallapopBrandFromProduct } from "../../../../lib/inventory/wallapop-brand";
 import { log } from "../log";
 import {
+  clickMarcaCatalogItem,
+  clickMarcaCrearOption,
   clickOpenListboxOption,
+  closeOpenDropdowns,
   listFieldDropdownOptions,
   listOpenDropdownOptions,
   openHiddenFieldDropdown,
-  closeOpenDropdowns,
+  queryMarcaCombo,
 } from "./dropdown";
 import { readPublishDescription } from "./fields";
 import {
-  dumpMarcaCombo,
   marcaFieldShown,
-  queryMarcaCombo,
   readBrandValue,
   typeMarcaCombo,
 } from "./marca-combo";
 import { fillIfEmpty } from "./nav";
 import { WallapopPublishError } from "./types";
-
-function marcaCrearScanJs(wanted: string): string {
-  return `((wanted) => {
-    const want = String(wanted || "").toLowerCase();
-    const clip = (s) => String(s || "").replace(/\\s+/g, " ").trim();
-    const walk = (root, acc) => {
-      if (!root || !root.querySelectorAll) return acc;
-      for (const el of root.querySelectorAll("*")) {
-        acc.push(el);
-        if (el.shadowRoot) walk(el.shadowRoot, acc);
-      }
-      return acc;
-    };
-    const nodes = walk(document, []);
-    const hits = nodes
-      .map((el) => ({ el, text: clip(el.textContent) }))
-      .filter((row) => /^Crear\\b/i.test(row.text) && row.text.length < 80);
-    const match =
-      hits.find((row) => row.text.toLowerCase().includes(want)) || hits[0];
-    if (!match) {
-      return { clicked: false, hits: hits.map((row) => row.text).slice(0, 8) };
-    }
-    match.el.click();
-    match.el.dispatchEvent(
-      new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
-    );
-    return { clicked: true, text: match.text, hits: hits.map((row) => row.text).slice(0, 8) };
-  })(${JSON.stringify(wanted)})`;
-}
-
-const CLICK_MARCA_CATALOG_JS = `((wanted) => {
-    const want = String(wanted || "").toLowerCase();
-    const items = [...document.querySelectorAll("wallapop-combo-box-item")];
-    const match = items.find((el) => {
-      const aria = (el.getAttribute("aria-label") || "").trim().toLowerCase();
-      return aria === want;
-    });
-    if (!match) return false;
-    match.click();
-    return true;
-  })`;
 
 const MARCA_LOOKS_SELECTED_JS = `((wanted) => {
       const want = String(wanted || "").toLowerCase();
@@ -86,34 +46,18 @@ const TYPE_HIDDEN_BRAND_JS = `((v) => {
     return true;
   })`;
 
-async function clickMarcaCatalogItem(
-  page: Page,
-  wanted: string,
-): Promise<boolean> {
-  const clicked = (await page.evaluate(
-    `${CLICK_MARCA_CATALOG_JS}(${JSON.stringify(wanted)})`,
-  )) as boolean;
-  if (clicked) await page.waitForTimeout(500);
-  return Boolean(clicked);
-}
-
 async function clickMarcaCrear(page: Page, wanted: string): Promise<boolean> {
-  const result = (await page.evaluate(marcaCrearScanJs(wanted))) as {
-    clicked?: boolean;
-    text?: string;
-    hits?: string[];
-  };
+  const result = await clickMarcaCrearOption(page, wanted);
   log("info", "wallapop_publish_marca_crear_scan", {
     wanted,
-    clicked: Boolean(result?.clicked),
-    text: result?.text || null,
-    hits: result?.hits || [],
+    clicked: result.clicked,
+    text: result.text || null,
+    hits: result.hits,
   });
-  if (!result?.clicked) return false;
-  await page.waitForTimeout(700);
+  if (!result.clicked) return false;
   log("info", "wallapop_publish_marca_crear_clicked", {
     wanted,
-    via: "shadow",
+    via: "panel",
     text: result.text,
   });
   return true;
@@ -167,7 +111,6 @@ async function selectMarcaViaCombo(
   const options = await listFieldDropdownOptions(page, "marca");
   log("info", "wallapop_publish_marca_try", { wanted, via: "combo", options });
   const picked = await pickMarcaSuggestion(page, wanted);
-  await dumpMarcaCombo(page, "after_pick");
   const afterPick = await readBrandValue(page);
   const looksSelected = await marcaLooksSelected(page, wanted);
   log("info", "wallapop_publish_marca_pick_result", {
@@ -185,7 +128,6 @@ async function selectMarcaViaCombo(
     });
     return;
   }
-  await dumpMarcaCombo(page, "before_fail");
   throw new WallapopPublishError(
     "form",
     `No se pudo seleccionar la marca (${wanted}).`,
@@ -224,7 +166,6 @@ async function selectMarcaViaHidden(page: Page, wanted: string): Promise<void> {
     });
     return;
   }
-  await dumpMarcaCombo(page, "before_fail");
   throw new WallapopPublishError(
     "form",
     `No se pudo seleccionar la marca (${wanted}).`,
@@ -253,7 +194,6 @@ export async function ensureMarcaIfShown(
     comboId: combo?.id || null,
     hasHiddenBrand: Boolean(await page.locator("#brand").count()),
   });
-  await dumpMarcaCombo(page, "field_found");
   if (!wanted) {
     throw new WallapopPublishError(
       "form",

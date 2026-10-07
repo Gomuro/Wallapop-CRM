@@ -85,7 +85,7 @@ export function isUiLayer(repoPath) {
   return (
     repoPath.startsWith("app/") ||
     repoPath.startsWith("components/") ||
-    repoPath === "middleware.ts"
+    repoPath === "proxy.ts"
   )
 }
 

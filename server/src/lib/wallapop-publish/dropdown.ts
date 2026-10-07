@@ -8,7 +8,7 @@ export async function closeOpenDropdowns(page: Page): Promise<void> {
 /** Options inside one Wallapop field. Never scans photo drop-areas. */
 const DROPDOWN_ROOT_JS: Record<"condition" | "marca", string> = {
   condition: `document.querySelector("#condition")?.closest("walla-dropdown, tsl-upload-form-dropdown") || document.querySelector('walla-dropdown[data-testid="condition"]')`,
-  marca: `(() => {
+  marca: `document.querySelector('wallapop-combo-box[data-testid="brand"]') || (() => {
     const labels = [...document.querySelectorAll("label")];
     const lab = labels.find((el) => /Marca\\s*\\*/i.test(el.textContent || ""));
     const forId = lab?.getAttribute("for");
@@ -170,4 +170,116 @@ export async function clickFieldDropdownOption(
   label: string,
 ): Promise<boolean> {
   return clickListboxOptionInRoot(page, label, DROPDOWN_ROOT_JS[field]);
+}
+
+/** Combo host plus open suggestion panels — never the page header. */
+const MARCA_SCOPE_ROOTS = `
+    const field = ${DROPDOWN_ROOT_JS.marca};
+    const panels = [...document.querySelectorAll("walla-floating-area")].filter((el) => {
+      const closed = /wrapper--closed|wrapper--hidden/.test(String(el.className || ""));
+      const r = el.getBoundingClientRect();
+      const s = getComputedStyle(el);
+      return (
+        !closed &&
+        r.height > 2 &&
+        s.display !== "none" &&
+        s.visibility !== "hidden"
+      );
+    });
+    const roots = [field, ...panels].filter(Boolean);
+`;
+
+function clickMarcaCatalogJs(wanted: string): string {
+  return `((wanted) => {
+    ${MARCA_SCOPE_ROOTS}
+    const want = String(wanted || "").toLowerCase();
+    for (const root of roots) {
+      const items = [...root.querySelectorAll("wallapop-combo-box-item")];
+      const match = items.find((el) => {
+        const aria = (el.getAttribute("aria-label") || "").trim().toLowerCase();
+        return aria === want;
+      });
+      if (match) {
+        match.click();
+        return true;
+      }
+    }
+    return false;
+  })(${JSON.stringify(wanted)})`;
+}
+
+function clickMarcaCrearJs(wanted: string): string {
+  return `((wanted) => {
+    ${MARCA_SCOPE_ROOTS}
+    const want = String(wanted || "").toLowerCase();
+    const clip = (s) => String(s || "").replace(/\\s+/g, " ").trim();
+    const walk = (node, acc) => {
+      if (!node || !node.querySelectorAll) return acc;
+      for (const el of node.querySelectorAll("*")) {
+        acc.push(el);
+        if (el.shadowRoot) walk(el.shadowRoot, acc);
+      }
+      return acc;
+    };
+    const nodes = roots.reduce((acc, root) => walk(root, acc), []);
+    const hits = nodes
+      .map((el) => ({ el, text: clip(el.textContent) }))
+      .filter((row) => /^Crear\\b/i.test(row.text) && row.text.length < 80);
+    const leaves = hits.filter(
+      (row) => !hits.some((other) => other.el !== row.el && row.el.contains(other.el)),
+    );
+    const match =
+      leaves.find((row) => row.text.toLowerCase().includes(want)) || leaves[0];
+    if (!match) {
+      return { clicked: false, hits: hits.map((row) => row.text).slice(0, 8) };
+    }
+    match.el.click();
+    match.el.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+    );
+    return {
+      clicked: true,
+      text: match.text,
+      hits: hits.map((row) => row.text).slice(0, 8),
+    };
+  })(${JSON.stringify(wanted)})`;
+}
+
+export async function queryMarcaCombo(page: Page): Promise<{
+  id: string;
+  value: string;
+} | null> {
+  return (await page.evaluate(`(() => {
+    const root = ${DROPDOWN_ROOT_JS.marca};
+    if (!root) return null;
+    const input = root.querySelector("input");
+    if (!(input instanceof HTMLInputElement)) return null;
+    return { id: input.id || "", value: String(input.value || "").trim() };
+  })()`)) as { id: string; value: string } | null;
+}
+
+export async function clickMarcaCatalogItem(
+  page: Page,
+  wanted: string,
+): Promise<boolean> {
+  const clicked = (await page.evaluate(clickMarcaCatalogJs(wanted))) as boolean;
+  if (clicked) await page.waitForTimeout(500);
+  return Boolean(clicked);
+}
+
+export type MarcaCrearClick = {
+  clicked: boolean;
+  text?: string;
+  hits: string[];
+};
+
+export async function clickMarcaCrearOption(
+  page: Page,
+  wanted: string,
+): Promise<MarcaCrearClick> {
+  const result = (await page.evaluate(clickMarcaCrearJs(wanted))) as MarcaCrearClick;
+  const hits = Array.isArray(result?.hits) ? result.hits : [];
+  if (!result?.clicked) return { clicked: false, hits };
+  await page.waitForTimeout(700);
+  return { clicked: true, text: result.text, hits };
 }

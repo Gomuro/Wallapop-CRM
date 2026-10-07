@@ -55,6 +55,12 @@ export {
   ensureStandardWeightBand,
   roleRadioIsChecked,
 } from "./shipping";
+export {
+  clickMarcaCatalogItem,
+  clickMarcaCrearOption,
+  queryMarcaCombo,
+} from "./dropdown";
+export { readBrandValue } from "./marca-combo";
 
 function logPublishStart(input: PublishWallapopInput, page: Page): void {
   log("info", "wallapop_publish_start", {
