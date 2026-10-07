@@ -19,6 +19,7 @@ import { getPrisma } from "./db"
 import { log, serializeError } from "./log"
 import { getBrowserBusy } from "./wallapop-cdp"
 import { getWallapopSessionSnapshot } from "./wallapop-session"
+import { recoverStalePostingListings } from "./wallapop-posting-watchdog"
 import { runProductPublish } from "../routes/product-publish"
 
 /** Default ~15 min. Override with account UI, else `WALLAPOP_AUTOPOST_INTERVAL_MS`. */
@@ -202,8 +203,8 @@ export function autopostDelayWithJitter(
 
 /**
  * Eligible queue row on the default account.
- * Only `READY_TO_POST` — never POSTING / ACTIVE / DEACTIVATED (anti-duplicate
- * after crash-after-Publicar; POSTING is not retried even if the enum exists).
+ * Only `READY_TO_POST` — never POSTING / ACTIVE / DEACTIVATED / FAILED.
+ * Stale POSTING is recovered by the posting watchdog before pick.
  * A leftover upload/home URL is not a published item — still eligible.
  */
 export function autopostEligibleListingWhere(
@@ -408,6 +409,12 @@ export async function runAutopostTick(
   if (!prisma) {
     log("warn", "wallapop_autopost_skip_no_db")
     return
+  }
+
+  try {
+    await recoverStalePostingListings(prisma)
+  } catch (error) {
+    log("warn", "wallapop_posting_watchdog_tick_failed", serializeError(error))
   }
 
   if (!isAutopostLivePublishEnabled()) {

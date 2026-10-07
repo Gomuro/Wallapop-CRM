@@ -1,7 +1,7 @@
 import type { ListingStatus, ProductCondition, ProductStatus, ShippingPackageSize } from "@/lib/validations"
 
-/** Listing status as returned by GET (includes in-flight publish). Not writable via PUT. */
-export type ListingStatusRead = ListingStatus | "POSTING"
+/** Listing status as returned by GET (in-flight POSTING, watchdog FAILED). Not writable via PUT. */
+export type ListingStatusRead = ListingStatus | "POSTING" | "FAILED"
 
 export type InventoryProductImage = {
   id: string

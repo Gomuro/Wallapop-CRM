@@ -64,7 +64,9 @@ export function ListingDetailSection({
                   ? "En cola de publicación"
                   : listing.status === "POSTING"
                     ? "Publicando…"
-                    : "Sin publicar"}
+                    : listing.status === "FAILED"
+                      ? "Error al publicar"
+                      : "Sin publicar"}
             </MetaRow>
             <MetaRow label="Enlace">
               {posted && itemUrl ? (

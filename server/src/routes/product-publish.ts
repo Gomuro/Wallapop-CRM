@@ -83,7 +83,12 @@ export async function claimListingForPublish(
       status: "READY_TO_POST",
       ...listingWithoutPublicItemUrlWhere,
     },
-    data: { status: "POSTING", externalUrl: null },
+    data: {
+      status: "POSTING",
+      externalUrl: null,
+      postingAttempts: { increment: 1 },
+      lastPublishError: null,
+    },
   })
   return result.count > 0
 }
@@ -140,6 +145,8 @@ export async function activatePostingListing(
       status: "ACTIVE",
       lastPostedAt: new Date(),
       shippingEnabled: data.shippingEnabled,
+      postingAttempts: 0,
+      lastPublishError: null,
       ...(data.externalUrl != null ? { externalUrl: data.externalUrl } : {}),
     },
   })

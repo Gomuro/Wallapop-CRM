@@ -28,6 +28,7 @@ const LISTING_STATUSES = new Set<ListingStatusRead>([
   "DEACTIVATED",
   "READY_TO_POST",
   "POSTING",
+  "FAILED",
 ])
 
 function asString(value: unknown, fallback = ""): string {

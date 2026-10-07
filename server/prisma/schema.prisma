@@ -24,6 +24,7 @@ enum ListingStatus {
   POSTING
   ACTIVE
   DEACTIVATED
+  FAILED
 }
 
 enum ProductCondition {
@@ -158,6 +159,8 @@ model ProductListing {
   shippingUpToKg     Int?          @map("shipping_up_to_kg")
   lastPostedAt       DateTime?     @map("last_posted_at")
   lastEditedAt       DateTime?     @map("last_edited_at")
+  postingAttempts    Int           @default(0) @map("posting_attempts")
+  lastPublishError   String?       @map("last_publish_error")
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
 

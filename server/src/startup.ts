@@ -1,5 +1,6 @@
 import { log, serializeError } from "./lib/log"
 import { startWallapopAutopostLoop } from "./lib/wallapop-autopost"
+import { recoverStalePostingOnBoot } from "./lib/wallapop-posting-watchdog"
 import { rehydrateWallapopSessionOnBoot } from "./lib/wallapop-session"
 
 /**
@@ -20,4 +21,5 @@ export function runStartupHooks(): void {
     )
 
   startWallapopAutopostLoop()
+  void recoverStalePostingOnBoot()
 }

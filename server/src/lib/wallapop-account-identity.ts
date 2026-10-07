@@ -60,6 +60,8 @@ export async function syncWallapopIdentityOnActive(
         externalUrl: null,
         externalItemId: null,
         lastPostedAt: null,
+        postingAttempts: 0,
+        lastPublishError: null,
       },
     }),
     prisma.account.update({

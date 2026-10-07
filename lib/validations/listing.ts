@@ -9,12 +9,13 @@ export const listingStatusSchema = z.enum([
   "DEACTIVATED",
 ])
 
-/** Read/API mapping: includes internal `POSTING` while a live publish is in flight. */
+/** Read/API mapping: includes internal `POSTING` and watchdog `FAILED`. */
 export const listingStatusReadSchema = z.enum([
   "READY_TO_POST",
   "POSTING",
   "ACTIVE",
   "DEACTIVATED",
+  "FAILED",
 ])
 
 export const productListingCreateSchema = z.object({

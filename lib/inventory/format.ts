@@ -34,6 +34,8 @@ export function listingStatusLabel(status: ListingStatusRead) {
       return "Listo para publicar"
     case "POSTING":
       return "Publicando…"
+    case "FAILED":
+      return "Error al publicar"
   }
 }
 
@@ -84,6 +86,7 @@ export function listingIndicatorShort(
 ): string | null {
   if (!listing) return null
   if (listing.status === "POSTING") return "Publicando…"
+  if (listing.status === "FAILED") return "Error al publicar"
   if (isListingActive(listing, listingActive)) return "En Wallapop"
   if (listing.status === "READY_TO_POST") return "Listo para publicar"
   if (listing.status === "DEACTIVATED") return "Desactivado"
