@@ -72,6 +72,11 @@ products.json
 source-product.json
 server/scripts/seed-product-once.ts
 
+# Postgres dumps (D8). Never commit.
+backups/
+*.pgdump
+server/ops/run-backup.cmd
+
 # Uploaded product photos (keep folder)
 public/uploads/*
 !public/uploads/.gitkeep

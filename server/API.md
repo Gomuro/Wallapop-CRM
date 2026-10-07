@@ -198,6 +198,10 @@ Body (JSON, camelCase): усі поля опційні, **хоча б одне**
 | POST | `/api/v1/accounts/connect/2fa` | Body `{ code }` (4–8 alphanumeric). Вводить OTP у відкритий контекст. Якщо RAM злетіла після рестарту, але MFA-екран у Chrome лишився — **re-attach CDP** і прийняти код (не 409). Без MFA/сесії → **409** `NOT_AUTHENTICATING`. Помилка коду → **400** `CONNECT_FAILED` |
 | POST | `/api/v1/accounts/disconnect` | Повний **logout Wallapop** у Chrome-профілі (`clearCookies` + `es.wallapop.com/logout`) + CRM `DISCONNECTED`; Prisma default → `INACTIVE`. Профіль на диску / процес Chrome не видаляються. Якщо CDP недоступний — CRM все одно від’єднується |
 
+| GET | `/api/v1/backups` | Список файлів у `BACKUP_DIR` (`{ files: { file, size, mtime }[] }`). Cookie. Не `public/uploads`. |
+| POST | `/api/v1/backups` | Один `pg_dump -Fc` на календарний день. 201 `{ file, reused: false }` або 200 `{ file, reused: true }` якщо сьогодні вже є копія. 500 `BACKUP_FAILED` якщо немає `pg_dump`. CRM на буті дамп **не** робить — лише Task Scheduler / ця команда. |
+| GET | `/api/v1/backups/:file` | Attachment. Ім’я лише `wallapop_crm-YYYYMMDD-HHmm.pgdump`. 400/404 |
+
 Пароль Wallapop у БД **не** зберігається. При `ACTIVE` / disconnect оновлюється `status` default-акаунта в Prisma (`ACTIVE` / `INACTIVE`).
 
 ### Браузерні профілі (обов’язково — 1 акаунт = 1 Chrome user-data-dir)

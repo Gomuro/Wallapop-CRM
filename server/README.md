@@ -50,7 +50,10 @@ npm run ops -- ping
 npm run ops -- pull --dry-run
 npm run ops -- push --sku SKU --dry-run
 npm run ops -- github
+npm run ops -- backup
 ```
+
+`BACKUP_DIR` — дампи Postgres (`pg_dump -Fc`), не `public/uploads`. Завантаження з CRM: `/accounts`, cookie. На Windows VPS раз на добу: `powershell -File server/ops/install-backup-task.ps1`.
 
 `DATABASE_URL_VPS` / `OPS_SSH` лише в `server/.env`. Users/seed не чіпає. Після `refresh-local` на локалі `autopost_enabled=false`. Фотофайли не копіює — лише рядки `product_images` (`storageKey`).
 

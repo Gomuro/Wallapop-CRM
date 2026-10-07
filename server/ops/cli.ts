@@ -1,6 +1,7 @@
 import type { PrismaClient } from "../generated/prisma/client"
 
 import { requireLocalDatabaseUrl, requireVpsDatabaseUrl } from "./env"
+import { runBackup } from "./backup"
 import { githubReport } from "./github"
 import { pingBoth } from "./ping"
 import { withPair } from "./prisma"
@@ -28,6 +29,7 @@ function usage(): never {
   npm run ops -- push --sku SKU
   npm run ops -- push --sku SKU --dry-run
   npm run ops -- github
+  npm run ops -- backup
 `)
   process.exit(1)
 }
@@ -64,6 +66,10 @@ async function main(): Promise<void> {
   }
   if (cmd === "github" || cmd === "report" || cmd === "gh") {
     console.log(githubReport())
+    return
+  }
+  if (cmd === "backup") {
+    await runBackup()
     return
   }
   usage()
