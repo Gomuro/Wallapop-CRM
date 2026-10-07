@@ -15,6 +15,50 @@ export type CategoryBreadcrumbOptions = {
   consumerGoodsPublish?: boolean;
 };
 
+function wallapopIdsFromPath(path: string): number[] {
+  return path
+    .split("/")
+    .filter(Boolean)
+    .map((segment: string) => Number.parseInt(segment, 10))
+    .filter((n: number) => Number.isFinite(n));
+}
+
+/** Drop motor/jobs/services prefixes so the picker starts at consumer goods. */
+function trimConsumerGoodsPath(
+  wallapopIds: number[],
+  verticalById: ReadonlyMap<number, string | null>,
+): number[] {
+  let start = 0;
+  for (let i = 0; i < wallapopIds.length; i++) {
+    const id = wallapopIds[i]!;
+    if (verticalById.get(id) === "consumer_goods") {
+      start = i;
+      break;
+    }
+    if (!CONSUMER_UPLOAD_EXCLUDED_ROOTS.has(id)) {
+      start = i;
+      break;
+    }
+  }
+  const trimmed = wallapopIds.slice(start);
+  while (
+    trimmed.length > 0 &&
+    CONSUMER_UPLOAD_EXCLUDED_ROOTS.has(trimmed[0]!)
+  ) {
+    trimmed.shift();
+  }
+  return trimmed;
+}
+
+function spanishLabelsInOrder(
+  wallapopIds: number[],
+  nameById: ReadonlyMap<number, string>,
+): string[] {
+  return wallapopIds
+    .map((id: number) => nameById.get(id))
+    .filter((name): name is string => Boolean(name?.trim()));
+}
+
 /** Spanish labels root → leaf from materialized `Category.path` (wallapop_id segments). */
 export async function categoryBreadcrumbLabelsEs(
   prisma: PrismaClient,
@@ -27,46 +71,21 @@ export async function categoryBreadcrumbLabelsEs(
   });
   if (!leaf?.path) return [];
 
-  let wallapopIds = leaf.path
-    .split("/")
-    .filter(Boolean)
-    .map((segment: string) => Number.parseInt(segment, 10))
-    .filter((n: number) => Number.isFinite(n));
-
+  let wallapopIds = wallapopIdsFromPath(leaf.path);
   if (!wallapopIds.length) return [];
 
   const rows = await prisma.category.findMany({
     where: { wallapopId: { in: wallapopIds } },
     select: { wallapopId: true, nameEs: true, verticalId: true },
   });
-  const byId = new Map(rows.map((row) => [row.wallapopId, row.nameEs]));
-  const verticalById = new Map(
-    rows.map((row) => [row.wallapopId, row.verticalId]),
-  );
+  const nameById = new Map(rows.map((row) => [row.wallapopId, row.nameEs]));
 
   if (options?.consumerGoodsPublish) {
-    let start = 0;
-    for (let i = 0; i < wallapopIds.length; i++) {
-      const id = wallapopIds[i]!;
-      if (verticalById.get(id) === "consumer_goods") {
-        start = i;
-        break;
-      }
-      if (!CONSUMER_UPLOAD_EXCLUDED_ROOTS.has(id)) {
-        start = i;
-        break;
-      }
-    }
-    wallapopIds = wallapopIds.slice(start);
-    while (
-      wallapopIds.length > 0 &&
-      CONSUMER_UPLOAD_EXCLUDED_ROOTS.has(wallapopIds[0]!)
-    ) {
-      wallapopIds = wallapopIds.slice(1);
-    }
+    const verticalById = new Map(
+      rows.map((row) => [row.wallapopId, row.verticalId]),
+    );
+    wallapopIds = trimConsumerGoodsPath(wallapopIds, verticalById);
   }
 
-  return wallapopIds
-    .map((id: number) => byId.get(id))
-    .filter((name): name is string => Boolean(name?.trim()));
+  return spanishLabelsInOrder(wallapopIds, nameById);
 }

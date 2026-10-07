@@ -22,6 +22,7 @@
     "server:dev": "tsx server/src/index.ts",
     "server:start": "tsx server/src/index.ts",
     "server:smoke": "tsx server/scripts/smoke.ts",
+    "ops": "tsx server/ops/cli.ts",
     "test:api": "vitest run --config server/vitest.config.ts"
   },
   "dependencies": {

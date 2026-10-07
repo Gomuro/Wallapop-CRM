@@ -40,6 +40,20 @@ Postman: імпорт `server/postman/Wallapop-CRM.postman_collection.json` + `s
 
 `NEXT_PUBLIC_API_URL` — лише в корневому `.env` (Next/Vercel). `PORT` default `4000` у `server/.env`.
 
+## Ops (локальна Docker-Postgres і VPS)
+
+Окремий CLI, не частина API/publish: `server/ops/`. Тунель SSH + дві бази.
+
+```bash
+npm run ops -- tunnel
+npm run ops -- ping
+npm run ops -- pull --dry-run
+npm run ops -- push --sku SKU --dry-run
+npm run ops -- github
+```
+
+`DATABASE_URL_VPS` / `OPS_SSH` лише в `server/.env`. Users/seed не чіпає. Після `refresh-local` на локалі `autopost_enabled=false`. Фотофайли не копіює — лише рядки `product_images` (`storageKey`).
+
 ## Логи
 
 Кожен запит (крім `/health`) і кожна помилка пишуться в **`server/logs/server.log`** і в вікно, де запущений `npm run server:start`. Паролі й cookie туди не потрапляють.
