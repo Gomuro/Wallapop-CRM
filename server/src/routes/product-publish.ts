@@ -111,8 +111,8 @@ export async function revertPublishClaim(
 
 /**
  * Revert POSTING → READY_TO_POST only when we claimed and Publicar was never clicked.
- * `postedOnWallapop` is true after live browser success (including click-then-tab-teardown).
- * `clickedPublicar` covers a throw after the click before that success flag is set.
+ * `postedOnWallapop` is true after D9 verified the published catalog (or /item/).
+ * `clickedPublicar` / `keepClaim`: click ran but verify failed — stay POSTING, not ACTIVE.
  */
 export function shouldRevertPublishClaim(
   claimed: boolean,
@@ -438,6 +438,9 @@ export async function runProductPublish(
       error.step === "published"
     ) {
       postedOnWallapop = true
+      clickedPublicar = true
+    }
+    if (error instanceof WallapopPublishError && error.keepClaim) {
       clickedPublicar = true
     }
     if (postedOnWallapop) {

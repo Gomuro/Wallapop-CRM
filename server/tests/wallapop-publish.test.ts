@@ -2,8 +2,11 @@ import { describe, expect, it } from "vitest"
 
 import { productListingApiPutBodySchema } from "../../lib/validations/listing"
 import {
+  classifyPublishLanding,
   isPublicarContextDestroyedError,
+  isWallapopPublishedCatalogUrl,
   listingUrlFromPageUrl,
+  readLandingAfterPublicarClick,
   readUrlAfterPublicarClick,
 } from "../src/lib/wallapop-publish"
 import { shouldRevertPublishClaim } from "../src/routes/product-publish"
@@ -18,6 +21,19 @@ describe("readUrlAfterPublicarClick", () => {
       0,
     )
     expect(url).toBe("https://es.wallapop.com/item/abc")
+  })
+
+  it("marks Target closed as urlReadFailed, not as /item/", async () => {
+    const landing = await readLandingAfterPublicarClick(
+      {
+        waitForTimeout: async () => {
+          throw new Error("Target closed")
+        },
+        url: () => "https://es.wallapop.com/app/catalog/published",
+      },
+      0,
+    )
+    expect(landing).toEqual({ url: null, urlReadFailed: true })
   })
 
   it("returns null if wait or url throws after Publicar (Target closed)", async () => {
@@ -70,8 +86,57 @@ describe("listingUrlFromPageUrl", () => {
   })
 })
 
+describe("classifyPublishLanding", () => {
+  const published = "https://es.wallapop.com/app/catalog/published"
+
+  it("accepts Tu Catálogo published as hung", () => {
+    expect(
+      classifyPublishLanding({
+        url: published,
+        urlReadFailed: false,
+        reviewMessage: null,
+      }),
+    ).toEqual({ ok: true, reason: "published_catalog" })
+    expect(isWallapopPublishedCatalogUrl(published)).toBe(true)
+  })
+
+  it("rejects upload form and Revisa banner", () => {
+    expect(
+      classifyPublishLanding({
+        url: "https://es.wallapop.com/app/catalog/upload/consumer-goods",
+        urlReadFailed: false,
+        reviewMessage: null,
+      }).reason,
+    ).toBe("still_on_upload")
+    expect(
+      classifyPublishLanding({
+        url: "https://es.wallapop.com/app/catalog/upload/consumer-goods",
+        urlReadFailed: false,
+        reviewMessage: "Wallapop pidió revisar campos en rojo.",
+      }).reason,
+    ).toBe("review_banner")
+  })
+
+  it("does not mark ACTIVE when the tab is gone or URL is not the catalog", () => {
+    expect(
+      classifyPublishLanding({
+        url: null,
+        urlReadFailed: true,
+        reviewMessage: null,
+      }).reason,
+    ).toBe("target_closed")
+    expect(
+      classifyPublishLanding({
+        url: "https://es.wallapop.com/wall",
+        urlReadFailed: false,
+        reviewMessage: null,
+      }).reason,
+    ).toBe("unexpected_url")
+  })
+})
+
 describe("isPublicarContextDestroyedError", () => {
-  it("treats Target closed / destroyed context as posted-safe", () => {
+  it("detects Target closed / destroyed context", () => {
     expect(
       isPublicarContextDestroyedError(new Error("Target closed")),
     ).toBe(true)

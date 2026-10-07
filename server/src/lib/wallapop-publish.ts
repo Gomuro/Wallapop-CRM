@@ -117,10 +117,17 @@ export type PublishWallapopResult = {
 
 export class WallapopPublishError extends Error {
   step: PublishStep;
-  constructor(step: PublishStep, message: string) {
+  /** True: Publicar may have run; keep POSTING, do not write ACTIVE. */
+  keepClaim: boolean;
+  constructor(
+    step: PublishStep,
+    message: string,
+    opts?: { keepClaim?: boolean },
+  ) {
     super(message);
     this.name = "WallapopPublishError";
     this.step = step;
+    this.keepClaim = opts?.keepClaim === true;
   }
 }
 
@@ -133,6 +140,84 @@ export type PageUrlReader = {
 
 export function listingUrlFromPageUrl(url: string): string | null {
   return wallapopItemUrlOrNull(url);
+}
+
+export function isWallapopPublishedCatalogUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.toLowerCase();
+    if (host !== "wallapop.com" && !host.endsWith(".wallapop.com")) return false;
+    return /\/app\/catalog\/published(\/|$)/i.test(parsed.pathname);
+  } catch {
+    return false;
+  }
+}
+
+export function isWallapopUploadFormUrl(url: string): boolean {
+  try {
+    const parsed = new URL(url);
+    return /\/upload(\/|$)/i.test(parsed.pathname);
+  } catch {
+    return /\/upload/i.test(url);
+  }
+}
+
+export type PublishLandingReason =
+  | "published_catalog"
+  | "item_url"
+  | "still_on_upload"
+  | "review_banner"
+  | "target_closed"
+  | "unexpected_url";
+
+export type PublishLandingVerdict =
+  | { ok: true; reason: "published_catalog" | "item_url" }
+  | {
+      ok: false;
+      reason: "still_on_upload" | "review_banner" | "target_closed" | "unexpected_url";
+      message: string;
+    };
+
+/** D9: post exists only on Tu Catálogo published (or rare /item/ redirect). */
+export function classifyPublishLanding(input: {
+  url: string | null;
+  urlReadFailed: boolean;
+  reviewMessage: string | null;
+}): PublishLandingVerdict {
+  if (input.urlReadFailed || input.url == null || input.url.trim() === "") {
+    return {
+      ok: false,
+      reason: "target_closed",
+      message:
+        "No se pudo comprobar el catálogo tras Publicar (pestaña cerrada). El listing no se marcó ACTIVE.",
+    };
+  }
+  if (input.reviewMessage) {
+    return {
+      ok: false,
+      reason: "review_banner",
+      message: input.reviewMessage,
+    };
+  }
+  if (isWallapopUploadFormUrl(input.url)) {
+    return {
+      ok: false,
+      reason: "still_on_upload",
+      message:
+        "Wallapop no publicó el anuncio; el formulario de alta sigue abierto.",
+    };
+  }
+  if (isWallapopPublishedCatalogUrl(input.url)) {
+    return { ok: true, reason: "published_catalog" };
+  }
+  if (wallapopItemUrlOrNull(input.url)) {
+    return { ok: true, reason: "item_url" };
+  }
+  return {
+    ok: false,
+    reason: "unexpected_url",
+    message: `Tras Publicar la página no es el catálogo publicado (${input.url}). El listing no se marcó ACTIVE.`,
+  };
 }
 
 function safePageUrl(page: Page): string {
@@ -160,22 +245,35 @@ export function isPublicarContextDestroyedError(error: unknown): boolean {
 }
 
 /**
- * After a successful Publicar click: wait/url are best-effort.
- * Tab teardown (Target closed) still counts as posted — never throws.
+ * After Publicar: wait, then read the landing URL.
+ * Target closed → urlReadFailed (D9: not ACTIVE).
  */
-export async function readUrlAfterPublicarClick(
+export async function readLandingAfterPublicarClick(
   page: PageUrlReader,
   settleMs = PUBLICAR_SETTLE_MS,
-): Promise<string | null> {
+): Promise<{ url: string | null; urlReadFailed: boolean }> {
   try {
     await page.waitForTimeout(settleMs);
-    return listingUrlFromPageUrl(page.url());
+    const url = page.url();
+    return { url: url || null, urlReadFailed: !url };
   } catch (error) {
     log("warn", "wallapop_publish_url_after_publicar_failed", {
       message: error instanceof Error ? error.message : String(error),
     });
-    return null;
+    if (isPublicarContextDestroyedError(error)) {
+      return { url: null, urlReadFailed: true };
+    }
+    throw error;
   }
+}
+
+export async function readUrlAfterPublicarClick(
+  page: PageUrlReader,
+  settleMs = PUBLICAR_SETTLE_MS,
+): Promise<string | null> {
+  const landing = await readLandingAfterPublicarClick(page, settleMs);
+  if (landing.urlReadFailed || landing.url == null) return null;
+  return listingUrlFromPageUrl(landing.url);
 }
 
 function truncateSummary(title: string): string {
@@ -1333,14 +1431,6 @@ async function ensureMarcaIfShown(
   );
 }
 
-async function wallapopUploadStillOpen(page: Page): Promise<boolean> {
-  try {
-    return /\/upload/i.test(page.url());
-  } catch {
-    return false;
-  }
-}
-
 async function wallapopUploadReviewMessage(
   page: Page,
 ): Promise<string | null> {
@@ -1709,7 +1799,7 @@ async function clickFinalPublish(page: Page): Promise<boolean> {
       log("warn", "wallapop_publish_publicar_evaluate_torn_down", {
         message: error instanceof Error ? error.message : String(error),
       });
-      // DOM click may have already run; Node never got `true`. Prefer stuck POSTING over a duplicate.
+      // DOM click may have already run; Node never got `true`. Verify landing next.
       return true;
     }
     throw error;
@@ -2045,19 +2135,32 @@ async function runPublishAfterAttach(
     );
   }
 
-  const externalUrl = await readUrlAfterPublicarClick(page);
-  if (!externalUrl) {
-    const review = await wallapopUploadReviewMessage(page);
-    if (review || (await wallapopUploadStillOpen(page))) {
-      throw new WallapopPublishError(
-        "form",
-        review ??
-          "Wallapop no publicó el anuncio; el formulario de alta sigue abierto.",
-      );
-    }
+  const landingRead = await readLandingAfterPublicarClick(page);
+  let reviewMessage: string | null = null;
+  if (!landingRead.urlReadFailed) {
+    reviewMessage = await wallapopUploadReviewMessage(page);
   }
+  const landing = classifyPublishLanding({
+    url: landingRead.url,
+    urlReadFailed: landingRead.urlReadFailed,
+    reviewMessage,
+  });
+  log(landing.ok ? "info" : "warn", "wallapop_publish_verify", {
+    reason: landing.reason,
+    url: landingRead.url,
+  });
+  if (!landing.ok) {
+    const keepClaim =
+      landing.reason === "target_closed" || landing.reason === "unexpected_url";
+    throw new WallapopPublishError("form", landing.message, { keepClaim });
+  }
+
+  const externalUrl = landingRead.url
+    ? listingUrlFromPageUrl(landingRead.url)
+    : null;
   log("info", "wallapop_publish_done", {
     step: "published",
+    reason: landing.reason,
     externalUrl,
   });
   return {
