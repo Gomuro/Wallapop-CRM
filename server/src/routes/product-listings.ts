@@ -108,78 +108,92 @@ export async function getProductListing(req: Request, res: Response) {
   res.json({ listing: toListingJson(listing) })
 }
 
+type ListingPutBody = ReturnType<typeof productListingApiPutBodySchema.parse>
+type PrismaDb = NonNullable<ReturnType<typeof getPrisma>>
+
+async function parseListingPutBody(req: Request, res: Response) {
+  try {
+    return productListingApiPutBodySchema.parse(req.body)
+  } catch (error) {
+    if (error instanceof ZodError) {
+      sendZod(res, error)
+      return null
+    }
+    throw error
+  }
+}
+
+async function rejectReadyToPostWithoutBrand(
+  prisma: PrismaDb,
+  productId: string,
+  body: ListingPutBody,
+  res: Response,
+): Promise<boolean> {
+  if (body.status !== "READY_TO_POST") return false
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { brand: true },
+  })
+  if (product?.brand?.trim()) return false
+  sendError(
+    res,
+    400,
+    "BRAND_REQUIRED",
+    "Introduce una marca. Wallapop no deja publicar el anuncio sin Marca.",
+  )
+  return true
+}
+
+async function rejectPostingStatusChange(
+  prisma: PrismaDb,
+  productId: string,
+  accountId: string,
+  body: ListingPutBody,
+  res: Response,
+): Promise<boolean> {
+  if (body.status === undefined) return false
+  const existing = await prisma.productListing.findUnique({
+    where: { productId_accountId: { productId, accountId } },
+    select: { status: true },
+  })
+  if (existing?.status !== "POSTING") return false
+  if (body.status === "ACTIVE" || body.status === "DEACTIVATED") return false
+  sendError(
+    res,
+    409,
+    "PUBLISH_IN_PROGRESS",
+    "Listing is being published. Mark as ACTIVE to recover, or omit status to update the URL only.",
+  )
+  return true
+}
+
 export async function putProductListing(req: Request, res: Response) {
   const productId = paramId(req)
   if (!productId) {
     sendError(res, 404, "NOT_FOUND", "Product not found.")
     return
   }
-
-  let body: ReturnType<typeof productListingApiPutBodySchema.parse>
-  try {
-    body = productListingApiPutBodySchema.parse(req.body)
-  } catch (error) {
-    if (error instanceof ZodError) {
-      sendZod(res, error)
-      return
-    }
-    throw error
-  }
+  const body = await parseListingPutBody(req, res)
+  if (!body) return
 
   const prisma = getPrisma()
   if (!prisma) {
     sendError(res, 500, "INTERNAL", "Database is not configured.")
     return
   }
-
   const accountId = await requireDefaultAccountId(prisma, res)
   if (!accountId) return
-
   if (!(await assertProductExists(prisma, productId, res))) return
-
-  if (body.status === "READY_TO_POST") {
-    const product = await prisma.product.findUnique({
-      where: { id: productId },
-      select: { brand: true },
-    })
-    if (!product?.brand?.trim()) {
-      sendError(
-        res,
-        400,
-        "BRAND_REQUIRED",
-        "Introduce una marca. Wallapop no deja publicar el anuncio sin Marca.",
-      )
-      return
-    }
-  }
-
-  const existing = await prisma.productListing.findUnique({
-    where: {
-      productId_accountId: { productId, accountId },
-    },
-    select: { status: true },
-  })
-
-  if (existing?.status === "POSTING" && body.status !== undefined) {
-    if (body.status !== "ACTIVE" && body.status !== "DEACTIVATED") {
-      sendError(
-        res,
-        409,
-        "PUBLISH_IN_PROGRESS",
-        "Listing is being published. Mark as ACTIVE to recover, or omit status to update the URL only.",
-      )
-      return
-    }
+  if (await rejectReadyToPostWithoutBrand(prisma, productId, body, res)) return
+  if (await rejectPostingStatusChange(prisma, productId, accountId, body, res)) {
+    return
   }
 
   const listing = await prisma.productListing.upsert({
-    where: {
-      productId_accountId: { productId, accountId },
-    },
+    where: { productId_accountId: { productId, accountId } },
     create: buildUpsertCreate(productId, accountId, body),
     update: buildUpsertUpdate(body),
     select: listingJsonSelect,
   })
-
   res.json({ listing: toListingJson(listing) })
 }

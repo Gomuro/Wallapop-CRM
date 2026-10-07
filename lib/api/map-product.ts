@@ -116,13 +116,10 @@ export function mapApiListing(
   }
 }
 
-export function mapListItemToInventory(row: ApiProductListItem): InventoryProduct {
-  const cover =
-    typeof row.coverUrl === "string" && row.coverUrl.trim()
-      ? resolveMediaUrl(row.coverUrl)
-      : ""
-
-  const listing =
+export function listItemListing(
+  row: ApiProductListItem,
+): InventoryListing | null {
+  return (
     mapApiListing(row.listing, "") ??
     (row.listingStatus != null
       ? {
@@ -134,7 +131,23 @@ export function mapListItemToInventory(row: ApiProductListItem): InventoryProduc
           shippingEnabled: true,
         }
       : null)
+  )
+}
 
+function listItemListingActive(
+  row: ApiProductListItem,
+  listing: InventoryListing | null,
+): boolean {
+  if (listing?.status === "POSTING") return false
+  if (listing) return listing.status === "ACTIVE"
+  return Boolean(row.listingActive)
+}
+
+export function toListItemInventoryProduct(
+  row: ApiProductListItem,
+  cover: string,
+  listing: InventoryListing | null,
+): InventoryProduct {
   return {
     id: asString(row.id),
     sku: asString(row.sku),
@@ -158,30 +171,50 @@ export function mapListItemToInventory(row: ApiProductListItem): InventoryProduc
     createdAt: asString(row.updatedAt),
     updatedAt: asString(row.updatedAt),
     listing,
-    listingActive:
-      listing?.status === "POSTING"
-        ? false
-        : listing
-          ? listing.status === "ACTIVE"
-          : Boolean(row.listingActive),
+    listingActive: listItemListingActive(row, listing),
     shippingPublishReady: row.shippingPublishReady === true,
   }
 }
 
-export function mapProductToInventory(
-  product: ApiProduct,
-  category: ApiCategory | null,
-  accountName: string,
-): InventoryProduct {
-  const images = normalizeImages(product?.images)
+export function mapListItemToInventory(row: ApiProductListItem): InventoryProduct {
+  const cover =
+    typeof row.coverUrl === "string" && row.coverUrl.trim()
+      ? resolveMediaUrl(row.coverUrl)
+      : ""
+  return toListItemInventoryProduct(row, cover, listItemListing(row))
+}
+
+export function productImageUrls(product: ApiProduct): string[] {
+  return normalizeImages(product?.images)
     .slice()
     .sort((a, b) => a.sortOrder - b.sortOrder)
     .map((image) => resolveMediaUrl(image.url))
     .filter(Boolean)
+}
 
-  const listing = mapApiListing(product?.listing, accountName)
-  const conditionCode = asCondition(product?.condition)
+export function mappedProductImages(product: ApiProduct) {
+  return normalizeImages(product?.images).map((image) => ({
+    id: image.id,
+    url: resolveMediaUrl(image.url),
+    sortOrder: image.sortOrder,
+  }))
+}
 
+type InventoryProductSource = {
+  product: ApiProduct
+  category: ApiCategory | null
+  images: string[]
+  listing: InventoryListing | null
+  conditionCode: ProductCondition
+}
+
+export function toInventoryProduct({
+  product,
+  category,
+  images,
+  listing,
+  conditionCode,
+}: InventoryProductSource): InventoryProduct {
   return {
     id: asString(product?.id),
     sku: asString(product?.sku),
@@ -199,11 +232,7 @@ export function mapProductToInventory(
     lengthCm: asNullableNumber(product?.lengthCm),
     heightCm: asNullableNumber(product?.heightCm),
     images,
-    productImages: normalizeImages(product?.images).map((image) => ({
-      id: image.id,
-      url: resolveMediaUrl(image.url),
-      sortOrder: image.sortOrder,
-    })),
+    productImages: mappedProductImages(product),
     status: asStatus(product?.status),
     externalLinks: listing?.externalUrl ? [listing.externalUrl] : [],
     createdAt: asString(product?.createdAt),
@@ -215,4 +244,18 @@ export function mapProductToInventory(
       shippingEnabled: listing?.shippingEnabled,
     }),
   }
+}
+
+export function mapProductToInventory(
+  product: ApiProduct,
+  category: ApiCategory | null,
+  accountName: string,
+): InventoryProduct {
+  return toInventoryProduct({
+    product,
+    category,
+    images: productImageUrls(product),
+    listing: mapApiListing(product?.listing, accountName),
+    conditionCode: asCondition(product?.condition),
+  })
 }

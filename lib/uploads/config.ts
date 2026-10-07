@@ -15,6 +15,16 @@ export const UPLOAD_DIR =
 
 export const UPLOAD_PUBLIC_PATH = "/uploads"
 
+const STORAGE_KEY_RE = /^[A-Za-z0-9._-]+$/
+
+export function isSafeStorageKey(key: string): boolean {
+  return STORAGE_KEY_RE.test(key)
+}
+
+export function uniqueStorageKeys(keys: string[]): string[] {
+  return [...new Set(keys.filter(isSafeStorageKey))]
+}
+
 export function isAllowedImageType(value: string): value is AllowedImageType {
   return (ALLOWED_IMAGE_TYPES as readonly string[]).includes(value)
 }

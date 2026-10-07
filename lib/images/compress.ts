@@ -189,83 +189,104 @@ async function encodeCanvas(
   return await canvasToBlob(canvas, preferredType, qualities[qualities.length - 1] ?? 0.45)
 }
 
-export async function compressImageFile(file: File): Promise<File> {
-  if (typeof window === "undefined") return file
-
+export function isSmallWebp(file: File): boolean {
   const isWebp =
     file.type.toLowerCase() === "image/webp" || /\.webp$/i.test(file.name)
-  if (isWebp && file.size > 0 && file.size < SKIP_WEBP_UNDER_BYTES) {
-    return file
-  }
+  return isWebp && file.size > 0 && file.size < SKIP_WEBP_UNDER_BYTES
+}
 
+type RasterizedImage = {
+  canvas: HTMLCanvasElement | OffscreenCanvas
+  ctx: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
+  width: number
+  height: number
+}
+
+export async function rasterizeForCompress(file: File): Promise<RasterizedImage> {
   let decoded: DecodedImage | null = null
   let canvas: (HTMLCanvasElement | OffscreenCanvas) | null = null
-  let ctx: (CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D) | null = null
+  let ctx: (CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D) | null =
+    null
   let width = 0
   let height = 0
-
   try {
     decoded = await decodeImage(file)
     const fit = fitSize(decoded.width, decoded.height)
     width = fit.width
     height = fit.height
-
     canvas = makeCanvas(width, height)
-    ctx = canvas.getContext("2d") as CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D | null
+    ctx = canvas.getContext("2d") as
+      | CanvasRenderingContext2D
+      | OffscreenCanvasRenderingContext2D
+      | null
     if (!ctx) throw new Error("No se pudo inicializar el lienzo para procesar la foto.")
-
     if ("imageSmoothingEnabled" in ctx) ctx.imageSmoothingEnabled = true
     if ("imageSmoothingQuality" in ctx) ctx.imageSmoothingQuality = "high"
     ctx.drawImage(decoded.source, 0, 0, width, height)
-
     decoded.close?.()
-    decoded = null
+    return { canvas, ctx, width, height }
+  } catch (err) {
+    decoded?.close?.()
+    if (canvas) disposeCanvas(canvas, ctx, width, height)
+    throw err
+  }
+}
 
-    const safariOrIos = isSafariOrIos()
-    let chosenBlob: Blob | null = null
-    let chosenMime: "image/jpeg" | "image/webp" = "image/jpeg"
-
-    if (!safariOrIos) {
-      const webpBlob = await encodeCanvas(canvas, "image/webp", WEBP_QUALITIES)
-      if (
-        webpBlob &&
-        webpBlob.type === "image/webp" &&
-        (webpBlob.size <= TARGET_MAX_BYTES || webpBlob.size < file.size)
-      ) {
-        chosenBlob = webpBlob
-        chosenMime = "image/webp"
-      }
+export async function chooseCompressedBlob(
+  canvas: HTMLCanvasElement | OffscreenCanvas,
+  file: File,
+): Promise<{ blob: Blob; mime: "image/jpeg" | "image/webp" }> {
+  let chosenBlob: Blob | null = null
+  let chosenMime: "image/jpeg" | "image/webp" = "image/jpeg"
+  if (!isSafariOrIos()) {
+    const webpBlob = await encodeCanvas(canvas, "image/webp", WEBP_QUALITIES)
+    if (
+      webpBlob &&
+      webpBlob.type === "image/webp" &&
+      (webpBlob.size <= TARGET_MAX_BYTES || webpBlob.size < file.size)
+    ) {
+      chosenBlob = webpBlob
+      chosenMime = "image/webp"
     }
-
-    if (!chosenBlob) {
-      const jpegBlob = await encodeCanvas(canvas, "image/jpeg", JPEG_QUALITIES)
-      if (jpegBlob && jpegBlob.type === "image/jpeg") {
-        chosenBlob = jpegBlob
-        chosenMime = "image/jpeg"
-      }
+  }
+  if (!chosenBlob) {
+    const jpegBlob = await encodeCanvas(canvas, "image/jpeg", JPEG_QUALITIES)
+    if (jpegBlob && jpegBlob.type === "image/jpeg") {
+      chosenBlob = jpegBlob
+      chosenMime = "image/jpeg"
     }
+  }
+  if (!chosenBlob || chosenBlob.size <= 0) {
+    throw new Error("No se pudo codificar la foto.")
+  }
+  return { blob: chosenBlob, mime: chosenMime }
+}
 
-    if (!chosenBlob || chosenBlob.size <= 0) {
-      throw new Error("No se pudo codificar la foto.")
-    }
+export function recoverUncompressedOrThrow(file: File, err: unknown): File {
+  const isStandardSmall =
+    file.size > 0 &&
+    file.size <= TARGET_MAX_BYTES &&
+    ["image/jpeg", "image/png", "image/webp"].includes(file.type.toLowerCase())
+  if (isStandardSmall) return file
+  throw err instanceof Error ? err : new Error("No se pudo procesar la foto.")
+}
 
-    return new File([chosenBlob], outputName(file, chosenMime), {
-      type: chosenMime,
+export async function compressImageFile(file: File): Promise<File> {
+  if (typeof window === "undefined") return file
+  if (isSmallWebp(file)) return file
+  let raster: RasterizedImage | null = null
+  try {
+    raster = await rasterizeForCompress(file)
+    const { blob, mime } = await chooseCompressedBlob(raster.canvas, file)
+    return new File([blob], outputName(file, mime), {
+      type: mime,
       lastModified: Date.now(),
     })
   } catch (err) {
-    const isStandardSmall =
-      file.size > 0 &&
-      file.size <= TARGET_MAX_BYTES &&
-      ["image/jpeg", "image/png", "image/webp"].includes(file.type.toLowerCase())
-    if (isStandardSmall) {
-      return file
-    }
-    throw err instanceof Error ? err : new Error("No se pudo procesar la foto.")
+    return recoverUncompressedOrThrow(file, err)
   } finally {
-    decoded?.close?.()
-    if (canvas) {
-      disposeCanvas(canvas, ctx, width, height)
+    if (raster) {
+      disposeCanvas(raster.canvas, raster.ctx, raster.width, raster.height)
     }
   }
 }

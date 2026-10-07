@@ -252,31 +252,61 @@ export function getOfflineProduct(id: string): InventoryProduct | null {
   return readOfflineProducts().find((product) => product.id === id) ?? null
 }
 
-export function upsertOfflineProduct(
-  draft: OfflineProductDraft,
-  categories: ApiCategory[] = readOfflineCategories(),
-): InventoryProduct {
-  const products = readOfflineProducts()
-  const id = draft.id ?? `offline_${crypto.randomUUID()}`
-  const skuTaken = products.some(
+export function assertOfflineSkuFree(
+  products: InventoryProduct[],
+  id: string,
+  sku: string,
+) {
+  const taken = products.some(
     (product) =>
-      product.id !== id && product.sku.toLowerCase() === draft.sku.toLowerCase(),
+      product.id !== id && product.sku.toLowerCase() === sku.toLowerCase(),
   )
-  if (skuTaken) throw new OfflineSkuError()
+  if (taken) throw new OfflineSkuError()
+}
 
-  const prev = products.find((product) => product.id === id)
-  const category = categories.find((item) => item.id === draft.categoryId)
-  const now = new Date().toISOString()
+function pickDraftMeasure(
+  draftValue: number | null | undefined,
+  prevValue: number | null | undefined,
+) {
+  return draftValue === undefined ? (prevValue ?? null) : draftValue
+}
+
+export function draftMeasures(
+  draft: OfflineProductDraft,
+  prev: InventoryProduct | undefined,
+) {
+  return {
+    weight: pickDraftMeasure(draft.weight, prev?.weight),
+    widthCm: pickDraftMeasure(draft.widthCm, prev?.widthCm),
+    lengthCm: pickDraftMeasure(draft.lengthCm, prev?.lengthCm),
+    heightCm: pickDraftMeasure(draft.heightCm, prev?.heightCm),
+  }
+}
+
+export function productImagesFromDraftUrls(
+  id: string,
+  images: string[],
+  prev: InventoryProduct | undefined,
+) {
+  if (images === prev?.images) return prev?.productImages ?? []
+  return images.map((url, index) => ({
+    id: `${id}-img-${index}`,
+    url,
+    sortOrder: index,
+  }))
+}
+
+export function inventoryFromOfflineDraft(input: {
+  draft: OfflineProductDraft
+  prev: InventoryProduct | undefined
+  category: ApiCategory | undefined
+  id: string
+  now: string
+}): InventoryProduct {
+  const { draft, prev, category, id, now } = input
   const images = draft.images ?? prev?.images ?? []
-  const weight =
-    draft.weight === undefined ? (prev?.weight ?? null) : draft.weight
-  const widthCm =
-    draft.widthCm === undefined ? (prev?.widthCm ?? null) : draft.widthCm
-  const lengthCm =
-    draft.lengthCm === undefined ? (prev?.lengthCm ?? null) : draft.lengthCm
-  const heightCm =
-    draft.heightCm === undefined ? (prev?.heightCm ?? null) : draft.heightCm
-  const next: InventoryProduct = {
+  const measures = draftMeasures(draft, prev)
+  return {
     id,
     sku: draft.sku,
     title: draft.title,
@@ -287,23 +317,13 @@ export function upsertOfflineProduct(
     condition: conditionLabel(draft.condition),
     conditionCode: draft.condition,
     brand: prev?.brand ?? null,
-    weight,
+    ...measures,
     shippingPackageSize:
       draft.shippingPackageSize === undefined
         ? (prev?.shippingPackageSize ?? "STANDARD")
         : draft.shippingPackageSize,
-    widthCm,
-    lengthCm,
-    heightCm,
     images,
-    productImages:
-      images === prev?.images
-        ? (prev?.productImages ?? [])
-        : images.map((url, index) => ({
-            id: `${id}-img-${index}`,
-            url,
-            sortOrder: index,
-          })),
+    productImages: productImagesFromDraftUrls(id, images, prev),
     status: draft.status,
     externalLinks: prev?.externalLinks ?? [],
     createdAt: prev?.createdAt ?? now,
@@ -311,11 +331,27 @@ export function upsertOfflineProduct(
     listing: prev?.listing ?? null,
     listingActive: prev?.listingActive,
     shippingPublishReady: isShippingPublishReady({
-      weightKg: weight,
+      weightKg: measures.weight,
       shippingEnabled: prev?.listing?.shippingEnabled,
     }),
   }
+}
 
+export function upsertOfflineProduct(
+  draft: OfflineProductDraft,
+  categories: ApiCategory[] = readOfflineCategories(),
+): InventoryProduct {
+  const products = readOfflineProducts()
+  const id = draft.id ?? `offline_${crypto.randomUUID()}`
+  assertOfflineSkuFree(products, id, draft.sku)
+  const prev = products.find((product) => product.id === id)
+  const next = inventoryFromOfflineDraft({
+    draft,
+    prev,
+    category: categories.find((item) => item.id === draft.categoryId),
+    id,
+    now: new Date().toISOString(),
+  })
   writeOfflineProducts([next, ...products.filter((product) => product.id !== id)])
   return next
 }

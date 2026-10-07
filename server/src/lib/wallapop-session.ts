@@ -150,6 +150,44 @@ export type ConnectSessionResult =
       code?: "BROWSER_BUSY" | "CONNECT_FAILED"
     }
 
+async function finishConnectSuccess(
+  outcome: "ACTIVE" | "REQUIRES_2FA",
+): Promise<ConnectSessionResult> {
+  if (outcome === "REQUIRES_2FA") {
+    state.status = "AUTHENTICATING"
+    state.requires2FA = true
+    state.error = null
+    return { ok: true, session: snapshot() }
+  }
+  state.status = "ACTIVE"
+  state.requires2FA = false
+  state.error = null
+  await syncDefaultAccountStatus("ACTIVE")
+  const listingsReset = await bindWallapopIdentity()
+  return { ok: true, session: { ...snapshot(), listingsReset } }
+}
+
+function finishConnectFailure(
+  error: unknown,
+  prev: WallapopSessionSnapshot,
+): ConnectSessionResult {
+  const message =
+    error instanceof Error ? error.message : "Error al conectar Wallapop."
+  if (isBrowserBusyError(error)) {
+    state.status = prev.status
+    state.requires2FA = prev.requires2FA
+    state.email = prev.email
+    state.error = prev.error ?? null
+    log("warn", "wallapop_connect_browser_busy", { message })
+    return { ok: false, session: snapshot(), message, code: "BROWSER_BUSY" }
+  }
+  state.status = "DISCONNECTED"
+  state.requires2FA = false
+  state.error = message
+  log("error", "wallapop_connect_failed", { message })
+  return { ok: false, session: snapshot(), message, code: "CONNECT_FAILED" }
+}
+
 export async function connectWallapopSession(input: {
   email: string
   password: string
@@ -161,60 +199,21 @@ export async function connectWallapopSession(input: {
   state.requires2FA = false
   state.email = input.email
   state.error = null
-
   try {
     const outcome = await loginWallapopInBrowser({
       email: input.email,
       password: input.password,
       proxy: input.proxy,
     })
-
     if (gen !== connectGeneration) {
       return { ok: true, session: snapshot() }
     }
-
-    if (outcome === "REQUIRES_2FA") {
-      state.status = "AUTHENTICATING"
-      state.requires2FA = true
-      state.error = null
-      return { ok: true, session: snapshot() }
-    }
-
-    state.status = "ACTIVE"
-    state.requires2FA = false
-    state.error = null
-    await syncDefaultAccountStatus("ACTIVE")
-    const listingsReset = await bindWallapopIdentity()
-    return { ok: true, session: { ...snapshot(), listingsReset } }
+    return await finishConnectSuccess(outcome)
   } catch (error) {
     if (gen !== connectGeneration) {
       return { ok: true, session: snapshot() }
     }
-    const message =
-      error instanceof Error ? error.message : "Error al conectar Wallapop."
-    if (isBrowserBusyError(error)) {
-      state.status = prev.status
-      state.requires2FA = prev.requires2FA
-      state.email = prev.email
-      state.error = prev.error ?? null
-      log("warn", "wallapop_connect_browser_busy", { message })
-      return {
-        ok: false,
-        session: snapshot(),
-        message,
-        code: "BROWSER_BUSY",
-      }
-    }
-    state.status = "DISCONNECTED"
-    state.requires2FA = false
-    state.error = message
-    log("error", "wallapop_connect_failed", { message })
-    return {
-      ok: false,
-      session: snapshot(),
-      message,
-      code: "CONNECT_FAILED",
-    }
+    return finishConnectFailure(error, prev)
   }
 }
 
@@ -227,61 +226,60 @@ export type Submit2faResult =
       session: WallapopSessionSnapshot
     }
 
+function notAuthenticatingResult(): Submit2faResult {
+  return {
+    ok: false,
+    code: "NOT_AUTHENTICATING",
+    message: "No hay una sesión de autenticación activa.",
+    session: snapshot(),
+  }
+}
+
+async function finish2faSuccess(): Promise<Submit2faResult> {
+  state.status = "ACTIVE"
+  state.requires2FA = false
+  state.error = null
+  await syncDefaultAccountStatus("ACTIVE")
+  const listingsReset = await bindWallapopIdentity()
+  return { ok: true, session: { ...snapshot(), listingsReset } }
+}
+
+function finish2faFailure(error: unknown): Submit2faResult {
+  const message =
+    error instanceof Error ? error.message : "Error al verificar 2FA."
+  if (isBrowserBusyError(error)) {
+    log("warn", "wallapop_2fa_browser_busy", { message })
+    return { ok: false, code: "BROWSER_BUSY", message, session: snapshot() }
+  }
+  state.status = "AUTHENTICATING"
+  state.requires2FA = true
+  state.error = message
+  log("error", "wallapop_2fa_failed", { message })
+  return { ok: false, code: "CONNECT_FAILED", message, session: snapshot() }
+}
+
 export async function submitWallapopSession2fa(
   code: string,
 ): Promise<Submit2faResult> {
   if (state.status !== "AUTHENTICATING" || !state.requires2FA) {
     await applyReconcileToState()
   }
-
   if (state.status !== "AUTHENTICATING" || !state.requires2FA) {
-    return {
-      ok: false,
-      code: "NOT_AUTHENTICATING",
-      message: "No hay una sesión de autenticación activa.",
-      session: snapshot(),
-    }
+    return notAuthenticatingResult()
   }
-
   const gen = connectGeneration
   state.error = null
-
   try {
     await submitWallapop2faInBrowser(code)
     if (gen !== connectGeneration) {
       return { ok: true, session: snapshot() }
     }
-    state.status = "ACTIVE"
-    state.requires2FA = false
-    state.error = null
-    await syncDefaultAccountStatus("ACTIVE")
-    const listingsReset = await bindWallapopIdentity()
-    return { ok: true, session: { ...snapshot(), listingsReset } }
+    return await finish2faSuccess()
   } catch (error) {
     if (gen !== connectGeneration) {
       return { ok: true, session: snapshot() }
     }
-    const message =
-      error instanceof Error ? error.message : "Error al verificar 2FA."
-    if (isBrowserBusyError(error)) {
-      log("warn", "wallapop_2fa_browser_busy", { message })
-      return {
-        ok: false,
-        code: "BROWSER_BUSY",
-        message,
-        session: snapshot(),
-      }
-    }
-    state.status = "AUTHENTICATING"
-    state.requires2FA = true
-    state.error = message
-    log("error", "wallapop_2fa_failed", { message })
-    return {
-      ok: false,
-      code: "CONNECT_FAILED",
-      message,
-      session: snapshot(),
-    }
+    return finish2faFailure(error)
   }
 }
 

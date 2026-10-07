@@ -1,69 +1,100 @@
 "use client"
 
-import { useEffect, useRef, useState } from "react"
+import {
+  useEffect,
+  useRef,
+  useState,
+  useSyncExternalStore,
+  type Dispatch,
+  type ReactNode,
+  type SetStateAction,
+} from "react"
 import { createPortal } from "react-dom"
 import { XIcon } from "lucide-react"
 
 import { useSwipeCarousel } from "@/lib/ui/swipe-carousel"
 import { cn } from "@/lib/utils"
 
-export function ImageLightbox({
-  images,
-  initialIndex = 0,
-  alt,
-  open,
+function LightboxChrome({
+  count,
+  currentIndex,
   onClose,
-  onIndexChange,
+  onSelectIndex,
+  children,
 }: {
-  images: string[]
-  initialIndex?: number
-  alt: string
-  open: boolean
+  count: number
+  currentIndex: number
   onClose: () => void
-  onIndexChange?: (index: number) => void
+  onSelectIndex: (index: number) => void
+  children: ReactNode
 }) {
-  const viewportRef = useRef<HTMLDivElement>(null)
-  const trackRef = useRef<HTMLDivElement>(null)
-  const onIndexChangeRef = useRef(onIndexChange)
-  const [mounted, setMounted] = useState(false)
-  const [currentIndex, setCurrentIndex] = useState(initialIndex)
+  return (
+    <div
+      role="dialog"
+      aria-modal="true"
+      aria-label="Vista de imagen a pantalla completa"
+      className="fixed inset-0 z-50 flex flex-col justify-between bg-black/95 text-white select-none backdrop-blur-md animate-in fade-in-0 duration-150"
+    >
+      <header className="relative z-10 flex w-full items-center justify-between px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
+        <div className="flex items-center gap-2">
+          {count > 1 ? (
+            <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium tracking-wide text-white/90 backdrop-blur-xs">
+              {currentIndex + 1} / {count}
+            </span>
+          ) : null}
+        </div>
+        <button
+          type="button"
+          onClick={onClose}
+          aria-label="Cerrar vista completa"
+          className="flex size-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 active:scale-95 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
+        >
+          <XIcon className="size-6" />
+        </button>
+      </header>
+      {children}
+      <footer className="relative z-10 flex w-full items-center justify-center px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
+        {count > 1 ? (
+          <div className="flex max-w-full flex-wrap justify-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 ring-1 ring-white/10 backdrop-blur-sm">
+            {Array.from({ length: count }, (_, idx) => (
+              <button
+                key={idx}
+                type="button"
+                aria-label={`Ver foto ${idx + 1}`}
+                aria-current={idx === currentIndex ? "true" : undefined}
+                onClick={() => onSelectIndex(idx)}
+                className="flex size-5 items-center justify-center"
+              >
+                <span
+                  className={cn(
+                    "rounded-full transition-all duration-200",
+                    idx === currentIndex
+                      ? "h-2 w-4 bg-white"
+                      : "size-2 bg-white/40 hover:bg-white/60",
+                  )}
+                />
+              </button>
+            ))}
+          </div>
+        ) : null}
+      </footer>
+    </div>
+  )
+}
 
-  const count = images.length
-  onIndexChangeRef.current = onIndexChange
-
-  const swipe = useSwipeCarousel({
-    index: currentIndex,
-    count,
-    enabled: open && count > 0,
-    trackRef,
-    viewportRef,
-    onIndex: (next) => {
-      setCurrentIndex(next)
-      onIndexChangeRef.current?.(next)
-    },
-    onVerticalDismiss: onClose,
-  })
-
-  useEffect(() => {
-    setMounted(true)
-  }, [])
-
-  useEffect(() => {
-    if (!open) return
-    setCurrentIndex(Math.min(Math.max(0, initialIndex), Math.max(0, count - 1)))
-    // Sync only when opening so parent index updates do not cancel the slide.
-    // eslint-disable-next-line react-hooks/exhaustive-deps -- initialIndex/count read on open
-  }, [open])
-
-  useEffect(() => {
-    if (!open) return
-    const prevOverflow = document.body.style.overflow
-    document.body.style.overflow = "hidden"
-    return () => {
-      document.body.style.overflow = prevOverflow
-    }
-  }, [open])
-
+function useLightboxKeyboard({
+  open,
+  count,
+  onClose,
+  onIndexChangeRef,
+  setCurrentIndex,
+}: {
+  open: boolean
+  count: number
+  onClose: () => void
+  onIndexChangeRef: { current?: (index: number) => void }
+  setCurrentIndex: Dispatch<SetStateAction<number>>
+}) {
   useEffect(() => {
     if (!open) return
 
@@ -90,35 +121,91 @@ export function ImageLightbox({
 
     window.addEventListener("keydown", handleKeyDown)
     return () => window.removeEventListener("keydown", handleKeyDown)
-  }, [open, count, onClose])
+  }, [open, count, onClose, onIndexChangeRef, setCurrentIndex])
+}
+
+export function ImageLightbox({
+  images,
+  initialIndex = 0,
+  alt,
+  open,
+  onClose,
+  onIndexChange,
+}: {
+  images: string[]
+  initialIndex?: number
+  alt: string
+  open: boolean
+  onClose: () => void
+  onIndexChange?: (index: number) => void
+}) {
+  const viewportRef = useRef<HTMLDivElement>(null)
+  const trackRef = useRef<HTMLDivElement>(null)
+  const onIndexChangeRef = useRef(onIndexChange)
+  const mounted = useSyncExternalStore(
+    () => () => {},
+    () => true,
+    () => false,
+  )
+  const [currentIndex, setCurrentIndex] = useState(initialIndex)
+  const [wasOpen, setWasOpen] = useState(open)
+
+  const count = images.length
+  if (open !== wasOpen) {
+    setWasOpen(open)
+    if (open) {
+      setCurrentIndex(
+        Math.min(Math.max(0, initialIndex), Math.max(0, count - 1)),
+      )
+    }
+  }
+
+  const swipe = useSwipeCarousel({
+    index: currentIndex,
+    count,
+    enabled: open && count > 0,
+    trackRef,
+    viewportRef,
+    onIndex: (next) => {
+      setCurrentIndex(next)
+      onIndexChangeRef.current?.(next)
+    },
+    onVerticalDismiss: onClose,
+  })
+
+  useEffect(() => {
+    onIndexChangeRef.current = onIndexChange
+  }, [onIndexChange])
+
+  useEffect(() => {
+    if (!open) return
+    const prevOverflow = document.body.style.overflow
+    document.body.style.overflow = "hidden"
+    return () => {
+      document.body.style.overflow = prevOverflow
+    }
+  }, [open])
+
+  useLightboxKeyboard({
+    open,
+    count,
+    onClose,
+    onIndexChangeRef,
+    setCurrentIndex,
+  })
 
   if (!mounted || !open || count === 0) return null
 
   const content = (
-    <div
-      role="dialog"
-      aria-modal="true"
-      aria-label="Vista de imagen a pantalla completa"
-      className="fixed inset-0 z-50 flex flex-col justify-between bg-black/95 text-white select-none backdrop-blur-md animate-in fade-in-0 duration-150"
+    <LightboxChrome
+      count={count}
+      currentIndex={currentIndex}
+      onClose={onClose}
+      onSelectIndex={(idx) => {
+        setCurrentIndex(idx)
+        onIndexChangeRef.current?.(idx)
+      }}
     >
-      <header className="relative z-10 flex w-full items-center justify-between px-4 py-3 pt-[max(0.75rem,env(safe-area-inset-top))]">
-        <div className="flex items-center gap-2">
-          {count > 1 ? (
-            <span className="rounded-full bg-white/10 px-3 py-1 text-xs font-medium tracking-wide text-white/90 backdrop-blur-xs">
-              {currentIndex + 1} / {count}
-            </span>
-          ) : null}
-        </div>
-        <button
-          type="button"
-          onClick={onClose}
-          aria-label="Cerrar vista completa"
-          className="flex size-11 items-center justify-center rounded-full bg-white/10 text-white transition-colors hover:bg-white/20 active:scale-95 focus-visible:ring-2 focus-visible:ring-white focus-visible:outline-none"
-        >
-          <XIcon className="size-6" />
-        </button>
-      </header>
-
       <div
         ref={viewportRef}
         className={cn(
@@ -147,36 +234,7 @@ export function ImageLightbox({
           ))}
         </div>
       </div>
-
-      <footer className="relative z-10 flex w-full items-center justify-center px-4 py-3 pb-[max(0.75rem,env(safe-area-inset-bottom))]">
-        {count > 1 ? (
-          <div className="flex max-w-full flex-wrap justify-center gap-1.5 rounded-full bg-black/40 px-3 py-1.5 ring-1 ring-white/10 backdrop-blur-sm">
-            {images.map((_, idx) => (
-              <button
-                key={idx}
-                type="button"
-                aria-label={`Ver foto ${idx + 1}`}
-                aria-current={idx === currentIndex ? "true" : undefined}
-                onClick={() => {
-                  setCurrentIndex(idx)
-                  onIndexChangeRef.current?.(idx)
-                }}
-                className="flex size-5 items-center justify-center"
-              >
-                <span
-                  className={cn(
-                    "rounded-full transition-all duration-200",
-                    idx === currentIndex
-                      ? "h-2 w-4 bg-white"
-                      : "size-2 bg-white/40 hover:bg-white/60",
-                  )}
-                />
-              </button>
-            ))}
-          </div>
-        ) : null}
-      </footer>
-    </div>
+    </LightboxChrome>
   )
 
   return createPortal(content, document.body)

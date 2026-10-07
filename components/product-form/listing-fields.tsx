@@ -82,6 +82,214 @@ function ListingShippingToggle({ defaultEnabled }: { defaultEnabled: boolean }) 
   )
 }
 
+export function ListingUrlField({
+  listing,
+  itemUrl,
+  junkUrl,
+  isPosting,
+  fieldError,
+}: {
+  listing: InventoryListing
+  itemUrl: string | null
+  junkUrl: boolean
+  isPosting: boolean
+  fieldError?: string
+}) {
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="externalUrl">Enlace de Wallapop</Label>
+      <Input
+        key={listing.externalUrl ?? "empty"}
+        id="externalUrl"
+        name="externalUrl"
+        type="text"
+        inputMode="url"
+        autoComplete="off"
+        placeholder="https://es.wallapop.com/item/…"
+        defaultValue={itemUrl ?? (junkUrl ? listing.externalUrl ?? "" : "")}
+        className="h-11 scroll-mt-28"
+        aria-invalid={Boolean(fieldError)}
+        aria-describedby={fieldError ? "externalUrl-error" : "externalUrl-hint"}
+      />
+      {fieldError ? (
+        <p id="externalUrl-error" className="text-xs text-destructive" role="alert">
+          {fieldError}
+        </p>
+      ) : (
+        <p id="externalUrl-hint" className="text-xs text-muted-foreground">
+          {isPosting
+            ? "Vacío no quita el enlace que ya está guardado."
+            : "Solo vale un enlace /item/…. Vacío o cualquier otra URL se borra."}
+        </p>
+      )}
+    </div>
+  )
+}
+
+export function ListingStatusFields({
+  isPosting,
+  pending,
+  status,
+  onStatusChange,
+}: {
+  isPosting: boolean
+  pending: boolean
+  status: ListingStatus
+  onStatusChange: (value: ListingStatus) => void
+}) {
+  if (isPosting) {
+    return (
+      <div className="space-y-1.5">
+        <Label htmlFor="listingStatus">Estado del anuncio</Label>
+        <input type="hidden" name="keepUrlIfEmpty" value="1" />
+        <Input
+          id="listingStatus"
+          readOnly
+          disabled
+          value={listingStatusLabel("POSTING")}
+          className="h-11 scroll-mt-28"
+          aria-readonly="true"
+        />
+        <p className="text-xs text-muted-foreground">
+          Se está publicando en Wallapop. No hace falta volver a publicarlo.
+        </p>
+        <Button
+          type="submit"
+          variant="default"
+          className="h-12 w-full"
+          disabled={pending}
+          aria-busy={pending}
+        >
+          {pending ? <LoaderCircleIcon className="animate-spin" /> : null}
+          {pending ? "Guardando anuncio…" : "Guardar enlace"}
+        </Button>
+        <Button
+          type="submit"
+          name="listingStatus"
+          value="ACTIVE"
+          variant="outline"
+          className="h-12 w-full"
+          disabled={pending}
+          aria-busy={pending}
+        >
+          {pending ? <LoaderCircleIcon className="animate-spin" /> : null}
+          Marcar como publicado en Wallapop
+        </Button>
+      </div>
+    )
+  }
+
+  return (
+    <div className="space-y-1.5">
+      <Label htmlFor="listingStatus">Estado del anuncio</Label>
+      <Select
+        value={status}
+        onValueChange={(value) => value && onStatusChange(value as ListingStatus)}
+        itemToStringLabel={(value) => listingStatusLabel(value as ListingStatus)}
+        items={Object.fromEntries(
+          LISTING_STATUS_OPTIONS.map((item) => [item, listingStatusLabel(item)]),
+        )}
+      >
+        <SelectTrigger
+          id="listingStatus"
+          className="h-11 w-full data-[size=default]:h-11"
+        >
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          {LISTING_STATUS_OPTIONS.map((item) => (
+            <SelectItem key={item} value={item}>
+              {listingStatusLabel(item)}
+            </SelectItem>
+          ))}
+        </SelectContent>
+      </Select>
+      <input type="hidden" name="listingStatus" value={status} />
+    </div>
+  )
+}
+
+export function ListingFormBody({
+  listing,
+  itemUrl,
+  junkUrl,
+  isPosting,
+  pending,
+  status,
+  onStatusChange,
+  formAction,
+  state,
+}: {
+  listing: InventoryListing
+  itemUrl: string | null
+  junkUrl: boolean
+  isPosting: boolean
+  pending: boolean
+  status: ListingStatus
+  onStatusChange: (value: ListingStatus) => void
+  formAction: (payload: FormData) => void
+  state: ListingActionState
+}) {
+  return (
+    <form action={formAction} noValidate className="space-y-3">
+      <ListingUrlField
+        listing={listing}
+        itemUrl={itemUrl}
+        junkUrl={junkUrl}
+        isPosting={isPosting}
+        fieldError={state.fieldErrors?.externalUrl}
+      />
+      <ListingStatusFields
+        isPosting={isPosting}
+        pending={pending}
+        status={status}
+        onStatusChange={onStatusChange}
+      />
+      <ListingShippingToggle
+        key={`${listing.id}-${listing.shippingEnabled ? "on" : "off"}`}
+        defaultEnabled={listing.shippingEnabled !== false}
+      />
+      {itemUrl ? (
+        <a
+          href={itemUrl}
+          target="_blank"
+          rel="noopener noreferrer"
+          className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary/8 px-4 text-sm font-medium text-primary"
+        >
+          <ExternalLinkIcon className="size-4 shrink-0" />
+          Ver anuncio publicado
+        </a>
+      ) : null}
+      {state.error ? (
+        <p
+          id="listing-form-error"
+          className="text-sm text-destructive"
+          role="alert"
+        >
+          {state.error}
+        </p>
+      ) : null}
+      {state.success ? (
+        <p className="text-sm text-muted-foreground" role="status">
+          Anuncio guardado.
+        </p>
+      ) : null}
+      {isPosting ? null : (
+        <Button
+          type="submit"
+          variant="default"
+          className="h-12 w-full"
+          disabled={pending}
+          aria-busy={pending}
+        >
+          {pending ? <LoaderCircleIcon className="animate-spin" /> : null}
+          {pending ? "Guardando anuncio…" : "Guardar anuncio"}
+        </Button>
+      )}
+    </form>
+  )
+}
+
 export function ListingFields({
   productId,
   listing,
@@ -109,6 +317,13 @@ export function ListingFields({
   const [status, setStatus] = useState<ListingStatus>(
     writableListingStatus(listing?.status),
   )
+  const [seenListingStatus, setSeenListingStatus] = useState(listing?.status)
+  if (listing?.status !== seenListingStatus) {
+    setSeenListingStatus(listing?.status)
+    if (listing?.status && listing.status !== "POSTING") {
+      setStatus(writableListingStatus(listing.status))
+    }
+  }
   const isPosting = listing?.status === "POSTING"
   const itemUrl = wallapopItemUrlOrNull(listing?.externalUrl)
   const junkUrl = Boolean(listing?.externalUrl) && !itemUrl
@@ -122,12 +337,6 @@ export function ListingFields({
     target?.scrollIntoView({ behavior: "smooth", block: "center" })
     if (target instanceof HTMLElement) target.focus()
   }, [state])
-
-  useEffect(() => {
-    if (listing?.status && listing.status !== "POSTING") {
-      setStatus(writableListingStatus(listing.status))
-    }
-  }, [listing?.status])
 
   useEffect(() => {
     if (state.success) router.refresh()
@@ -168,170 +377,20 @@ export function ListingFields({
             inicio). El autopost no lo cogerá hasta que lo quites.
           </p>
         ) : null}
-
-        <form action={formAction} noValidate className="space-y-3">
-          <div className="space-y-1.5">
-            <Label htmlFor="externalUrl">Enlace de Wallapop</Label>
-            <Input
-              key={listing.externalUrl ?? "empty"}
-              id="externalUrl"
-              name="externalUrl"
-              type="text"
-              inputMode="url"
-              autoComplete="off"
-              placeholder="https://es.wallapop.com/item/…"
-              defaultValue={itemUrl ?? (junkUrl ? listing.externalUrl ?? "" : "")}
-              className="h-11 scroll-mt-28"
-              aria-invalid={Boolean(state.fieldErrors?.externalUrl)}
-              aria-describedby={
-                state.fieldErrors?.externalUrl
-                  ? "externalUrl-error"
-                  : "externalUrl-hint"
-              }
-            />
-            {state.fieldErrors?.externalUrl ? (
-              <p
-                id="externalUrl-error"
-                className="text-xs text-destructive"
-                role="alert"
-              >
-                {state.fieldErrors.externalUrl}
-              </p>
-            ) : (
-              <p id="externalUrl-hint" className="text-xs text-muted-foreground">
-                {isPosting
-                  ? "Vacío no quita el enlace que ya está guardado."
-                  : "Solo vale un enlace /item/…. Vacío o cualquier otra URL se borra."}
-              </p>
-            )}
-          </div>
-
-          <div className="space-y-1.5">
-            <Label htmlFor="listingStatus">Estado del anuncio</Label>
-            {isPosting ? (
-              <>
-                <input type="hidden" name="keepUrlIfEmpty" value="1" />
-                <Input
-                  id="listingStatus"
-                  readOnly
-                  disabled
-                  value={listingStatusLabel("POSTING")}
-                  className="h-11 scroll-mt-28"
-                  aria-readonly="true"
-                />
-                <p className="text-xs text-muted-foreground">
-                  Se está publicando en Wallapop. No hace falta volver a
-                  publicarlo.
-                </p>
-                <Button
-                  type="submit"
-                  variant="default"
-                  className="h-12 w-full"
-                  disabled={pending}
-                  aria-busy={pending}
-                >
-                  {pending ? <LoaderCircleIcon className="animate-spin" /> : null}
-                  {pending ? "Guardando anuncio…" : "Guardar enlace"}
-                </Button>
-                <Button
-                  type="submit"
-                  name="listingStatus"
-                  value="ACTIVE"
-                  variant="outline"
-                  className="h-12 w-full"
-                  disabled={pending}
-                  aria-busy={pending}
-                >
-                  {pending ? <LoaderCircleIcon className="animate-spin" /> : null}
-                  Marcar como publicado en Wallapop
-                </Button>
-              </>
-            ) : (
-              <>
-                <Select
-                  value={status}
-                  onValueChange={(value) =>
-                    value && setStatus(value as ListingStatus)
-                  }
-                  itemToStringLabel={(value) =>
-                    listingStatusLabel(value as ListingStatus)
-                  }
-                  items={Object.fromEntries(
-                    LISTING_STATUS_OPTIONS.map((item) => [
-                      item,
-                      listingStatusLabel(item),
-                    ]),
-                  )}
-                >
-                  <SelectTrigger
-                    id="listingStatus"
-                    className="h-11 w-full data-[size=default]:h-11"
-                  >
-                    <SelectValue />
-                  </SelectTrigger>
-                  <SelectContent>
-                    {LISTING_STATUS_OPTIONS.map((item) => (
-                      <SelectItem key={item} value={item}>
-                        {listingStatusLabel(item)}
-                      </SelectItem>
-                    ))}
-                  </SelectContent>
-                </Select>
-                <input type="hidden" name="listingStatus" value={status} />
-              </>
-            )}
-          </div>
-
-          <ListingShippingToggle
-            key={`${listing.id}-${listing.shippingEnabled ? "on" : "off"}`}
-            defaultEnabled={listing.shippingEnabled !== false}
-          />
-
-          {itemUrl ? (
-            <a
-              href={itemUrl}
-              target="_blank"
-              rel="noopener noreferrer"
-              className="flex min-h-11 w-full items-center justify-center gap-2 rounded-lg bg-primary/8 px-4 text-sm font-medium text-primary"
-            >
-              <ExternalLinkIcon className="size-4 shrink-0" />
-              Ver anuncio publicado
-            </a>
-          ) : null}
-
-          {state.error ? (
-            <p
-              id="listing-form-error"
-              className="text-sm text-destructive"
-              role="alert"
-            >
-              {state.error}
-            </p>
-          ) : null}
-          {state.success ? (
-            <p className="text-sm text-muted-foreground" role="status">
-              Anuncio guardado.
-            </p>
-          ) : null}
-
-          {isPosting ? null : (
-            <Button
-              type="submit"
-              variant="default"
-              className="h-12 w-full"
-              disabled={pending}
-              aria-busy={pending}
-            >
-              {pending ? <LoaderCircleIcon className="animate-spin" /> : null}
-              {pending ? "Guardando anuncio…" : "Guardar anuncio"}
-            </Button>
-          )}
-        </form>
-
+        <ListingFormBody
+          listing={listing}
+          itemUrl={itemUrl}
+          junkUrl={junkUrl}
+          isPosting={isPosting}
+          pending={pending}
+          status={status}
+          onStatusChange={setStatus}
+          formAction={formAction}
+          state={state}
+        />
         {junkUrl && !isPosting ? (
           <ClearListingLinkButton productId={productId} />
         ) : null}
-
         {itemUrl && listing.lastPostedAt ? (
           <p className="text-xs text-muted-foreground">
             Publicado {formatListingPostedAt(listing.lastPostedAt)}

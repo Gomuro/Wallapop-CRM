@@ -1,7 +1,6 @@
 import { afterEach, describe, expect, it, vi } from "vitest"
 
 import {
-  AUTOPOST_PICK_ORDER_BY,
   AUTOPOST_JITTER_FRACTION,
   autopostDelayWithJitter,
   autopostEligibleListingWhere,

@@ -15,6 +15,7 @@ import { useOfflineCategories, useOfflineProduct } from "@/lib/offline/use-offli
 import { typeScreen } from "@/lib/ui/type"
 import type { ProductCondition, ProductStatus } from "@/lib/validations"
 import { productUpdateSchema } from "@/lib/validations/product"
+import type { InventoryProduct } from "@/lib/inventory/types"
 
 function generateFallbackSku(): string {
   return `WP-${Date.now().toString().slice(-6)}`
@@ -59,6 +60,44 @@ function fieldErrorsFromZod(error: {
     }
   }
   return fieldErrors
+}
+
+function OfflineEditFormFields({
+  product,
+  categories,
+  action,
+}: {
+  product: InventoryProduct
+  categories: ApiCategory[]
+  action: (
+    prev: ProductActionState,
+    formData: FormData,
+  ) => Promise<ProductActionState>
+}) {
+  return (
+    <>
+      <header className="sticky top-0 z-30 flex items-center gap-1 border-b bg-background px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:top-14 md:px-8">
+        <Button
+          variant="ghost"
+          size="icon"
+          className="size-11"
+          nativeButton={false}
+          render={<Link href={`/products/${product.id}`} />}
+          aria-label="Volver al producto"
+        >
+          <ChevronLeftIcon />
+        </Button>
+        <h1 className={typeScreen}>Editar producto</h1>
+      </header>
+      <ProductForm
+        key={product.id}
+        categories={categories}
+        product={product}
+        action={action}
+        submitLabel="Guardar"
+      />
+    </>
+  )
 }
 
 export function OfflineEditProduct({
@@ -169,25 +208,10 @@ export function OfflineEditProduct({
   return (
     <>
       <OfflineBanner />
-      <header className="sticky top-0 z-30 flex items-center gap-1 border-b bg-background px-2 py-2 pt-[max(0.5rem,env(safe-area-inset-top))] md:top-14 md:px-8">
-        <Button
-          variant="ghost"
-          size="icon"
-          className="size-11"
-          nativeButton={false}
-          render={<Link href={`/products/${product.id}`} />}
-          aria-label="Volver al producto"
-        >
-          <ChevronLeftIcon />
-        </Button>
-        <h1 className={typeScreen}>Editar producto</h1>
-      </header>
-      <ProductForm
-        key={product.id}
-        categories={categories}
+      <OfflineEditFormFields
         product={product}
+        categories={categories}
         action={action}
-        submitLabel="Guardar"
       />
     </>
   )

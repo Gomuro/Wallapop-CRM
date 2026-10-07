@@ -80,6 +80,44 @@ export type RecoverStalePostingDeps = {
   maxAttempts?: number
 }
 
+type StalePostingRow = {
+  id: string
+  productId: string
+  postingAttempts: number
+  product: { sku: string }
+}
+
+async function applyStalePostingRecovery(
+  prisma: PrismaClient,
+  row: StalePostingRow,
+  reason: PostingStaleReason,
+  maxAttempts: number,
+): Promise<"FAILED" | "READY_TO_POST"> {
+  const nextStatus = statusAfterStalePosting(row.postingAttempts, maxAttempts)
+  await prisma.productListing.update({
+    where: { id: row.id },
+    data: { status: nextStatus, lastPublishError: reason },
+  })
+  if (nextStatus === "FAILED") {
+    log("warn", "wallapop_posting_stale_failed", {
+      listingId: row.id,
+      productId: row.productId,
+      sku: row.product.sku,
+      reason,
+      postingAttempts: row.postingAttempts,
+    })
+  } else {
+    log("info", "wallapop_posting_stale_recovered", {
+      listingId: row.id,
+      productId: row.productId,
+      sku: row.product.sku,
+      reason,
+      postingAttempts: row.postingAttempts,
+    })
+  }
+  return nextStatus
+}
+
 export async function recoverStalePostingListings(
   prisma: PrismaClient,
   deps: RecoverStalePostingDeps = {},
@@ -91,16 +129,11 @@ export async function recoverStalePostingListings(
   if (reason == null) {
     return { recovered: 0, failed: 0, skipped: true }
   }
-
   const staleMs = deps.staleMs ?? readPostingStaleMs()
   const maxAttempts = deps.maxAttempts ?? readPostingMaxAttempts()
   const cutoff = new Date((deps.now ?? new Date()).getTime() - staleMs)
-
   const stale = await prisma.productListing.findMany({
-    where: {
-      status: "POSTING",
-      updatedAt: { lt: cutoff },
-    },
+    where: { status: "POSTING", updatedAt: { lt: cutoff } },
     select: {
       id: true,
       productId: true,
@@ -108,39 +141,13 @@ export async function recoverStalePostingListings(
       product: { select: { sku: true } },
     },
   })
-
   let recovered = 0
   let failed = 0
   for (const row of stale) {
-    const nextStatus = statusAfterStalePosting(row.postingAttempts, maxAttempts)
-    await prisma.productListing.update({
-      where: { id: row.id },
-      data: {
-        status: nextStatus,
-        lastPublishError: reason,
-      },
-    })
-    if (nextStatus === "FAILED") {
-      failed += 1
-      log("warn", "wallapop_posting_stale_failed", {
-        listingId: row.id,
-        productId: row.productId,
-        sku: row.product.sku,
-        reason,
-        postingAttempts: row.postingAttempts,
-      })
-    } else {
-      recovered += 1
-      log("info", "wallapop_posting_stale_recovered", {
-        listingId: row.id,
-        productId: row.productId,
-        sku: row.product.sku,
-        reason,
-        postingAttempts: row.postingAttempts,
-      })
-    }
+    const next = await applyStalePostingRecovery(prisma, row, reason, maxAttempts)
+    if (next === "FAILED") failed += 1
+    else recovered += 1
   }
-
   return { recovered, failed, skipped: false }
 }
 

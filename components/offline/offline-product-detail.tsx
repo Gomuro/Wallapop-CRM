@@ -18,7 +18,7 @@ import {
   formatEuro,
   statusLabel,
 } from "@/lib/inventory/format"
-import { typeMeta, typePrice, typeScreen } from "@/lib/ui/type"
+import { typePrice, typeScreen } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
 
 export function OfflineProductDetail({ id }: { id: string }) {

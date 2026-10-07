@@ -14,6 +14,7 @@ export function errorHandler(
   res: Response,
   _next: NextFunction,
 ) {
+  void _next
   if (err instanceof multer.MulterError) {
     const message =
       err.code === "LIMIT_FILE_SIZE"

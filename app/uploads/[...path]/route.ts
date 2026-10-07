@@ -1,5 +1,6 @@
 import http from "node:http"
 import https from "node:https"
+import type { IncomingMessage } from "node:http"
 import { NextRequest, NextResponse } from "next/server"
 
 import { API_TIMEOUT_MS } from "@/lib/api/http"
@@ -7,6 +8,33 @@ import { API_TIMEOUT_MS } from "@/lib/api/http"
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
 export const maxDuration = 30
+
+function appendUploadChunk(chunks: Buffer[]) {
+  return function onUploadData(chunk: Buffer | string) {
+    chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk))
+  }
+}
+
+export function uploadToNextResponse(res: IncomingMessage, chunks: Buffer[]) {
+  const body = Buffer.concat(chunks)
+  const headers = new Headers()
+  const type = res.headers["content-type"]
+  if (typeof type === "string") headers.set("content-type", type)
+  headers.set("cache-control", "public, max-age=86400")
+  return new NextResponse(body, {
+    status: res.statusCode ?? 502,
+    headers,
+  })
+}
+
+export function collectUploadResponse(
+  res: IncomingMessage,
+  resolve: (response: NextResponse) => void,
+) {
+  const chunks: Buffer[] = []
+  res.on("data", appendUploadChunk(chunks))
+  res.on("end", () => resolve(uploadToNextResponse(res, chunks)))
+}
 
 export async function GET(
   request: NextRequest,
@@ -31,25 +59,7 @@ export async function GET(
         method: "GET",
         timeout: API_TIMEOUT_MS,
       },
-      (res) => {
-        const chunks: Buffer[] = []
-        res.on("data", (chunk) =>
-          chunks.push(Buffer.isBuffer(chunk) ? chunk : Buffer.from(chunk)),
-        )
-        res.on("end", () => {
-          const body = Buffer.concat(chunks)
-          const headers = new Headers()
-          const type = res.headers["content-type"]
-          if (typeof type === "string") headers.set("content-type", type)
-          headers.set("cache-control", "public, max-age=86400")
-          resolve(
-            new NextResponse(body, {
-              status: res.statusCode ?? 502,
-              headers,
-            }),
-          )
-        })
-      },
+      (res) => collectUploadResponse(res, resolve),
     )
     req.on("error", reject)
     req.end()

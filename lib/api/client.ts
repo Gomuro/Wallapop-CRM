@@ -74,33 +74,14 @@ export async function apiClientFetch<T>(
   }
 }
 
-export async function apiFetch<T>(
+export async function fetchConfiguredApi(
   path: string,
-  options: ApiFetchOptions = {},
-): Promise<{ data: T; response: Response }> {
-  const { cookieHeader, ...init } = options
-  const headers = jsonApiHeaders(init.headers, init.body)
-
-  if (cookieHeader) {
-    headers.set("Cookie", cookieHeader)
-  }
-
-  const credentials: RequestCredentials | undefined = cookieHeader
-    ? "omit"
-    : (init.credentials ?? "include")
-
+  init: RequestInit,
+  timeoutMs?: number,
+): Promise<Response> {
   assertApiConfigured()
-  let response: Response
   try {
-    response = await fetch(
-      clientApiV1Path(path),
-      withApiTimeout({
-        ...init,
-        headers,
-        credentials,
-        cache: init.cache ?? "no-store",
-      }),
-    )
+    return await fetch(clientApiV1Path(path), withApiTimeout(init, timeoutMs))
   } catch {
     throw new ApiError(
       0,
@@ -108,14 +89,14 @@ export async function apiFetch<T>(
       "No se ha podido conectar con el servidor.",
     )
   }
+}
 
+export async function parseOkApiJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     throw await parseApiError(response)
   }
-
   try {
-    const data = (await parseJsonResponse<T>(response)) as T
-    return { data, response }
+    return (await parseJsonResponse<T>(response)) as T
   } catch (error) {
     if (error instanceof ApiError) throw error
     throw new ApiError(
@@ -124,6 +105,30 @@ export async function apiFetch<T>(
       "El servidor devolvió una respuesta no válida.",
     )
   }
+}
+
+export function apiFetchInit(options: ApiFetchOptions): RequestInit {
+  const { cookieHeader, ...init } = options
+  const headers = jsonApiHeaders(init.headers, init.body)
+  if (cookieHeader) headers.set("Cookie", cookieHeader)
+  const credentials: RequestCredentials | undefined = cookieHeader
+    ? "omit"
+    : (init.credentials ?? "include")
+  return {
+    ...init,
+    headers,
+    credentials,
+    cache: init.cache ?? "no-store",
+  }
+}
+
+export async function apiFetch<T>(
+  path: string,
+  options: ApiFetchOptions = {},
+): Promise<{ data: T; response: Response }> {
+  const response = await fetchConfiguredApi(path, apiFetchInit(options))
+  const data = await parseOkApiJson<T>(response)
+  return { data, response }
 }
 
 export { ApiError }

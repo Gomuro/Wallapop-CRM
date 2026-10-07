@@ -426,39 +426,31 @@ function snapshotOpenPages(pages: Page[]): Array<PageUrlSnapshot & { page: Page 
  * If none, open `/wall` in a new tab. Never leave a closed Page on the handle.
  * Does not disconnect CDP and does not quit chrome.exe.
  */
-async function retargetHandleAfterUploadClose(
+async function retargetToExistingPage(
   current: WallapopBrowserHandle,
-): Promise<void> {
-  let remaining: Page[] = []
-  try {
-    remaining = current.context.pages().filter((p) => !isClosedPage(p))
-  } catch (error) {
-    log("warn", "wallapop_upload_tab_retarget_pages_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    })
-    handle = null
-    return
-  }
-
+  remaining: Page[],
+): Promise<boolean> {
   const urlPick = pickLiveSessionPage(snapshotOpenPages(remaining))
   const wall = urlPick && isWallFeedUrl(urlPick.url) ? urlPick.page : null
   const next =
     wall ?? (await pickUsableWallapopPage(remaining)) ?? urlPick?.page ?? null
-
-  if (next) {
-    next.setDefaultTimeout(ACTION_TIMEOUT_MS)
-    handle = { ...current, page: next, ownedPage: false }
-    await next.bringToFront().catch(() => {})
-    let nextUrl = ""
-    try {
-      nextUrl = next.url()
-    } catch {
-      nextUrl = urlPick?.url ?? ""
-    }
-    log("info", "wallapop_handle_retargeted", { url: nextUrl })
-    return
+  if (!next) return false
+  next.setDefaultTimeout(ACTION_TIMEOUT_MS)
+  handle = { ...current, page: next, ownedPage: false }
+  await next.bringToFront().catch(() => {})
+  let nextUrl = ""
+  try {
+    nextUrl = next.url()
+  } catch {
+    nextUrl = urlPick?.url ?? ""
   }
+  log("info", "wallapop_handle_retargeted", { url: nextUrl })
+  return true
+}
 
+async function retargetToNewWallPage(
+  current: WallapopBrowserHandle,
+): Promise<void> {
   try {
     const page = await current.context.newPage()
     page.setDefaultTimeout(ACTION_TIMEOUT_MS)
@@ -477,26 +469,58 @@ async function retargetHandleAfterUploadClose(
   }
 }
 
+async function retargetHandleAfterUploadClose(
+  current: WallapopBrowserHandle,
+): Promise<void> {
+  let remaining: Page[] = []
+  try {
+    remaining = current.context.pages().filter((p) => !isClosedPage(p))
+  } catch (error) {
+    log("warn", "wallapop_upload_tab_retarget_pages_failed", {
+      message: error instanceof Error ? error.message : String(error),
+    })
+    handle = null
+    return
+  }
+  if (await retargetToExistingPage(current, remaining)) return
+  await retargetToNewWallPage(current)
+}
+
 /**
  * Close the owned upload tab used for this publish / dry-run (success or failure after attach).
  * Allowed during the publish busy lock. Does not disconnect Playwright and does not quit chrome.exe.
  * Never closes the session `/wall` tab (`ownedPage: false`) or login / 2FA tabs.
  */
+function readUploadTabUrl(current: WallapopBrowserHandle): {
+  url: string
+  alreadyClosed: boolean
+} {
+  let url = ""
+  let alreadyClosed = isClosedPage(current.page)
+  if (!alreadyClosed) {
+    try {
+      url = current.page.url()
+    } catch {
+      alreadyClosed = true
+    }
+  }
+  return { url, alreadyClosed }
+}
+
+async function closeOwnedUploadTab(
+  current: WallapopBrowserHandle,
+  url: string,
+): Promise<void> {
+  await current.page.close()
+  log("info", "wallapop_upload_tab_closed", { url, ownedPage: true })
+  await retargetHandleAfterUploadClose(current)
+}
+
 export async function closeWallapopUploadTab(): Promise<void> {
   const current = handle
   if (!current) return
-
   try {
-    let url = ""
-    let alreadyClosed = isClosedPage(current.page)
-    if (!alreadyClosed) {
-      try {
-        url = current.page.url()
-      } catch {
-        alreadyClosed = true
-      }
-    }
-
+    const { url, alreadyClosed } = readUploadTabUrl(current)
     if (alreadyClosed) {
       log("info", "wallapop_upload_tab_already_closed", {
         ownedPage: current.ownedPage,
@@ -504,7 +528,6 @@ export async function closeWallapopUploadTab(): Promise<void> {
       await retargetHandleAfterUploadClose(current)
       return
     }
-
     if (!shouldCloseUploadTab(current.ownedPage, url)) {
       log(
         "info",
@@ -515,13 +538,7 @@ export async function closeWallapopUploadTab(): Promise<void> {
       )
       return
     }
-
-    await current.page.close()
-    log("info", "wallapop_upload_tab_closed", {
-      url,
-      ownedPage: true,
-    })
-    await retargetHandleAfterUploadClose(current)
+    await closeOwnedUploadTab(current, url)
   } catch (error) {
     log("warn", "wallapop_upload_tab_close_failed", {
       message: error instanceof Error ? error.message : String(error),
@@ -618,26 +635,31 @@ function cdpUnavailableMessage(cause: unknown): string {
  * If Chrome is not listening on CDP, spawns Chrome (same as login / boot rehydrate).
  * After publish the API quits chrome.exe (`quitWallapopChrome`); next run spawn/attach again.
  */
-export async function ensureWallapopPage(): Promise<Page> {
-  if (handle) {
-    const connected = await isCdpConnected(handle)
-    if (!connected) {
-      log("warn", "wallapop_cdp_stale_handle_reset", { cdpUrl: CDP_URL })
-      handle = null
-    } else if (isClosedPage(handle.page)) {
-      log("warn", "wallapop_cdp_closed_page_ignored", { cdpUrl: CDP_URL })
-    }
+async function resetStaleCdpHandle(): Promise<void> {
+  if (!handle) return
+  const connected = await isCdpConnected(handle)
+  if (!connected) {
+    log("warn", "wallapop_cdp_stale_handle_reset", { cdpUrl: CDP_URL })
+    handle = null
+    return
   }
-
-  if (!handle) {
-    try {
-      handle = await attachOrLaunch()
-      log("info", "wallapop_cdp_ensure_attached", { cdpUrl: CDP_URL })
-    } catch (error) {
-      throw new Error(cdpUnavailableMessage(error))
-    }
+  if (isClosedPage(handle.page)) {
+    log("warn", "wallapop_cdp_closed_page_ignored", { cdpUrl: CDP_URL })
   }
+}
 
+async function attachCdpHandleOrThrow(): Promise<void> {
+  if (handle) return
+  try {
+    handle = await attachOrLaunch()
+    log("info", "wallapop_cdp_ensure_attached", { cdpUrl: CDP_URL })
+  } catch (error) {
+    throw new Error(cdpUnavailableMessage(error))
+  }
+}
+
+async function reopenCdpIfPagesFail(): Promise<void> {
+  if (!handle) return
   try {
     handle.context.pages()
   } catch (error) {
@@ -651,17 +673,25 @@ export async function ensureWallapopPage(): Promise<Page> {
       throw new Error(cdpUnavailableMessage(reconnectError))
     }
   }
+}
 
+async function openOwnedUploadTab(): Promise<Page> {
   if (!handle) {
     throw new Error(cdpUnavailableMessage(new Error("CDP handle missing")))
   }
-
   const page = await handle.context.newPage()
   page.setDefaultTimeout(ACTION_TIMEOUT_MS)
   await page.bringToFront().catch(() => {})
   handle = { ...handle, page, ownedPage: true }
   log("info", "wallapop_upload_tab_opened", { ownedPage: true })
   return page
+}
+
+export async function ensureWallapopPage(): Promise<Page> {
+  await resetStaleCdpHandle()
+  await attachCdpHandleOrThrow()
+  await reopenCdpIfPagesFail()
+  return openOwnedUploadTab()
 }
 
 async function isCdpConnected(current: WallapopBrowserHandle): Promise<boolean> {

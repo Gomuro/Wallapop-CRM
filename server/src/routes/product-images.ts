@@ -68,54 +68,54 @@ async function compactSortOrders(
   )
 }
 
-export async function postProductImages(req: Request, res: Response) {
-  const productId = paramId(req)
-  if (!productId) {
-    sendError(res, 404, "NOT_FOUND", "Product not found.")
-    return
-  }
+type PrismaDb = NonNullable<ReturnType<typeof getPrisma>>
 
-  const files = multerFiles(req).filter((file) => file.size > 0)
-  if (files.length === 0) {
-    sendError(res, 400, "VALIDATION_ERROR", "No images selected.")
-    return
-  }
-
-  const prisma = getPrisma()
-  if (!prisma) {
-    sendError(res, 500, "INTERNAL", "Database is not configured.")
-    return
-  }
-
+async function requireExistingProduct(
+  prisma: PrismaDb,
+  productId: string,
+  res: Response,
+): Promise<boolean> {
   const product = await prisma.product.findUnique({
     where: { id: productId },
     select: { id: true },
   })
   if (!product) {
     sendError(res, 404, "NOT_FOUND", "Product not found.")
-    return
+    return false
   }
+  return true
+}
 
-  const currentCount = await prisma.productImage.count({
-    where: { productId },
-  })
-  if (currentCount + files.length > PRODUCT_IMAGE_MAX) {
+async function assertImageCapacity(
+  prisma: PrismaDb,
+  productId: string,
+  addCount: number,
+  res: Response,
+): Promise<boolean> {
+  const currentCount = await prisma.productImage.count({ where: { productId } })
+  if (currentCount + addCount > PRODUCT_IMAGE_MAX) {
     sendError(
       res,
       400,
       "VALIDATION_ERROR",
       `Maximum ${PRODUCT_IMAGE_MAX} photos per product.`,
     )
-    return
+    return false
   }
+  return true
+}
 
+async function appendProductImageFiles(
+  prisma: PrismaDb,
+  productId: string,
+  files: Express.Multer.File[],
+): Promise<string | null> {
   const last = await prisma.productImage.findFirst({
     where: { productId },
     orderBy: { sortOrder: "desc" },
     select: { sortOrder: true },
   })
   let nextSort = (last?.sortOrder ?? -1) + 1
-
   try {
     for (const file of files) {
       const saved = await saveStrippedImageBuffer(
@@ -133,13 +133,62 @@ export async function postProductImages(req: Request, res: Response) {
       nextSort += 1
     }
   } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Could not save image."
-    sendError(res, 400, "VALIDATION_ERROR", message)
+    return error instanceof Error ? error.message : "Could not save image."
+  }
+  return null
+}
+
+export async function postProductImages(req: Request, res: Response) {
+  const productId = paramId(req)
+  if (!productId) {
+    sendError(res, 404, "NOT_FOUND", "Product not found.")
     return
   }
-
+  const files = multerFiles(req).filter((file) => file.size > 0)
+  if (files.length === 0) {
+    sendError(res, 400, "VALIDATION_ERROR", "No images selected.")
+    return
+  }
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+  if (!(await requireExistingProduct(prisma, productId, res))) return
+  if (!(await assertImageCapacity(prisma, productId, files.length, res))) return
+  const saveError = await appendProductImageFiles(prisma, productId, files)
+  if (saveError) {
+    sendError(res, 400, "VALIDATION_ERROR", saveError)
+    return
+  }
   await sendProduct(res, productId, 201)
+}
+
+function reorderIdsError(
+  ids: string[],
+  images: Array<{ id: string }>,
+): string | null {
+  if (ids.length !== images.length) {
+    return "Reorder must include every image id for this product."
+  }
+  const known = new Set(images.map((image) => image.id))
+  const unique = new Set(ids)
+  if (unique.size !== ids.length || ids.some((id) => !known.has(id))) {
+    return "Reorder ids must match this product's images."
+  }
+  return null
+}
+
+async function parseReorderBody(req: Request, res: Response) {
+  try {
+    return productImagesReorderSchema.parse(req.body)
+  } catch (error) {
+    if (error instanceof ZodError) {
+      sendZod(res, error)
+      return null
+    }
+    throw error
+  }
 }
 
 export async function patchProductImages(req: Request, res: Response) {
@@ -148,58 +197,24 @@ export async function patchProductImages(req: Request, res: Response) {
     sendError(res, 404, "NOT_FOUND", "Product not found.")
     return
   }
-
-  let body: ReturnType<typeof productImagesReorderSchema.parse>
-  try {
-    body = productImagesReorderSchema.parse(req.body)
-  } catch (error) {
-    if (error instanceof ZodError) {
-      sendZod(res, error)
-      return
-    }
-    throw error
-  }
+  const body = await parseReorderBody(req, res)
+  if (!body) return
 
   const prisma = getPrisma()
   if (!prisma) {
     sendError(res, 500, "INTERNAL", "Database is not configured.")
     return
   }
-
-  const product = await prisma.product.findUnique({
-    where: { id: productId },
-    select: { id: true },
-  })
-  if (!product) {
-    sendError(res, 404, "NOT_FOUND", "Product not found.")
-    return
-  }
+  if (!(await requireExistingProduct(prisma, productId, res))) return
 
   const images = await prisma.productImage.findMany({
     where: { productId },
     select: { id: true },
     orderBy: { sortOrder: "asc" },
   })
-
-  if (body.ids.length !== images.length) {
-    sendError(
-      res,
-      400,
-      "VALIDATION_ERROR",
-      "Reorder must include every image id for this product.",
-    )
-    return
-  }
-
-  const known = new Set(images.map((image) => image.id))
-  const unique = new Set(body.ids)
-  if (unique.size !== body.ids.length || body.ids.some((id) => !known.has(id))) {
-    sendError(
-      res,
-      400,
-      "VALIDATION_ERROR",
-      "Reorder ids must match this product's images.",
-    )
+  const invalid = reorderIdsError(body.ids, images)
+  if (invalid) {
+    sendError(res, 400, "VALIDATION_ERROR", invalid)
     return
   }
 
@@ -211,8 +226,46 @@ export async function patchProductImages(req: Request, res: Response) {
       }),
     ),
   )
-
   await sendProduct(res, productId)
+}
+
+async function saveReplacementImage(
+  file: Express.Multer.File,
+  res: Response,
+) {
+  try {
+    return await saveStrippedImageBuffer(
+      file.buffer,
+      file.mimetype || "application/octet-stream",
+    )
+  } catch (error) {
+    const message =
+      error instanceof Error ? error.message : "Could not save image."
+    sendError(res, 400, "VALIDATION_ERROR", message)
+    return null
+  }
+}
+
+async function commitReplacementImage(
+  prisma: PrismaDb,
+  imageId: string,
+  saved: Awaited<ReturnType<typeof saveStrippedImageBuffer>>,
+  res: Response,
+): Promise<boolean> {
+  try {
+    await prisma.productImage.update({
+      where: { id: imageId },
+      data: { storageKey: saved.storageKey, url: saved.url },
+    })
+    return true
+  } catch (error) {
+    await deleteLocalImage(saved.storageKey)
+    if (prismaErrorCode(error) === "P2025") {
+      sendError(res, 404, "NOT_FOUND", "Image not found.")
+      return false
+    }
+    throw error
+  }
 }
 
 export async function putProductImage(req: Request, res: Response) {
@@ -222,19 +275,16 @@ export async function putProductImage(req: Request, res: Response) {
     sendError(res, 404, "NOT_FOUND", "Image not found.")
     return
   }
-
   const file = req.file
   if (!file || file.size === 0) {
     sendError(res, 400, "VALIDATION_ERROR", "No image selected.")
     return
   }
-
   const prisma = getPrisma()
   if (!prisma) {
     sendError(res, 500, "INTERNAL", "Database is not configured.")
     return
   }
-
   const existing = await prisma.productImage.findFirst({
     where: { id: imageId, productId },
   })
@@ -242,36 +292,10 @@ export async function putProductImage(req: Request, res: Response) {
     sendError(res, 404, "NOT_FOUND", "Image not found.")
     return
   }
-
-  let saved: Awaited<ReturnType<typeof saveStrippedImageBuffer>>
-  try {
-    saved = await saveStrippedImageBuffer(
-      file.buffer,
-      file.mimetype || "application/octet-stream",
-    )
-  } catch (error) {
-    const message =
-      error instanceof Error ? error.message : "Could not save image."
-    sendError(res, 400, "VALIDATION_ERROR", message)
-    return
-  }
-
-  const oldKey = existing.storageKey
-  try {
-    await prisma.productImage.update({
-      where: { id: imageId },
-      data: { storageKey: saved.storageKey, url: saved.url },
-    })
-  } catch (error) {
-    await deleteLocalImage(saved.storageKey)
-    if (prismaErrorCode(error) === "P2025") {
-      sendError(res, 404, "NOT_FOUND", "Image not found.")
-      return
-    }
-    throw error
-  }
-
-  await deleteLocalImage(oldKey)
+  const saved = await saveReplacementImage(file, res)
+  if (!saved) return
+  if (!(await commitReplacementImage(prisma, imageId, saved, res))) return
+  await deleteLocalImage(existing.storageKey)
   await sendProduct(res, productId)
 }
 

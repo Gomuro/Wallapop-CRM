@@ -246,6 +246,51 @@ export async function findNextAutopostListing(
   })
 }
 
+const autopostPickSelect = {
+  id: true,
+  productId: true,
+  createdAt: true,
+  shippingEnabled: true,
+  product: {
+    select: {
+      sku: true,
+      title: true,
+      weightKg: true,
+      widthCm: true,
+      lengthCm: true,
+      heightCm: true,
+    },
+  },
+} as const
+
+type AutopostCandidate = Prisma.ProductListingGetPayload<{
+  select: typeof autopostPickSelect
+}>
+
+function listingShippingReady(listing: AutopostCandidate): boolean {
+  return isShippingPublishReady({
+    weightKg: decimalToNumberOrNull(listing.product.weightKg),
+    shippingEnabled: listing.shippingEnabled,
+  })
+}
+
+function skipAutopostForShipping(listing: AutopostCandidate): void {
+  const product = listing.product
+  recordAutopostSkip({
+    productId: listing.productId,
+    sku: product.sku,
+    title: product.title,
+    code: SHIPPING_NOT_READY_CODE,
+    message: SHIPPING_NOT_READY_MESSAGE,
+  })
+  log("info", "wallapop_autopost_skip_shipping", {
+    listingId: listing.id,
+    productId: listing.productId,
+    sku: product.sku,
+    code: SHIPPING_NOT_READY_CODE,
+  })
+}
+
 export async function pickNextAutopostListing(
   prisma: PrismaClient,
   accountId: string,
@@ -258,32 +303,11 @@ export async function pickNextAutopostListing(
     where: autopostEligibleListingWhere(accountId),
     orderBy: AUTOPOST_PICK_ORDER_BY,
     take: AUTOPOST_PICK_BATCH,
-    select: {
-      id: true,
-      productId: true,
-      createdAt: true,
-      shippingEnabled: true,
-      product: {
-        select: {
-          sku: true,
-          title: true,
-          weightKg: true,
-          widthCm: true,
-          lengthCm: true,
-          heightCm: true,
-        },
-      },
-    },
+    select: autopostPickSelect,
   })
-
   let skipped = 0
   for (const listing of candidates) {
-    const product = listing.product
-    const ready = isShippingPublishReady({
-      weightKg: decimalToNumberOrNull(product.weightKg),
-      shippingEnabled: listing.shippingEnabled,
-    })
-    if (ready) {
+    if (listingShippingReady(listing)) {
       return {
         listing: {
           id: listing.id,
@@ -294,23 +318,9 @@ export async function pickNextAutopostListing(
         skipped,
       }
     }
-
     skipped += 1
-    recordAutopostSkip({
-      productId: listing.productId,
-      sku: product.sku,
-      title: product.title,
-      code: SHIPPING_NOT_READY_CODE,
-      message: SHIPPING_NOT_READY_MESSAGE,
-    })
-    log("info", "wallapop_autopost_skip_shipping", {
-      listingId: listing.id,
-      productId: listing.productId,
-      sku: product.sku,
-      code: SHIPPING_NOT_READY_CODE,
-    })
+    skipAutopostForShipping(listing)
   }
-
   return { listing: null, scanned: candidates.length, skipped }
 }
 
@@ -404,71 +414,66 @@ async function scheduleNextAsync(): Promise<void> {
  * One queue tick. Exported for tests — pass a mock publish so Vitest never
  * opens Chrome. Dry-run env skips before session / pick / publish.
  */
-export async function runAutopostTick(
-  publishProduct: typeof runProductPublish = runProductPublish,
-): Promise<void> {
-  const prisma = getPrisma()
-  if (!prisma) {
-    log("warn", "wallapop_autopost_skip_no_db")
-    return
-  }
-
+async function recoverStalePostingOnTick(prisma: PrismaClient): Promise<void> {
   try {
     await recoverStalePostingListings(prisma)
   } catch (error) {
     log("warn", "wallapop_posting_watchdog_tick_failed", serializeError(error))
   }
+}
 
+async function autopostTickGates(
+  prisma: PrismaClient,
+): Promise<string | null> {
   if (!isAutopostLivePublishEnabled()) {
     log("info", "wallapop_autopost_idle_until_live")
-    return
+    return null
   }
-
   if (!(await isDefaultAccountAutopostEnabled(prisma))) {
     log("info", "wallapop_autopost_idle_until_started")
-    return
+    return null
   }
-
   log("info", "wallapop_autopost_tick")
-
   const session = await getWallapopSessionSnapshot()
   if (session.status !== "ACTIVE") {
     log("info", "wallapop_autopost_skip_session", { status: session.status })
-    return
+    return null
   }
-
   const busy = getBrowserBusy()
   if (busy !== "idle") {
     log("info", "wallapop_autopost_skip_busy", { busy })
-    return
+    return null
   }
-
   const accountId = await findDefaultAccountId(prisma)
   if (!accountId) {
     log("warn", "wallapop_autopost_skip_no_account")
+    return null
+  }
+  return accountId
+}
+
+function logAutopostIdlePick(picked: {
+  scanned: number
+  skipped: number
+}): void {
+  if (picked.skipped > 0) {
+    log("info", "wallapop_autopost_idle_no_shipping_ready", {
+      scanned: picked.scanned,
+      skipped: picked.skipped,
+    })
     return
   }
+  log("info", "wallapop_autopost_idle")
+}
 
-  const picked = await pickNextAutopostListing(prisma, accountId)
-  if (!picked.listing) {
-    if (picked.skipped > 0) {
-      log("info", "wallapop_autopost_idle_no_shipping_ready", {
-        scanned: picked.scanned,
-        skipped: picked.skipped,
-      })
-    } else {
-      log("info", "wallapop_autopost_idle")
-    }
-    return
-  }
-
-  const listing = picked.listing
-
+async function publishPickedAutopostListing(
+  listing: { id: string; productId: string },
+  publishProduct: typeof runProductPublish,
+): Promise<void> {
   log("info", "wallapop_autopost_pick", {
     listingId: listing.id,
     productId: listing.productId,
   })
-
   const result = await publishProduct(listing.productId, { dryRun: false })
   if (!result.ok) {
     if (result.code === "PUBLISH_ABORTED") {
@@ -487,11 +492,29 @@ export async function runAutopostTick(
     })
     return
   }
-
   log("info", "wallapop_autopost_publish_ok", {
     listingId: listing.id,
     productId: listing.productId,
     dryRun: result.dryRun,
     step: result.step,
   })
+}
+
+export async function runAutopostTick(
+  publishProduct: typeof runProductPublish = runProductPublish,
+): Promise<void> {
+  const prisma = getPrisma()
+  if (!prisma) {
+    log("warn", "wallapop_autopost_skip_no_db")
+    return
+  }
+  await recoverStalePostingOnTick(prisma)
+  const accountId = await autopostTickGates(prisma)
+  if (!accountId) return
+  const picked = await pickNextAutopostListing(prisma, accountId)
+  if (!picked.listing) {
+    logAutopostIdlePick(picked)
+    return
+  }
+  await publishPickedAutopostListing(picked.listing, publishProduct)
 }

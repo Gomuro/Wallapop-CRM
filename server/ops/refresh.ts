@@ -1,18 +1,53 @@
 import type { PrismaClient } from "../generated/prisma/client"
 
+import { uniqueStorageKeys } from "../../lib/uploads/config"
+
+import {
+  pullUploadFiles,
+  pushUploadFiles,
+  type UploadSyncReport,
+} from "./uploads-sync"
 import { applyWarehouse, listingBySku, loadWarehouse } from "./warehouse"
+
+function photoSummary(photos: UploadSyncReport) {
+  return {
+    copied: photos.copied.length,
+    skipped: photos.skipped.length,
+    missing: photos.missing,
+    failed: photos.failed,
+  }
+}
 
 function printReport(
   label: string,
-  report: { upserted: string[]; skipped: { sku: string; reason: string }[] },
+  report: {
+    upserted: string[]
+    skipped: { sku: string; reason: string }[]
+    photos?: UploadSyncReport
+  },
   dryRun: boolean,
 ): void {
   console.log(
     JSON.stringify(
-      { action: label, dryRun, count: report.upserted.length, ...report },
+      {
+        action: label,
+        dryRun,
+        count: report.upserted.length,
+        upserted: report.upserted,
+        skipped: report.skipped,
+        photos: report.photos ? photoSummary(report.photos) : undefined,
+      },
       null,
       2,
     ),
+  )
+}
+
+function keysFromWarehouse(
+  products: { images: { storageKey: string }[] }[],
+): string[] {
+  return uniqueStorageKeys(
+    products.flatMap((row) => row.images.map((image) => image.storageKey)),
   )
 }
 
@@ -29,7 +64,8 @@ export async function refreshLocal(
     dryRun,
     muteAutopost: true,
   })
-  printReport("refresh-local", report, dryRun)
+  const photos = await pullUploadFiles(keysFromWarehouse(products), dryRun)
+  printReport("refresh-local", { ...report, photos }, dryRun)
 }
 
 /** Copy one listing’s Wallapop URL/status from local onto VPS (same SKU). */
@@ -60,5 +96,19 @@ export async function refreshVpsListing(
       data: patch,
     })
   }
-  console.log(JSON.stringify({ action: "refresh-vps", sku, dryRun, patch }, null, 2))
+  const warehouse = await loadWarehouse(local)
+  const photos = await pushUploadFiles(keysFromWarehouse(warehouse), dryRun)
+  console.log(
+    JSON.stringify(
+      {
+        action: "refresh-vps",
+        sku,
+        dryRun,
+        patch,
+        photos: photoSummary(photos),
+      },
+      null,
+      2,
+    ),
+  )
 }

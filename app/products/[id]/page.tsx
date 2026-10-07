@@ -24,8 +24,84 @@ import { ProductCacheHydrator } from "@/components/offline/product-cache-hydrato
 import { apiUnavailableReason } from "@/lib/api/availability"
 import { isApiConfigured } from "@/lib/api/config"
 import { getProduct } from "@/lib/inventory/store"
-import { typeMeta, typePrice, typeScreen } from "@/lib/ui/type"
+import type { InventoryProduct } from "@/lib/inventory/types"
+import { typePrice, typeScreen } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
+
+function ProductDetailAside({ product }: { product: InventoryProduct }) {
+  return (
+    <aside className="space-y-4 px-4 pt-4 pb-[calc(9rem+env(safe-area-inset-bottom))] md:px-8 md:pb-8 lg:sticky lg:top-28 lg:col-span-6 lg:self-start lg:px-0 lg:pt-0 lg:pb-0">
+      <div>
+        <p className={cn(typePrice, "text-primary-text")}>
+          {formatEuro(product.price)}
+        </p>
+        <p className="mt-1 text-lg font-medium leading-snug">{product.title}</p>
+      </div>
+      <div className="flex flex-wrap gap-1.5">
+        <Badge
+          className={
+            product.status === "ACTIVE"
+              ? "bg-foreground text-background"
+              : undefined
+          }
+          variant={
+            product.status === "SOLD"
+              ? "secondary"
+              : product.status === "INACTIVE"
+                ? "outline"
+                : "default"
+          }
+        >
+          {statusLabel(product.status)}
+        </Badge>
+        <Badge variant="outline">{categoryLabel(product.category)}</Badge>
+        <Badge variant="outline">{conditionLabel(product.condition)}</Badge>
+        {product.weight != null ? (
+          <Badge variant="secondary">{product.weight} kg</Badge>
+        ) : null}
+      </div>
+      <ListingDetailSection
+        productId={product.id}
+        listing={product.listing}
+        listingActive={product.listingActive}
+        shippingIncomplete={!product.shippingPublishReady}
+      />
+      {process.env.NODE_ENV === "development" ? (
+        <TestPublishButton
+          productId={product.id}
+          disabled={
+            !product.images.length || product.listing?.status === "POSTING"
+          }
+          disabledHint={
+            product.listing?.status === "POSTING"
+              ? "Se está publicando en Wallapop. No hace falta volver a publicarlo."
+              : undefined
+          }
+        />
+      ) : null}
+      <Separator />
+      <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
+        {product.description || "Sin descripción."}
+      </p>
+      <div className="space-y-2 pt-2">
+        <Button
+          className="h-12 w-full"
+          nativeButton={false}
+          render={<Link href={`/products/${product.id}/edit`} />}
+        >
+          Editar producto
+        </Button>
+        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:inset-auto md:z-auto md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
+          <SoldSyncButton
+            productId={product.id}
+            disabled={product.status === "SOLD"}
+          />
+        </div>
+        <DeleteProductButton productId={product.id} />
+      </div>
+    </aside>
+  )
+}
 
 export default async function ProductDetailPage({
   params,
@@ -78,76 +154,7 @@ export default async function ProductDetailPage({
             alt={product.title}
           />
         </div>
-        <aside className="space-y-4 px-4 pt-4 pb-[calc(9rem+env(safe-area-inset-bottom))] md:px-8 md:pb-8 lg:sticky lg:top-28 lg:col-span-6 lg:self-start lg:px-0 lg:pt-0 lg:pb-0">
-          <div>
-            <p className={cn(typePrice, "text-primary-text")}>
-              {formatEuro(product.price)}
-            </p>
-            <p className="mt-1 text-lg font-medium leading-snug">{product.title}</p>
-          </div>
-          <div className="flex flex-wrap gap-1.5">
-            <Badge
-              className={
-                product.status === "ACTIVE"
-                  ? "bg-foreground text-background"
-                  : undefined
-              }
-              variant={
-                product.status === "SOLD"
-                  ? "secondary"
-                  : product.status === "INACTIVE"
-                    ? "outline"
-                    : "default"
-              }
-            >
-              {statusLabel(product.status)}
-            </Badge>
-            <Badge variant="outline">{categoryLabel(product.category)}</Badge>
-            <Badge variant="outline">{conditionLabel(product.condition)}</Badge>
-            {product.weight != null ? (
-              <Badge variant="secondary">{product.weight} kg</Badge>
-            ) : null}
-          </div>
-          <ListingDetailSection
-            productId={product.id}
-            listing={product.listing}
-            listingActive={product.listingActive}
-            shippingIncomplete={!product.shippingPublishReady}
-          />
-          {process.env.NODE_ENV === "development" ? (
-            <TestPublishButton
-              productId={product.id}
-              disabled={
-                !product.images.length || product.listing?.status === "POSTING"
-              }
-              disabledHint={
-                product.listing?.status === "POSTING"
-                  ? "Se está publicando en Wallapop. No hace falta volver a publicarlo."
-                  : undefined
-              }
-            />
-          ) : null}
-          <Separator />
-          <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">
-            {product.description || "Sin descripción."}
-          </p>
-          <div className="space-y-2 pt-2">
-            <Button
-              className="h-12 w-full"
-              nativeButton={false}
-              render={<Link href={`/products/${product.id}/edit`} />}
-            >
-              Editar producto
-            </Button>
-            <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:inset-auto md:z-auto md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
-              <SoldSyncButton
-                productId={product.id}
-                disabled={product.status === "SOLD"}
-              />
-            </div>
-            <DeleteProductButton productId={product.id} />
-          </div>
-        </aside>
+        <ProductDetailAside product={product} />
       </div>
     </>
   )

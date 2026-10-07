@@ -35,19 +35,56 @@ function stripLeadingWhitespace(value: string) {
   return value.replace(/^\s+/, "")
 }
 
-export function CatalogToolbar({
+function CatalogStatusFilters({
+  status,
+  counts,
+  onSelect,
+}: {
+  status: "ALL" | ProductStatus
+  counts: StatusCounts
+  onSelect: (value: "ALL" | ProductStatus) => void
+}) {
+  return (
+    <div className="flex min-w-0 gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
+      {STATUS_FILTERS.map((filter) => {
+        const active = status === filter.value
+        const count = counts[filter.value]
+        const empty = filter.value !== "ALL" && count === 0
+        return (
+          <button
+            key={filter.value}
+            type="button"
+            disabled={empty && !active}
+            onClick={() => onSelect(filter.value)}
+            aria-pressed={active}
+            aria-label={`${filter.label}, ${count} productos`}
+            className={cn(
+              typeMeta,
+              "inline-flex h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-full px-3 font-semibold transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+              active
+                ? "bg-foreground text-background"
+                : "bg-muted text-foreground hover:bg-accent hover:text-accent-foreground",
+              empty && !active && "opacity-40",
+            )}
+          >
+            {filter.label}
+            <span className="tabular-nums">({count})</span>
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
+function useCatalogToolbarNav({
   q,
   status,
   view,
-  counts,
-  pending,
   startTransition,
 }: {
   q: string
   status: "ALL" | ProductStatus
   view: "grid" | "list"
-  counts: StatusCounts
-  pending: boolean
   startTransition: TransitionStartFunction
 }) {
   const router = useRouter()
@@ -93,6 +130,31 @@ export function CatalogToolbar({
     go({ q: "" })
   }
 
+  return { draft, setDraft, go, clearSearch }
+}
+
+export function CatalogToolbar({
+  q,
+  status,
+  view,
+  counts,
+  pending,
+  startTransition,
+}: {
+  q: string
+  status: "ALL" | ProductStatus
+  view: "grid" | "list"
+  counts: StatusCounts
+  pending: boolean
+  startTransition: TransitionStartFunction
+}) {
+  const { draft, setDraft, go, clearSearch } = useCatalogToolbarNav({
+    q,
+    status,
+    view,
+    startTransition,
+  })
+
   return (
     <header className="sticky top-0 z-30 border-b bg-background px-4 pb-3 pt-[max(0.75rem,env(safe-area-inset-top))] md:top-14 md:px-8">
       <h1 className="sr-only">Catálogo</h1>
@@ -124,34 +186,11 @@ export function CatalogToolbar({
           ) : null}
         </div>
         <div className="flex w-full min-w-0 flex-col gap-2 sm:flex-row sm:items-center md:w-auto">
-          <div className="flex min-w-0 gap-1.5 overflow-x-auto pb-0.5 [scrollbar-width:none] [-ms-overflow-style:none] [&::-webkit-scrollbar]:hidden">
-            {STATUS_FILTERS.map((filter) => {
-              const active = status === filter.value
-              const count = counts[filter.value]
-              const empty = filter.value !== "ALL" && count === 0
-              return (
-                <button
-                  key={filter.value}
-                  type="button"
-                  disabled={empty && !active}
-                  onClick={() => go({ status: filter.value })}
-                  aria-pressed={active}
-                  aria-label={`${filter.label}, ${count} productos`}
-                  className={cn(
-                    typeMeta,
-                    "inline-flex h-11 min-w-11 shrink-0 items-center justify-center gap-1 rounded-full px-3 font-semibold transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
-                    active
-                      ? "bg-foreground text-background"
-                      : "bg-muted text-foreground hover:bg-accent hover:text-accent-foreground",
-                    empty && !active && "opacity-40",
-                  )}
-                >
-                  {filter.label}
-                  <span className="tabular-nums">({count})</span>
-                </button>
-              )
-            })}
-          </div>
+          <CatalogStatusFilters
+            status={status}
+            counts={counts}
+            onSelect={(value) => go({ status: value })}
+          />
           <div className="flex shrink-0 justify-end gap-1.5">
             <Button
               variant={view === "grid" ? "secondary" : "ghost"}

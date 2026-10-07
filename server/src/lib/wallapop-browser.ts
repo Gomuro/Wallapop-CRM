@@ -199,62 +199,47 @@ async function clickEmailLoginEntry(page: Page): Promise<void> {
   }
 }
 
+async function scanPagesForOutcome(
+  pages: Page[],
+  detect: (p: Page) => Promise<boolean>,
+  outcome: BrowserLoginOutcome,
+): Promise<BrowserLoginOutcome | null> {
+  const handle = getWallapopHandle()
+  for (const p of pages) {
+    try {
+      if (await detect(p)) {
+        if (handle) setWallapopHandle({ ...handle, page: p, ownedPage: false })
+        return outcome
+      }
+    } catch {
+      // closed tab
+    }
+  }
+  return null
+}
+
+async function classifyLoginPages(
+  page: Page,
+): Promise<BrowserLoginOutcome | null> {
+  const handle = getWallapopHandle()
+  const pages = handle?.context.pages() ?? [page]
+  return (
+    (await scanPagesForOutcome(pages, detect2FA, "REQUIRES_2FA")) ??
+    (await scanPagesForOutcome(pages, detectLoggedIn, "ACTIVE"))
+  )
+}
+
 async function waitForLoginOutcome(
   page: Page,
   timeoutMs = NAV_TIMEOUT_MS,
 ): Promise<BrowserLoginOutcome | "FAILED"> {
-  const deadline = Date.now() + timeoutMs;
+  const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    const handle = getWallapopHandle();
-    const pages = handle?.context.pages() ?? [page];
-    for (const p of pages) {
-      try {
-        if (await detect2FA(p)) {
-          if (handle)
-            setWallapopHandle({ ...handle, page: p, ownedPage: false });
-          return "REQUIRES_2FA";
-        }
-      } catch {
-        // closed tab
-      }
-    }
-    for (const p of pages) {
-      try {
-        if (await detectLoggedIn(p)) {
-          if (handle)
-            setWallapopHandle({ ...handle, page: p, ownedPage: false });
-          return "ACTIVE";
-        }
-      } catch {
-        // closed tab
-      }
-    }
-    await page.waitForTimeout(500).catch(() => {});
+    const found = await classifyLoginPages(page)
+    if (found) return found
+    await page.waitForTimeout(500).catch(() => {})
   }
-
-  const handle = getWallapopHandle();
-  const pages = handle?.context.pages() ?? [page];
-  for (const p of pages) {
-    try {
-      if (await detect2FA(p)) {
-        if (handle) setWallapopHandle({ ...handle, page: p, ownedPage: false });
-        return "REQUIRES_2FA";
-      }
-    } catch {
-      // closed
-    }
-  }
-  for (const p of pages) {
-    try {
-      if (await detectLoggedIn(p)) {
-        if (handle) setWallapopHandle({ ...handle, page: p, ownedPage: false });
-        return "ACTIVE";
-      }
-    } catch {
-      // closed
-    }
-  }
-  return "FAILED";
+  return (await classifyLoginPages(page)) ?? "FAILED"
 }
 
 export async function logoutWallapopInBrowser(): Promise<void> {
@@ -302,50 +287,47 @@ export type ReconcileBrowserState = "REQUIRES_2FA" | "ACTIVE" | "NONE"
  * If no Wallapop tab (New Tab etc.), navigate to /wall first so cookies/session can be detected.
  * On NONE closes the browser handle (same as prior reconcile).
  */
-async function detectReconcileStateFromHandle(): Promise<ReconcileBrowserState> {
-  const handle = getWallapopHandle()
-  if (!handle) return "NONE"
-
-  const siblings = handle.context.pages()
-  const mfaPage =
-    siblings.find((p) => {
+function findMfaPage(pages: Page[]): Page | null {
+  return (
+    pages.find((p) => {
       const url = p.url().toLowerCase()
       return (
         url.includes("accounts.wallapop.com") || url.includes("login-actions")
       )
     }) ?? null
-  let activePage = mfaPage ?? handle.page
-  if (mfaPage && mfaPage !== handle.page) {
-    setWallapopHandle({ ...handle, page: mfaPage, ownedPage: false })
-  }
+  )
+}
 
-  const activeUrl = (() => {
-    try {
-      return activePage.url().toLowerCase()
-    } catch {
-      return ""
-    }
-  })()
+function pageUrlLower(page: Page): string {
+  try {
+    return page.url().toLowerCase()
+  } catch {
+    return ""
+  }
+}
+
+async function probeWallIfNeeded(
+  mfaPage: Page | null,
+  activePage: Page,
+): Promise<Page> {
+  const activeUrl = pageUrlLower(activePage)
   const onWallapop =
-    activeUrl.includes("wallapop.com") ||
-    activeUrl.includes("login-actions")
+    activeUrl.includes("wallapop.com") || activeUrl.includes("login-actions")
+  if (mfaPage || onWallapop) return activePage
+  log("info", "wallapop_browser_reconcile_probe_nav", {
+    from: activeUrl || "(unknown)",
+    to: PROBE_URL,
+  })
+  await activePage.goto(PROBE_URL, {
+    waitUntil: "domcontentloaded",
+    timeout: NAV_TIMEOUT_MS,
+  })
+  return getWallapopHandle()?.page ?? activePage
+}
 
-  if (!mfaPage && !onWallapop) {
-    log("info", "wallapop_browser_reconcile_probe_nav", {
-      from: activeUrl || "(unknown)",
-      to: PROBE_URL,
-    })
-    await activePage.goto(PROBE_URL, {
-      waitUntil: "domcontentloaded",
-      timeout: NAV_TIMEOUT_MS,
-    })
-    activePage = getWallapopHandle()?.page ?? activePage
-  }
-
-  if (!mfaPage) {
-    await dismissWallapopConsent(activePage)
-  }
-
+async function classifyReconcilePage(
+  activePage: Page,
+): Promise<ReconcileBrowserState> {
   if (await detect2FA(activePage)) {
     log("info", "wallapop_browser_reconcile_mfa", { url: activePage.url() })
     return "REQUIRES_2FA"
@@ -356,9 +338,23 @@ async function detectReconcileStateFromHandle(): Promise<ReconcileBrowserState> 
     })
     return "ACTIVE"
   }
-
   await closeWallapopBrowser()
   return "NONE"
+}
+
+async function detectReconcileStateFromHandle(): Promise<ReconcileBrowserState> {
+  const handle = getWallapopHandle()
+  if (!handle) return "NONE"
+  const mfaPage = findMfaPage(handle.context.pages())
+  let activePage = mfaPage ?? handle.page
+  if (mfaPage && mfaPage !== handle.page) {
+    setWallapopHandle({ ...handle, page: mfaPage, ownedPage: false })
+  }
+  activePage = await probeWallIfNeeded(mfaPage, activePage)
+  if (!mfaPage) {
+    await dismissWallapopConsent(activePage)
+  }
+  return classifyReconcilePage(activePage)
 }
 
 async function reconcileWithAttach(
@@ -409,163 +405,179 @@ export async function reconcileWallapopBrowserStateSpawning(): Promise<Reconcile
   return reconcileWithAttach(true)
 }
 
+async function fillWallapopLoginForm(
+  page: Page,
+  input: { email: string; password: string },
+): Promise<void> {
+  const emailInput = await firstVisible(page, SELECTORS.email, 10_000)
+  if (!emailInput) {
+    throw new Error("No se encontró el campo de email (#username).")
+  }
+  await emailInput.fill(input.email)
+  const passwordInput = await firstVisible(page, SELECTORS.password, 10_000)
+  if (!passwordInput) {
+    throw new Error("No se encontró el campo de contraseña (#password).")
+  }
+  await passwordInput.fill(input.password)
+  const submit = await firstVisible(page, SELECTORS.submit, 10_000)
+  if (!submit) {
+    throw new Error(
+      'No se encontró el botón "Acceder a Wallapop" (#kc-login).',
+    )
+  }
+  await submit.click()
+}
+
+async function resolveLoginOutcome(page: Page): Promise<BrowserLoginOutcome> {
+  const outcome = await waitForLoginOutcome(page)
+  if (outcome !== "FAILED") return outcome
+  if (await detectRecaptcha(page)) {
+    throw new Error(
+      "Wallapop muestra reCAPTCHA. Resuélvelo manualmente en Chrome o reintenta más tarde.",
+    )
+  }
+  throw new Error(
+    "No se pudo completar el login de Wallapop. Revisa email, contraseña o el DOM.",
+  )
+}
+
+async function runWallapopEmailLogin(input: {
+  email: string
+  password: string
+  proxy?: string | null
+}): Promise<BrowserLoginOutcome> {
+  await closeWallapopBrowser()
+  const attached = await attachOrLaunch(input.proxy)
+  setWallapopHandle(attached)
+  const { page } = attached
+  try {
+    await page.goto(LOGIN_URL, {
+      waitUntil: "domcontentloaded",
+      timeout: NAV_TIMEOUT_MS,
+    })
+    await dismissWallapopConsent(page)
+    if (await detectLoggedIn(page)) {
+      log("info", "wallapop_already_logged_in", { url: page.url() })
+      return "ACTIVE"
+    }
+    await clickEmailLoginEntry(page)
+    await dismissWallapopConsent(page)
+    await fillWallapopLoginForm(page, input)
+    const outcome = await resolveLoginOutcome(page)
+    log("info", "wallapop_login_outcome", { outcome, url: page.url() })
+    return outcome
+  } catch (error) {
+    await closeWallapopBrowser()
+    throw error
+  }
+}
+
 export async function loginWallapopInBrowser(input: {
   email: string
   password: string
   proxy?: string | null
 }): Promise<BrowserLoginOutcome> {
-  return runWithBrowserBusy("login", async () => {
-    await closeWallapopBrowser()
-    const attached = await attachOrLaunch(input.proxy)
-    setWallapopHandle(attached)
-    const { page } = attached
+  return runWithBrowserBusy("login", () => runWallapopEmailLogin(input))
+}
 
-    try {
-      await page.goto(LOGIN_URL, {
-        waitUntil: "domcontentloaded",
-        timeout: NAV_TIMEOUT_MS,
-      })
-      await dismissWallapopConsent(page)
+async function requireIdleFor2fa(): Promise<void> {
+  const busyAtStart = getBrowserBusy()
+  if (busyAtStart !== "idle") {
+    throw new BrowserBusyError(busyAtStart, "login")
+  }
+}
 
-      if (await detectLoggedIn(page)) {
-        log("info", "wallapop_already_logged_in", { url: page.url() })
-        return "ACTIVE"
-      }
+async function attachHandleFor2fa(): Promise<void> {
+  let handle = getWallapopHandle()
+  if (handle?.page) return
+  const reconciled = await reconcileWallapopBrowserState()
+  handle = getWallapopHandle()
+  if (reconciled === "REQUIRES_2FA" && handle?.page) return
+  const busyAfter = getBrowserBusy()
+  if (busyAfter !== "idle") {
+    throw new BrowserBusyError(busyAfter, "login")
+  }
+  throw new Error("No hay una sesión de autenticación activa.")
+}
 
-      await clickEmailLoginEntry(page)
-      await dismissWallapopConsent(page)
+function assertLoginOutcome(outcome: BrowserLoginOutcome | "FAILED") {
+  if (outcome === "FAILED") {
+    throw new Error("No se pudo verificar el código 2FA.")
+  }
+  if (outcome === "REQUIRES_2FA") {
+    throw new Error("Código 2FA incorrecto o aún pendiente.")
+  }
+  return outcome
+}
 
-      const emailInput = await firstVisible(page, SELECTORS.email, 10_000)
-      if (!emailInput) {
-        throw new Error("No se encontró el campo de email (#username).")
-      }
-      await emailInput.fill(input.email)
-
-      const passwordInput = await firstVisible(page, SELECTORS.password, 10_000)
-      if (!passwordInput) {
-        throw new Error("No se encontró el campo de contraseña (#password).")
-      }
-      await passwordInput.fill(input.password)
-
-      const submit = await firstVisible(page, SELECTORS.submit, 10_000)
-      if (!submit) {
-        throw new Error(
-          'No se encontró el botón "Acceder a Wallapop" (#kc-login).',
-        )
-      }
-      await submit.click()
-
-      const outcome = await waitForLoginOutcome(page)
-      if (outcome === "FAILED") {
-        if (await detectRecaptcha(page)) {
-          throw new Error(
-            "Wallapop muestra reCAPTCHA. Resuélvelo manualmente en Chrome o reintenta más tarde.",
-          )
-        }
-        throw new Error(
-          "No se pudo completar el login de Wallapop. Revisa email, contraseña o el DOM.",
-        )
-      }
-      log("info", "wallapop_login_outcome", {
-        outcome,
-        url: page.url(),
-      })
-      return outcome
-    } catch (error) {
-      await closeWallapopBrowser()
-      throw error
+async function fillWallapopOtp(page: Page, trimmed: string) {
+  const otpInput = await firstVisible(page, SELECTORS.otp, 10_000)
+  if (!otpInput) {
+    throw new Error(
+      "No se encontró el campo del código 2FA (data-input-otp / mfa_code).",
+    )
+  }
+  await otpInput.fill(trimmed)
+  try {
+    const hidden = page.locator('input[name="mfa_code"]').first()
+    if (await hidden.isVisible({ timeout: 800 }).catch(() => false)) {
+      await hidden.fill(trimmed, { timeout: 1_500 }).catch(() => {})
     }
-  })
+  } catch {
+    // page may have navigated away already
+  }
+  return otpInput
+}
+
+async function submitWallapopOtp(
+  page: Page,
+  otpInput: Awaited<ReturnType<typeof firstVisible>>,
+) {
+  try {
+    const submit = await firstVisible(page, SELECTORS.otpSubmit, 5_000)
+    if (submit) {
+      await submit.click({ timeout: 5_000 })
+    } else if (otpInput) {
+      await otpInput.press("Enter")
+    }
+  } catch {
+    // Navigation during click is fine — fall through to outcome.
+  }
+}
+
+async function retargetAfter2faSubmit(page: Page): Promise<Page> {
+  const handle = getWallapopHandle()
+  if (!handle) return page
+  const next = preferLoggedInPage(handle.context.pages(), handle.page)
+  setWallapopHandle({ ...handle, page: next, ownedPage: false })
+  return next
+}
+
+async function runWallapop2faSubmit(code: string): Promise<BrowserLoginOutcome> {
+  const handle = getWallapopHandle()
+  if (!handle?.page) {
+    throw new Error("No hay una sesión de autenticación activa.")
+  }
+  let page = handle.page
+  if (!(await detect2FA(page))) {
+    throw new Error(
+      "La pantalla 2FA ya no está disponible. Reintenta el login.",
+    )
+  }
+  const otpInput = await fillWallapopOtp(page, code.trim())
+  if (!(await detect2FA(page))) {
+    return assertLoginOutcome(await waitForLoginOutcome(page))
+  }
+  await submitWallapopOtp(page, otpInput)
+  page = await retargetAfter2faSubmit(page)
+  return assertLoginOutcome(await waitForLoginOutcome(page))
 }
 
 export async function submitWallapop2faInBrowser(
   code: string,
 ): Promise<BrowserLoginOutcome> {
   // Reconcile/attach while idle — reconcile skips when busy ≠ idle.
-  const busyAtStart = getBrowserBusy()
-  if (busyAtStart !== "idle") {
-    throw new BrowserBusyError(busyAtStart, "login")
-  }
-
-  let handle = getWallapopHandle()
-  if (!handle?.page) {
-    const reconciled = await reconcileWallapopBrowserState()
-    handle = getWallapopHandle()
-    if (reconciled !== "REQUIRES_2FA" || !handle?.page) {
-      const busyAfter = getBrowserBusy()
-      if (busyAfter !== "idle") {
-        throw new BrowserBusyError(busyAfter, "login")
-      }
-      throw new Error("No hay una sesión de autenticación activa.")
-    }
-  }
-
-  return runWithBrowserBusy("login", async () => {
-    handle = getWallapopHandle()
-    if (!handle?.page) {
-      throw new Error("No hay una sesión de autenticación activa.")
-    }
-
-    let page = handle.page
-    if (!(await detect2FA(page))) {
-      throw new Error(
-        "La pantalla 2FA ya no está disponible. Reintenta el login.",
-      )
-    }
-
-    const otpInput = await firstVisible(page, SELECTORS.otp, 10_000)
-    if (!otpInput) {
-      throw new Error(
-        "No se encontró el campo del código 2FA (data-input-otp / mfa_code).",
-      )
-    }
-    const trimmed = code.trim()
-    await otpInput.fill(trimmed)
-
-    try {
-      const hidden = page.locator('input[name="mfa_code"]').first()
-      if (await hidden.isVisible({ timeout: 800 }).catch(() => false)) {
-        await hidden.fill(trimmed, { timeout: 1_500 }).catch(() => {})
-      }
-    } catch {
-      // page may have navigated away already
-    }
-
-    if (!(await detect2FA(page))) {
-      const outcome = await waitForLoginOutcome(page)
-      if (outcome === "FAILED") {
-        throw new Error("No se pudo verificar el código 2FA.")
-      }
-      if (outcome === "REQUIRES_2FA") {
-        throw new Error("Código 2FA incorrecto o aún pendiente.")
-      }
-      return outcome
-    }
-
-    try {
-      const submit = await firstVisible(page, SELECTORS.otpSubmit, 5_000)
-      if (submit) {
-        await submit.click({ timeout: 5_000 })
-      } else {
-        await otpInput.press("Enter")
-      }
-    } catch {
-      // Navigation during click is fine — fall through to outcome.
-    }
-
-    handle = getWallapopHandle()
-    if (handle) {
-      page = preferLoggedInPage(handle.context.pages(), handle.page)
-      setWallapopHandle({ ...handle, page, ownedPage: false })
-    }
-
-    const outcome = await waitForLoginOutcome(page)
-    if (outcome === "FAILED") {
-      throw new Error("No se pudo verificar el código 2FA.")
-    }
-    if (outcome === "REQUIRES_2FA") {
-      throw new Error("Código 2FA incorrecto o aún pendiente.")
-    }
-    return outcome
-  })
+  await requireIdleFor2fa()
+  await attachHandleFor2fa()
+  return runWithBrowserBusy("login", () => runWallapop2faSubmit(code))
 }

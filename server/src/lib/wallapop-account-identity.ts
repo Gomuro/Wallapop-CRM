@@ -24,34 +24,23 @@ export type WallapopIdentitySyncResult = {
  * First login stores the email. Same email keeps listings.
  * A different email resets listings to READY_TO_POST and stops autopost.
  */
-export async function syncWallapopIdentityOnActive(
+async function storeWallapopEmailIfEmpty(
   prisma: PrismaClient,
-  incomingEmail: string,
+  accountId: string,
+  email: string,
 ): Promise<WallapopIdentitySyncResult> {
-  const email = normalizeWallapopEmail(incomingEmail)
-  if (!email) return { listingsReset: false }
-
-  const account = await prisma.account.findFirst({
-    where: { isDefault: true },
-    select: {
-      id: true,
-      wallapopEmail: true,
-    },
+  await prisma.account.update({
+    where: { id: accountId },
+    data: { wallapopEmail: email },
   })
-  if (!account) return { listingsReset: false }
+  return { listingsReset: false }
+}
 
-  if (!account.wallapopEmail) {
-    await prisma.account.update({
-      where: { id: account.id },
-      data: { wallapopEmail: email },
-    })
-    return { listingsReset: false }
-  }
-
-  if (!wallapopIdentityChanged(account.wallapopEmail, email)) {
-    return { listingsReset: false }
-  }
-
+async function resetListingsForIdentityChange(
+  prisma: PrismaClient,
+  account: { id: string; wallapopEmail: string | null },
+  email: string,
+): Promise<WallapopIdentitySyncResult> {
   await prisma.$transaction([
     prisma.productListing.updateMany({
       where: { accountId: account.id },
@@ -66,17 +55,33 @@ export async function syncWallapopIdentityOnActive(
     }),
     prisma.account.update({
       where: { id: account.id },
-      data: {
-        wallapopEmail: email,
-        autopostEnabled: false,
-      },
+      data: { wallapopEmail: email, autopostEnabled: false },
     }),
   ])
-
   log("info", "wallapop_account_identity_changed", {
     accountId: account.id,
     from: account.wallapopEmail,
     to: email,
   })
   return { listingsReset: true }
+}
+
+export async function syncWallapopIdentityOnActive(
+  prisma: PrismaClient,
+  incomingEmail: string,
+): Promise<WallapopIdentitySyncResult> {
+  const email = normalizeWallapopEmail(incomingEmail)
+  if (!email) return { listingsReset: false }
+  const account = await prisma.account.findFirst({
+    where: { isDefault: true },
+    select: { id: true, wallapopEmail: true },
+  })
+  if (!account) return { listingsReset: false }
+  if (!account.wallapopEmail) {
+    return storeWallapopEmailIfEmpty(prisma, account.id, email)
+  }
+  if (!wallapopIdentityChanged(account.wallapopEmail, email)) {
+    return { listingsReset: false }
+  }
+  return resetListingsForIdentityChange(prisma, account, email)
 }

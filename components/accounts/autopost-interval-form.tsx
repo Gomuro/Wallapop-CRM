@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState } from "react"
+import { useEffect, useState, useSyncExternalStore } from "react"
 import { LoaderCircleIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
@@ -59,36 +59,171 @@ function formatIntervalHint(autopost: ApiAutopostStatus): string {
   return `Entre publicaciones: ~${value} ${UNIT_SHORT[unit]} (varía un ±${jitterPct} %)`
 }
 
+let nowMs = 0
+let nowTimer: ReturnType<typeof window.setInterval> | undefined
+const nowListeners = new Set<() => void>()
+
+function emitNow() {
+  nowMs = Date.now()
+  nowListeners.forEach((listener) => listener())
+}
+
+function subscribeNow(onStoreChange: () => void) {
+  nowListeners.add(onStoreChange)
+  if (nowTimer === undefined) {
+    emitNow()
+    nowTimer = window.setInterval(emitNow, 1000)
+  }
+  return () => {
+    nowListeners.delete(onStoreChange)
+    if (nowListeners.size === 0 && nowTimer !== undefined) {
+      window.clearInterval(nowTimer)
+      nowTimer = undefined
+    }
+  }
+}
+
 function useAutopostNextTickLabel(
   nextTickAt: string | null | undefined,
   enabled: boolean,
 ): string | null {
-  const [label, setLabel] = useState<string | null>(null)
-
-  useEffect(() => {
-    if (!enabled) {
-      setLabel(null)
-      return
-    }
-
-    function refresh() {
-      if (!nextTickAt) {
-        setLabel("Comprobando la cola…")
-        return
-      }
-      const remainingMs = new Date(nextTickAt).getTime() - Date.now()
-      setLabel(formatAutopostCountdown(remainingMs))
-    }
-
-    refresh()
-    const timer = window.setInterval(refresh, 1000)
-    return () => window.clearInterval(timer)
-  }, [enabled, nextTickAt])
-
-  return label
+  const now = useSyncExternalStore(
+    enabled ? subscribeNow : () => () => {},
+    () => nowMs,
+    () => 0,
+  )
+  if (!enabled) return null
+  if (!nextTickAt) return "Comprobando la cola…"
+  return formatAutopostCountdown(new Date(nextTickAt).getTime() - now)
 }
 
-export function AutopostIntervalForm() {
+type AutopostSetters = {
+  setValue: (value: string) => void
+  setUnit: (unit: AutopostIntervalUnit) => void
+  setAutopost: (autopost: ApiAutopostStatus | null) => void
+  setSessionStatus: (status: WallapopConnectionStatus) => void
+  setLoading: (loading: boolean) => void
+  setSaving: (saving: boolean) => void
+  setToggling: (toggling: boolean) => void
+  setError: (error: string | null) => void
+  setSaved: (saved: boolean) => void
+  setStartConfirmOpen: (open: boolean) => void
+}
+
+function subscribeAutopostLoad(setters: AutopostSetters) {
+  let cancelled = false
+
+  async function load() {
+    setters.setLoading(true)
+    try {
+      const [next, session] = await Promise.all([
+        getDefaultAccountAutopost(),
+        getWallapopAccountStatus().catch(() => null),
+      ])
+      if (cancelled) return
+      const parsed = msToAutopostIntervalInput(next.autopost.effectiveIntervalMs)
+      setters.setValue(String(parsed.value))
+      setters.setUnit(parsed.unit)
+      setters.setAutopost(next.autopost)
+      if (session) setters.setSessionStatus(session.status)
+      setters.setError(null)
+    } catch (err) {
+      if (!cancelled) setters.setError(wallapopAccountErrorMessage(err))
+    } finally {
+      if (!cancelled) setters.setLoading(false)
+    }
+  }
+
+  void load()
+  return () => {
+    cancelled = true
+  }
+}
+
+async function saveAutopostInterval(ctx: {
+  event: React.FormEvent
+  value: string
+  unit: AutopostIntervalUnit
+  setters: AutopostSetters
+}) {
+  ctx.event.preventDefault()
+  ctx.setters.setError(null)
+  ctx.setters.setSaved(false)
+
+  const parsedValue = Number(ctx.value)
+  const parsed = autopostIntervalPatchSchema.safeParse({
+    value: parsedValue,
+    unit: ctx.unit,
+  })
+  if (!parsed.success) {
+    ctx.setters.setError(parsed.error.issues[0]?.message ?? "Revisa el intervalo.")
+    return
+  }
+
+  ctx.setters.setSaving(true)
+  try {
+    const next = await updateAutopostInterval(parsed.data)
+    const shown = msToAutopostIntervalInput(next.autopost.effectiveIntervalMs)
+    ctx.setters.setValue(String(shown.value))
+    ctx.setters.setUnit(shown.unit)
+    ctx.setters.setAutopost(next.autopost)
+    ctx.setters.setSaved(true)
+  } catch (err) {
+    ctx.setters.setError(wallapopAccountErrorMessage(err))
+  } finally {
+    ctx.setters.setSaving(false)
+  }
+}
+
+async function startAutopostRun(setters: AutopostSetters) {
+  setters.setStartConfirmOpen(false)
+  setters.setError(null)
+  setters.setToggling(true)
+  try {
+    const next = await startAutopost()
+    setters.setAutopost(next.autopost)
+  } catch (err) {
+    setters.setError(wallapopAccountErrorMessage(err))
+  } finally {
+    setters.setToggling(false)
+  }
+}
+
+async function stopAutopostRun(setters: AutopostSetters) {
+  setters.setError(null)
+  setters.setToggling(true)
+  try {
+    const next = await stopAutopost()
+    setters.setAutopost(next.autopost)
+  } catch (err) {
+    setters.setError(wallapopAccountErrorMessage(err))
+  } finally {
+    setters.setToggling(false)
+  }
+}
+
+export type AutopostIntervalState = {
+  apiReady: boolean
+  value: string
+  unit: AutopostIntervalUnit
+  autopost: ApiAutopostStatus | null
+  loading: boolean
+  saving: boolean
+  toggling: boolean
+  error: string | null
+  saved: boolean
+  startConfirmOpen: boolean
+  running: boolean
+  nextTickLabel: string | null
+  busy: boolean
+  sessionActive: boolean
+  lastLabel: string
+  setters: AutopostSetters
+  setValue: (value: string) => void
+  setUnit: (unit: AutopostIntervalUnit) => void
+}
+
+export function useAutopostIntervalState(): AutopostIntervalState {
   const apiReady = isApiConfigured()
   const [value, setValue] = useState("15")
   const [unit, setUnit] = useState<AutopostIntervalUnit>("minutes")
@@ -102,49 +237,30 @@ export function AutopostIntervalForm() {
   const [saved, setSaved] = useState(false)
   const [startConfirmOpen, setStartConfirmOpen] = useState(false)
 
+  const setters: AutopostSetters = {
+    setValue,
+    setUnit,
+    setAutopost,
+    setSessionStatus,
+    setLoading,
+    setSaving,
+    setToggling,
+    setError,
+    setSaved,
+    setStartConfirmOpen,
+  }
+
   useEffect(() => {
     if (!apiReady) return
-
-    let cancelled = false
-
-    async function load() {
-      setLoading(true)
-      try {
-        const [next, session] = await Promise.all([
-          getDefaultAccountAutopost(),
-          getWallapopAccountStatus().catch(() => null),
-        ])
-        if (cancelled) return
-        const parsed = msToAutopostIntervalInput(
-          next.autopost.effectiveIntervalMs,
-        )
-        setValue(String(parsed.value))
-        setUnit(parsed.unit)
-        setAutopost(next.autopost)
-        if (session) setSessionStatus(session.status)
-        setError(null)
-      } catch (err) {
-        if (!cancelled) setError(wallapopAccountErrorMessage(err))
-      } finally {
-        if (!cancelled) setLoading(false)
-      }
-    }
-
-    void load()
-    return () => {
-      cancelled = true
-    }
+    return subscribeAutopostLoad(setters)
+  // eslint-disable-next-line react-hooks/exhaustive-deps -- setState fns are stable
   }, [apiReady])
 
   const running = autopost?.enabled === true
-  const nextTickLabel = useAutopostNextTickLabel(
-    autopost?.nextTickAt,
-    running,
-  )
+  const nextTickLabel = useAutopostNextTickLabel(autopost?.nextTickAt, running)
 
   useEffect(() => {
     if (!apiReady || !running) return
-
     let cancelled = false
     const timer = window.setInterval(() => {
       void getDefaultAccountAutopost()
@@ -153,7 +269,6 @@ export function AutopostIntervalForm() {
         })
         .catch(() => {})
     }, 15000)
-
     return () => {
       cancelled = true
       window.clearInterval(timer)
@@ -166,73 +281,79 @@ export function AutopostIntervalForm() {
     return () => window.clearTimeout(timer)
   }, [saved])
 
-  async function onSave(event: React.FormEvent) {
-    event.preventDefault()
-    setError(null)
-    setSaved(false)
-
-    const parsedValue = Number(value)
-    const parsed = autopostIntervalPatchSchema.safeParse({
-      value: parsedValue,
-      unit,
-    })
-    if (!parsed.success) {
-      setError(parsed.error.issues[0]?.message ?? "Revisa el intervalo.")
-      return
-    }
-
-    setSaving(true)
-    try {
-      const next = await updateAutopostInterval(parsed.data)
-      const shown = msToAutopostIntervalInput(
-        next.autopost.effectiveIntervalMs,
-      )
-      setValue(String(shown.value))
-      setUnit(shown.unit)
-      setAutopost(next.autopost)
-      setSaved(true)
-    } catch (err) {
-      setError(wallapopAccountErrorMessage(err))
-    } finally {
-      setSaving(false)
-    }
-  }
-
-  async function onStart() {
-    setStartConfirmOpen(false)
-    setError(null)
-    setToggling(true)
-    try {
-      const next = await startAutopost()
-      setAutopost(next.autopost)
-    } catch (err) {
-      setError(wallapopAccountErrorMessage(err))
-    } finally {
-      setToggling(false)
-    }
-  }
-
-  async function onStop() {
-    setError(null)
-    setToggling(true)
-    try {
-      const next = await stopAutopost()
-      setAutopost(next.autopost)
-    } catch (err) {
-      setError(wallapopAccountErrorMessage(err))
-    } finally {
-      setToggling(false)
-    }
-  }
-
   const busy = loading || saving || toggling
   const sessionActive = sessionStatus === "ACTIVE"
   const lastLabel = autopost?.lastPublication
     ? `${autopost.lastPublication.title} · ${formatListingPostedAt(autopost.lastPublication.at) ?? ""}`
     : "Aún no hay publicaciones"
 
+  return {
+    apiReady,
+    value,
+    unit,
+    autopost,
+    loading,
+    saving,
+    toggling,
+    error,
+    saved,
+    startConfirmOpen,
+    running,
+    nextTickLabel,
+    busy,
+    sessionActive,
+    lastLabel,
+    setters,
+    setValue,
+    setUnit,
+  }
+}
+
+export function AutopostRecentSkips({
+  autopost,
+}: {
+  autopost: ApiAutopostStatus | null
+}) {
+  if (!autopost?.recentSkips || autopost.recentSkips.length === 0) return null
   return (
-    <div className="mx-auto w-full max-w-md border-t border-border pt-8">
+    <div className="mb-4 rounded-lg border border-border px-3 py-2">
+      <p className="text-sm font-medium">Omitidos (envío)</p>
+      <p className="mt-0.5 text-xs text-muted-foreground">
+        Sin peso: no se publican y la cola sigue con el siguiente.
+      </p>
+      <ul className="mt-2 space-y-1.5">
+        {autopost.recentSkips.slice(0, 8).map((skip) => (
+          <li key={`${skip.productId}-${skip.at}`} className="text-sm">
+            <span className="font-medium">{skip.title}</span>
+            {skip.sku ? (
+              <span className="text-muted-foreground"> · {skip.sku}</span>
+            ) : null}
+            <span className="mt-0.5 block text-xs text-muted-foreground">
+              {skip.message}
+            </span>
+          </li>
+        ))}
+      </ul>
+    </div>
+  )
+}
+
+export function AutopostStatusCard({ state }: { state: AutopostIntervalState }) {
+  const {
+    apiReady,
+    autopost,
+    running,
+    nextTickLabel,
+    lastLabel,
+    error,
+    saved,
+    toggling,
+    sessionActive,
+    setters,
+  } = state
+
+  return (
+    <>
       <div className="mb-4 flex items-start justify-between gap-3">
         <div>
           <h2 className="text-lg font-semibold tracking-tight">
@@ -279,27 +400,7 @@ export function AutopostIntervalForm() {
         </p>
       ) : null}
 
-      {autopost?.recentSkips && autopost.recentSkips.length > 0 ? (
-        <div className="mb-4 rounded-lg border border-border px-3 py-2">
-          <p className="text-sm font-medium">Omitidos (envío)</p>
-          <p className="mt-0.5 text-xs text-muted-foreground">
-            Sin peso: no se publican y la cola sigue con el siguiente.
-          </p>
-          <ul className="mt-2 space-y-1.5">
-            {autopost.recentSkips.slice(0, 8).map((skip) => (
-              <li key={`${skip.productId}-${skip.at}`} className="text-sm">
-                <span className="font-medium">{skip.title}</span>
-                {skip.sku ? (
-                  <span className="text-muted-foreground"> · {skip.sku}</span>
-                ) : null}
-                <span className="mt-0.5 block text-xs text-muted-foreground">
-                  {skip.message}
-                </span>
-              </li>
-            ))}
-          </ul>
-        </div>
-      ) : null}
+      <AutopostRecentSkips autopost={autopost} />
 
       {error ? (
         <p
@@ -326,7 +427,7 @@ export function AutopostIntervalForm() {
             variant="destructive"
             className="h-12 w-full"
             disabled={!apiReady || toggling}
-            onClick={() => void onStop()}
+            onClick={() => void stopAutopostRun(setters)}
             aria-busy={toggling || undefined}
           >
             {toggling ? <LoaderCircleIcon className="animate-spin" /> : null}
@@ -337,7 +438,7 @@ export function AutopostIntervalForm() {
             type="button"
             className="h-12 w-full"
             disabled={!apiReady || toggling || !sessionActive}
-            onClick={() => setStartConfirmOpen(true)}
+            onClick={() => setters.setStartConfirmOpen(true)}
           >
             Iniciar autopost
           </Button>
@@ -348,90 +449,124 @@ export function AutopostIntervalForm() {
           </p>
         ) : null}
       </div>
+    </>
+  )
+}
 
-      <form onSubmit={onSave} className="flex flex-col gap-4">
-        <div className="grid grid-cols-[1fr_8.5rem] gap-2">
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="autopost-interval-value">Cantidad</Label>
-            <Input
-              id="autopost-interval-value"
-              name="value"
-              type="number"
-              inputMode="numeric"
-              min={1}
-              step={1}
-              className="h-12 text-base md:h-10 md:text-sm"
-              value={value}
-              onChange={(e) => setValue(e.target.value)}
-              disabled={!apiReady || busy}
-              required
-            />
-          </div>
-          <div className="flex flex-col gap-2">
-            <Label htmlFor="autopost-interval-unit">Unidad</Label>
-            <select
-              id="autopost-interval-unit"
-              name="unit"
-              className="h-12 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-base outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 md:h-10 md:text-sm"
-              value={unit}
-              onChange={(event) =>
-                setUnit(event.target.value as AutopostIntervalUnit)
-              }
-              disabled={!apiReady || busy}
-            >
-              {AUTOPOST_INTERVAL_UNITS.map((item) => (
-                <option key={item} value={item}>
-                  {UNIT_LABEL[item]}
-                </option>
-              ))}
-            </select>
-          </div>
+export function AutopostIntervalFields({
+  state,
+}: {
+  state: AutopostIntervalState
+}) {
+  const { apiReady, value, unit, busy, saving, setters, setValue, setUnit } =
+    state
+
+  return (
+    <form
+      onSubmit={(event) => void saveAutopostInterval({ event, value, unit, setters })}
+      className="flex flex-col gap-4"
+    >
+      <div className="grid grid-cols-[1fr_8.5rem] gap-2">
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="autopost-interval-value">Cantidad</Label>
+          <Input
+            id="autopost-interval-value"
+            name="value"
+            type="number"
+            inputMode="numeric"
+            min={1}
+            step={1}
+            className="h-12 text-base md:h-10 md:text-sm"
+            value={value}
+            onChange={(e) => setValue(e.target.value)}
+            disabled={!apiReady || busy}
+            required
+          />
         </div>
+        <div className="flex flex-col gap-2">
+          <Label htmlFor="autopost-interval-unit">Unidad</Label>
+          <select
+            id="autopost-interval-unit"
+            name="unit"
+            className="h-12 w-full min-w-0 rounded-lg border border-input bg-transparent px-2.5 text-base outline-none transition-colors focus-visible:border-ring focus-visible:ring-3 focus-visible:ring-ring/50 disabled:cursor-not-allowed disabled:opacity-50 md:h-10 md:text-sm"
+            value={unit}
+            onChange={(event) =>
+              setUnit(event.target.value as AutopostIntervalUnit)
+            }
+            disabled={!apiReady || busy}
+          >
+            {AUTOPOST_INTERVAL_UNITS.map((item) => (
+              <option key={item} value={item}>
+                {UNIT_LABEL[item]}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
 
-        <Button
-          type="submit"
-          variant="outline"
-          className="h-12 w-full"
-          disabled={!apiReady || busy}
-          aria-busy={saving || undefined}
-        >
-          {saving ? <LoaderCircleIcon className="animate-spin" /> : null}
-          {saving ? "Guardando…" : "Guardar intervalo"}
-        </Button>
-      </form>
+      <Button
+        type="submit"
+        variant="outline"
+        className="h-12 w-full"
+        disabled={!apiReady || busy}
+        aria-busy={saving || undefined}
+      >
+        {saving ? <LoaderCircleIcon className="animate-spin" /> : null}
+        {saving ? "Guardando…" : "Guardar intervalo"}
+      </Button>
+    </form>
+  )
+}
 
-      <Dialog open={startConfirmOpen} onOpenChange={setStartConfirmOpen}>
-        <DialogContent>
-          <DialogHeader>
-            <DialogTitle>¿Iniciar el autopost?</DialogTitle>
-            <DialogDescription>
-              Solo se publicarán anuncios en «Listo para publicar» de esta
-              cuenta de Wallapop. No hay supervisión de qué hay o no hay ya en
-              el marketplace. Si un artículo ya está en Wallapop pero el CRM no
-              lo sabe, se puede duplicar.
-            </DialogDescription>
-          </DialogHeader>
-          <DialogFooter>
-            <Button
-              type="button"
-              variant="outline"
-              className="h-11 w-full sm:w-auto"
-              onClick={() => setStartConfirmOpen(false)}
-            >
-              Volver
-            </Button>
-            <Button
-              type="button"
-              className="h-11 w-full sm:w-auto"
-              disabled={toggling}
-              onClick={() => void onStart()}
-            >
-              {toggling ? <LoaderCircleIcon className="animate-spin" /> : null}
-              Iniciar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+export function AutopostStartConfirmDialog({
+  state,
+}: {
+  state: AutopostIntervalState
+}) {
+  const { startConfirmOpen, toggling, setters } = state
+  return (
+    <Dialog open={startConfirmOpen} onOpenChange={setters.setStartConfirmOpen}>
+      <DialogContent>
+        <DialogHeader>
+          <DialogTitle>¿Iniciar el autopost?</DialogTitle>
+          <DialogDescription>
+            Solo se publicarán anuncios en «Listo para publicar» de esta
+            cuenta de Wallapop. No hay supervisión de qué hay o no hay ya en
+            el marketplace. Si un artículo ya está en Wallapop pero el CRM no
+            lo sabe, se puede duplicar.
+          </DialogDescription>
+        </DialogHeader>
+        <DialogFooter>
+          <Button
+            type="button"
+            variant="outline"
+            className="h-11 w-full sm:w-auto"
+            onClick={() => setters.setStartConfirmOpen(false)}
+          >
+            Volver
+          </Button>
+          <Button
+            type="button"
+            className="h-11 w-full sm:w-auto"
+            disabled={toggling}
+            onClick={() => void startAutopostRun(setters)}
+          >
+            {toggling ? <LoaderCircleIcon className="animate-spin" /> : null}
+            Iniciar
+          </Button>
+        </DialogFooter>
+      </DialogContent>
+    </Dialog>
+  )
+}
+
+export function AutopostIntervalForm() {
+  const state = useAutopostIntervalState()
+  return (
+    <div className="mx-auto w-full max-w-md border-t border-border pt-8">
+      <AutopostStatusCard state={state} />
+      <AutopostIntervalFields state={state} />
+      <AutopostStartConfirmDialog state={state} />
     </div>
   )
 }

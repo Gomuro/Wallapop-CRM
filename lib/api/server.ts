@@ -32,23 +32,17 @@ export type ApiServerFetchOptions = RequestInit & {
   skipAuthRedirect?: boolean
 }
 
-export async function apiServerFetch<T>(
+export async function fetchInternalApi(
   path: string,
-  init?: ApiServerFetchOptions,
-): Promise<T> {
+  cookie: string,
+  requestInit: RequestInit,
+): Promise<Response> {
   assertApiConfigured()
-  const headerList = await headers()
-  const cookie = headerList.get("cookie") ?? ""
-  const url = internalApiV1Path(path)
-
-  const { skipAuthRedirect, ...requestInit } = init ?? {}
   const mergedHeaders = jsonApiHeaders(requestInit.headers, requestInit.body)
   mergedHeaders.set("cookie", cookie)
-
-  let response: Response
   try {
-    response = await fetch(
-      url,
+    return await fetch(
+      internalApiV1Path(path),
       withApiTimeout({
         ...requestInit,
         headers: mergedHeaders,
@@ -62,15 +56,12 @@ export async function apiServerFetch<T>(
       "No se ha podido conectar con el servidor.",
     )
   }
+}
 
-  if (response.status === 401 && !skipAuthRedirect) {
-    redirect("/login")
-  }
-
+export async function parseServerApiJson<T>(response: Response): Promise<T> {
   if (!response.ok) {
     throw await parseApiError(response)
   }
-
   try {
     return (await parseJsonResponse<T>(response)) as T
   } catch (error) {
@@ -81,6 +72,23 @@ export async function apiServerFetch<T>(
       "El servidor devolvió una respuesta no válida.",
     )
   }
+}
+
+export async function apiServerFetch<T>(
+  path: string,
+  init?: ApiServerFetchOptions,
+): Promise<T> {
+  const headerList = await headers()
+  const { skipAuthRedirect, ...requestInit } = init ?? {}
+  const response = await fetchInternalApi(
+    path,
+    headerList.get("cookie") ?? "",
+    requestInit,
+  )
+  if (response.status === 401 && !skipAuthRedirect) {
+    redirect("/login")
+  }
+  return parseServerApiJson<T>(response)
 }
 
 export async function apiServerFetchSafe<T>(

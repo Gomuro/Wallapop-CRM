@@ -23,48 +23,61 @@ function filesFromFormData(formData: FormData) {
     .filter((entry): entry is File => entry instanceof File && entry.size > 0)
 }
 
-export async function uploadProductImages(
-  formData: FormData,
+function validateProductImageUpload(
+  files: File[],
   productId?: string,
-): Promise<UploadImagesResult> {
-  const files = filesFromFormData(formData)
-
+): UploadImagesResult | null {
   if (files.length === 0) {
     return { urls: [], error: "No hay imágenes seleccionadas." }
   }
   if (files.length > PRODUCT_IMAGE_MAX) {
     return { urls: [], error: `Máximo ${PRODUCT_IMAGE_MAX} fotos.` }
   }
-
   if (!productId) {
     return {
       urls: [],
       error: "Guarda el producto primero y después añade fotos.",
     }
   }
+  return null
+}
 
+function mapUploadImagesError(error: unknown): string {
+  if (error instanceof ApiError) return error.message
+  if (error instanceof Error) return error.message
+  return "No se pudo guardar la imagen."
+}
+
+export async function persistUploadedProductImages(
+  productId: string,
+  files: File[],
+): Promise<UploadImagesResult> {
+  const payload = new FormData()
+  files.forEach((file) => payload.append("files", file))
+  const product = await apiUploadProductImages(productId, payload)
+  revalidatePath(`/products/${productId}`)
+  revalidatePath(`/products/${productId}/edit`)
+  revalidatePath("/")
+  const sorted = Array.isArray(product.images)
+    ? product.images.slice().sort((a, b) => a.sortOrder - b.sortOrder)
+    : []
+  return {
+    urls: sorted.map((image) => resolveMediaUrl(image.url)),
+    imageIds: sorted.map((image) => image.id),
+  }
+}
+
+export async function uploadProductImages(
+  formData: FormData,
+  productId?: string,
+): Promise<UploadImagesResult> {
+  const files = filesFromFormData(formData)
+  const invalid = validateProductImageUpload(files, productId)
+  if (invalid) return invalid
   try {
-    const payload = new FormData()
-    files.forEach((file) => payload.append("files", file))
-    const product = await apiUploadProductImages(productId, payload)
-    revalidatePath(`/products/${productId}`)
-    revalidatePath(`/products/${productId}/edit`)
-    revalidatePath("/")
-    const sorted = Array.isArray(product.images)
-      ? product.images.slice().sort((a, b) => a.sortOrder - b.sortOrder)
-      : []
-    return {
-      urls: sorted.map((image) => resolveMediaUrl(image.url)),
-      imageIds: sorted.map((image) => image.id),
-    }
+    return await persistUploadedProductImages(productId as string, files)
   } catch (error) {
-    const message =
-      error instanceof ApiError
-        ? error.message
-        : error instanceof Error
-          ? error.message
-          : "No se pudo guardar la imagen."
-    return { urls: [], error: message }
+    return { urls: [], error: mapUploadImagesError(error) }
   }
 }
 

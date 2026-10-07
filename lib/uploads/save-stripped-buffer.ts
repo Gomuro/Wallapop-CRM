@@ -43,26 +43,10 @@ export type SavedStrippedImage = {
   storageKey: string
 }
 
-export async function saveStrippedImageBuffer(
+export function encodeStrippedPipeline(
   buffer: Buffer,
-  declaredType: string,
-): Promise<SavedStrippedImage> {
-  if (buffer.length > MAX_IMAGE_BYTES) {
-    throw new Error("La imagen debe pesar 10MB o menos.")
-  }
-
-  if (!isAllowedImageType(declaredType)) {
-    throw new Error("Usa JPEG, PNG o WebP.")
-  }
-
-  const metadata = await sharp(buffer, { failOn: "error" }).metadata()
-  const detected = metadata.format
-  const target = FORMAT_BY_TYPE[declaredType]
-
-  if (detected !== target) {
-    throw new Error("El tipo de archivo no coincide con el contenido.")
-  }
-
+  target: "jpeg" | "png" | "webp",
+) {
   let pipeline = sharp(buffer, { failOn: "error" }).rotate()
   if (target === "jpeg") {
     pipeline = pipeline.jpeg({ quality: 85, mozjpeg: true })
@@ -71,33 +55,62 @@ export async function saveStrippedImageBuffer(
   } else {
     pipeline = pipeline.webp({ quality: 85 })
   }
+  return pipeline
+}
 
-  const bytes = await pipeline.toBuffer()
-  const mime = MIME_BY_FORMAT[target]
-  const storageKey = `${nanoid(16)}.${EXT_BY_FORMAT[target]}`
-
-  if (!shouldWriteUploadToDisk()) {
-    return {
-      storageKey,
-      url: `data:${mime};base64,${bytes.toString("base64")}`,
-    }
+export function dataUrlStrippedImage(
+  mime: string,
+  bytes: Buffer,
+  storageKey: string,
+): SavedStrippedImage {
+  return {
+    storageKey,
+    url: `data:${mime};base64,${bytes.toString("base64")}`,
   }
+}
 
+export async function persistStrippedBytes(
+  bytes: Buffer,
+  mime: string,
+  storageKey: string,
+): Promise<SavedStrippedImage> {
+  if (!shouldWriteUploadToDisk()) {
+    return dataUrlStrippedImage(mime, bytes, storageKey)
+  }
   try {
     await mkdir(UPLOAD_DIR, { recursive: true })
     await writeFile(path.join(UPLOAD_DIR, storageKey), bytes)
   } catch (error) {
     if (isFsUnavailable(error)) {
-      return {
-        storageKey,
-        url: `data:${mime};base64,${bytes.toString("base64")}`,
-      }
+      return dataUrlStrippedImage(mime, bytes, storageKey)
     }
     throw error
   }
-
   return {
     storageKey,
     url: `${UPLOAD_PUBLIC_PATH}/${storageKey}`,
   }
+}
+
+export async function saveStrippedImageBuffer(
+  buffer: Buffer,
+  declaredType: string,
+): Promise<SavedStrippedImage> {
+  if (buffer.length > MAX_IMAGE_BYTES) {
+    throw new Error("La imagen debe pesar 10MB o menos.")
+  }
+  if (!isAllowedImageType(declaredType)) {
+    throw new Error("Usa JPEG, PNG o WebP.")
+  }
+  const metadata = await sharp(buffer, { failOn: "error" }).metadata()
+  const target = FORMAT_BY_TYPE[declaredType]
+  if (metadata.format !== target) {
+    throw new Error("El tipo de archivo no coincide con el contenido.")
+  }
+  const bytes = await encodeStrippedPipeline(buffer, target).toBuffer()
+  return persistStrippedBytes(
+    bytes,
+    MIME_BY_FORMAT[target],
+    `${nanoid(16)}.${EXT_BY_FORMAT[target]}`,
+  )
 }

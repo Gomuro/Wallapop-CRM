@@ -19,6 +19,42 @@ function mergeUnique(
   return extra.length > 0 ? [...current, ...extra] : current
 }
 
+function CatalogProductGrid({
+  products,
+  view,
+}: {
+  products: InventoryProduct[]
+  view: "grid" | "list"
+}) {
+  if (view === "grid") {
+    return (
+      <div className="grid auto-rows-fr grid-cols-2 items-stretch gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
+        {products.map((product, index) => (
+          <ProductCard
+            key={product.id}
+            product={product}
+            view="grid"
+            priority={index === 0}
+          />
+        ))}
+      </div>
+    )
+  }
+
+  return (
+    <div className="flex flex-col gap-2">
+      {products.map((product, index) => (
+        <ProductCard
+          key={product.id}
+          product={product}
+          view="list"
+          priority={index === 0}
+        />
+      ))}
+    </div>
+  )
+}
+
 export function CatalogProductList({
   initialProducts,
   total,
@@ -42,15 +78,6 @@ export function CatalogProductList({
   const sentinelRef = useRef<HTMLDivElement>(null)
   const inFlight = useRef(false)
   const generation = useRef(0)
-
-  useEffect(() => {
-    generation.current += 1
-    setItems(initialProducts)
-    setPage(1)
-    setDone(initialProducts.length >= total)
-    setError(null)
-    inFlight.current = false
-  }, [initialProducts, q, status, total])
 
   useEffect(() => {
     rememberOfflineProducts(items)
@@ -113,29 +140,7 @@ export function CatalogProductList({
 
   return (
     <>
-      {view === "grid" ? (
-        <div className="grid auto-rows-fr grid-cols-2 items-stretch gap-4 sm:grid-cols-3 md:grid-cols-4 lg:grid-cols-5">
-          {displayed.map((product, index) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              view="grid"
-              priority={index === 0}
-            />
-          ))}
-        </div>
-      ) : (
-        <div className="flex flex-col gap-2">
-          {displayed.map((product, index) => (
-            <ProductCard
-              key={product.id}
-              product={product}
-              view="list"
-              priority={index === 0}
-            />
-          ))}
-        </div>
-      )}
+      <CatalogProductGrid products={displayed} view={view} />
       {hasMore ? <div ref={sentinelRef} className="h-8" aria-hidden /> : null}
       {loading ? (
         <p

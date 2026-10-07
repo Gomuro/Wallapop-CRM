@@ -55,7 +55,7 @@ npm run ops -- backup
 
 `BACKUP_DIR` — дампи Postgres (`pg_dump -Fc`), не `public/uploads`. Завантаження з CRM: `/accounts`, cookie. На Windows VPS раз на добу: `powershell -File server/ops/install-backup-task.ps1`.
 
-`DATABASE_URL_VPS` / `OPS_SSH` лише в `server/.env`. Users/seed не чіпає. Після `refresh-local` на локалі `autopost_enabled=false`. Фотофайли не копіює — лише рядки `product_images` (`storageKey`).
+`DATABASE_URL_VPS` / `OPS_SSH` лише в `server/.env`. Users/seed не чіпає. Після `refresh-local` на локалі `autopost_enabled=false`. `pull` також качає файли з VPS `/uploads` у локальний `UPLOAD_DIR`. `push` після listing ще дописує на VPS фото, яких там ще немає (`PUT /api/v1/ops/uploads/:key`, логін seed). `OPS_UPLOAD_ORIGIN` якщо API не `http://<OPS_SSH host>:PORT`.
 
 ## Логи
 

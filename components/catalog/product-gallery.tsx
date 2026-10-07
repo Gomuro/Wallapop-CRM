@@ -1,11 +1,55 @@
 "use client"
 
-import { useState, useRef } from "react"
+import { useState, useRef, type RefObject } from "react"
 
 import { ImageLightbox } from "@/components/catalog/image-lightbox"
 import { GALLERY_SIZES, ProductImage } from "@/components/catalog/product-image"
 import { useSwipeCarousel } from "@/lib/ui/swipe-carousel"
 import { cn } from "@/lib/utils"
+
+function GallerySlideTrack({
+  trackRef,
+  images,
+  active,
+  alt,
+}: {
+  trackRef: RefObject<HTMLDivElement | null>
+  images: string[]
+  active: number
+  alt: string
+}) {
+  const count = images.length
+  return (
+    <div
+      ref={trackRef}
+      className={cn(
+        "flex w-full",
+        count > 1 && "cursor-grab active:cursor-grabbing",
+        count === 1 && "cursor-zoom-in",
+      )}
+    >
+      {count === 0 ? (
+        <div className="aspect-square w-full shrink-0 grow-0 basis-full border border-dashed border-border bg-muted" />
+      ) : (
+        images.map((src, index) => (
+          <div
+            key={`${index}-${src}`}
+            aria-hidden={index !== active}
+            className="relative aspect-square w-full shrink-0 grow-0 basis-full overflow-hidden bg-muted"
+          >
+            <ProductImage
+              src={src}
+              alt={index === 0 ? alt : ""}
+              sizes={GALLERY_SIZES}
+              priority={index === 0}
+              className="pointer-events-none object-cover"
+            />
+          </div>
+        ))
+      )}
+    </div>
+  )
+}
 
 export function ProductGallery({
   images = [],
@@ -67,34 +111,12 @@ export function ProductGallery({
         onPointerUp={swipe.onPointerUp}
         onPointerCancel={swipe.onPointerCancel}
       >
-        <div
-          ref={trackRef}
-          className={cn(
-            "flex w-full",
-            count > 1 && "cursor-grab active:cursor-grabbing",
-            count === 1 && "cursor-zoom-in",
-          )}
-        >
-          {count === 0 ? (
-            <div className="aspect-square w-full shrink-0 grow-0 basis-full border border-dashed border-border bg-muted" />
-          ) : (
-            safeImages.map((src, index) => (
-              <div
-                key={`${index}-${src}`}
-                aria-hidden={index !== active}
-                className="relative aspect-square w-full shrink-0 grow-0 basis-full overflow-hidden bg-muted"
-              >
-                <ProductImage
-                  src={src}
-                  alt={index === 0 ? alt : ""}
-                  sizes={GALLERY_SIZES}
-                  priority={index === 0}
-                  className="pointer-events-none object-cover"
-                />
-              </div>
-            ))
-          )}
-        </div>
+        <GallerySlideTrack
+          trackRef={trackRef}
+          images={safeImages}
+          active={active}
+          alt={alt}
+        />
         {count > 1 ? (
           <div className="pointer-events-none absolute inset-x-0 bottom-3 flex justify-center px-4">
             <div className="pointer-events-auto flex max-w-full flex-wrap justify-center gap-1 rounded-full bg-background/90 px-1.5 py-1 shadow-sm ring-1 ring-border backdrop-blur-sm">
