@@ -32,78 +32,70 @@ const FIND_HOST_JS = `(function findHost(id, label) {
   );
 })`;
 
-const WALK_JS = `function walk(node, acc) {
-  if (!node) return acc;
-  if (node.querySelectorAll) {
-    for (const el of node.querySelectorAll("*")) {
-      acc.push(el);
-      if (el.shadowRoot) walk(el.shadowRoot, acc);
-    }
-  }
-  return acc;
-}`;
-
 const OPEN_FIELD_JS = `((id, label) => {
-  ${WALK_JS}
   const host = ${FIND_HOST_JS}(id, label);
   if (!host) return false;
-  const btn = walk(host, []).find(
-    (el) => el.getAttribute && el.getAttribute("role") === "button",
-  );
+  const btn =
+    host.querySelector('[role="button"]') ||
+    host.querySelector("walla-dropdown [role=button]");
   const target = btn || host;
-  target.scrollIntoView?.({ block: "center" });
-  target.click?.();
+  target.scrollIntoView({ block: "center" });
+  target.click();
   return true;
 })`;
 
-/** Portaled list + checkbox id + sticky confirm (label varies). Borrar clears leftover Metal. */
-const CLICK_TITLES_IN_HOST_JS = `((id, label, titles, optionIds) => {
-  ${WALK_JS}
-  const norm = (s) =>
-    (s || "").replace(/\\s+/g, " ").trim().toLowerCase();
-  const wanted = titles.map(norm);
-  const ids = optionIds.map(norm);
-  const host = ${FIND_HOST_JS}(id, label);
-  if (!host) return 0;
-  const expanded = walk(host, []).find(
-    (el) => el.getAttribute && el.getAttribute("aria-expanded") === "true",
-  );
-  const listId = expanded?.getAttribute("aria-controls");
-  const floating = [...document.querySelectorAll(".walla-dropdown__floating-area")].find(
-    (el) => el.getBoundingClientRect().height > 40,
-  );
-  const list = (listId && document.getElementById(listId)) || floating || host;
-  const clear = [...list.querySelectorAll("walla-button")].find((el) => {
-    const t =
-      el.shadowRoot?.querySelector("[part=button-text]")?.textContent ||
-      el.innerText ||
-      "";
-    return /borrar|limpiar/i.test(t);
-  });
-  if (clear) (clear.shadowRoot?.querySelector("button") || clear).click();
-  const items = [
-    ...list.querySelectorAll(
-      'walla-dropdown-item[role="option"], [role="listbox"] [role="option"]',
-    ),
-  ];
-  let n = 0;
-  for (const el of items) {
-    const box = el.querySelector("input[type=checkbox], input[type=radio]");
-    const boxId = norm(box?.id || box?.getAttribute("name"));
-    const aria = norm(el.getAttribute("aria-label"));
-    const hit =
-      ids.some((oid) => boxId === oid) || wanted.some((w) => aria === w);
-    if (!hit) continue;
-    if (box && !box.checked) box.click();
-    else el.click();
-    n += 1;
+function openPanel(page: Page) {
+  return page
+    .locator(".walla-dropdown__floating-area")
+    .filter({ has: page.locator('walla-dropdown-item[role="option"]') })
+    .filter({ visible: true })
+    .last();
+}
+
+/** Click the visible option row. Slotted 0×0 copies do not receive the click. */
+async function clickFieldOptions(
+  page: Page,
+  titles: string[],
+  optionIds: string[],
+): Promise<number> {
+  const panel = openPanel(page);
+  await panel.waitFor({ state: "visible", timeout: 5_000 });
+  const clear = panel.getByRole("button", { name: /^(Borrar|Limpiar)$/i });
+  if ((await clear.count()) > 0) {
+    await clear.first().click({ force: true });
+    await page.waitForTimeout(250);
   }
-  const sticky = list.querySelector(
-    ".walla-dropdown__sticky-button walla-button, .walla-dropdown__sticky-button button",
-  );
-  if (sticky) (sticky.shadowRoot?.querySelector("button") || sticky).click();
+  let n = 0;
+  for (let i = 0; i < optionIds.length; i++) {
+    const id = optionIds[i];
+    const title = titles[i] ?? id;
+    const byBox = panel
+      .locator(`walla-dropdown-item[role="option"]:has(input#${id})`)
+      .filter({ visible: true });
+    const byAria = panel
+      .getByRole("option", { name: title, exact: true })
+      .filter({ visible: true });
+    const item = (await byBox.count()) > 0 ? byBox.first() : byAria.first();
+    if ((await item.count()) < 1) continue;
+    await item.scrollIntoViewIfNeeded();
+    await item.click({ force: true });
+    n += 1;
+    await page.waitForTimeout(150);
+  }
+  const sticky = panel.locator(".walla-dropdown__sticky-button walla-button");
+  if ((await sticky.count()) > 0) {
+    await sticky.first().click({ force: true });
+  } else {
+    const confirm = panel.getByRole("button", {
+      name: /^(Seleccionar|Aplicar)$/i,
+    });
+    if ((await confirm.count()) > 0) {
+      await confirm.first().click({ force: true });
+    }
+  }
+  await page.waitForTimeout(400);
   return n;
-})`;
+}
 
 export async function ensureExtraUploadFields(
   page: Page,
@@ -126,19 +118,21 @@ export async function ensureExtraUploadFields(
     const opened = (await page.evaluate(
       `${OPEN_FIELD_JS}(${JSON.stringify(field.id)}, ${JSON.stringify(field.label)})`,
     )) as boolean;
-    await page.waitForTimeout(400);
-    const clicked = opened
-      ? ((await page.evaluate(
-          `${CLICK_TITLES_IN_HOST_JS}(${JSON.stringify(field.id)}, ${JSON.stringify(field.label)}, ${JSON.stringify(titles)}, ${JSON.stringify(ids)})`,
-        )) as number)
-      : 0;
-    await page.waitForTimeout(400);
+    let clicked = 0;
+    if (opened) {
+      try {
+        clicked = await clickFieldOptions(page, titles, ids);
+      } catch {
+        clicked = 0;
+      }
+    }
     await closeOpenDropdowns(page);
     log("info", "wallapop_publish_extra_field", {
       id: field.id,
       opened,
       clicked,
       titles,
+      ids,
     });
     if (field.required && clicked < 1) {
       throw new WallapopPublishError(
