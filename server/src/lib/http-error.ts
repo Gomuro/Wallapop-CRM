@@ -26,6 +26,9 @@ export function sendError(
     })
   }
   const body: ApiErrorBody = { error: { code, message } }
+  if (status !== 200) {
+    res.setHeader("Cache-Control", "no-store")
+  }
   return res.status(status).json(body)
 }
 

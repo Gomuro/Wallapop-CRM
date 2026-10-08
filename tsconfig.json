@@ -37,6 +37,7 @@
     "server/ops",
     "server/tests",
     "server/scripts",
+    "tmp",
     "**/*.test.ts"
   ]
 }

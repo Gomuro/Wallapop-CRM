@@ -20,11 +20,15 @@ export function uploadToNextResponse(res: IncomingMessage, chunks: Buffer[]) {
   const headers = new Headers()
   const type = res.headers["content-type"]
   if (typeof type === "string") headers.set("content-type", type)
-  headers.set("cache-control", "public, max-age=86400")
-  return new NextResponse(body, {
-    status: res.statusCode ?? 502,
-    headers,
-  })
+  const status = res.statusCode ?? 502
+  if (status === 200) {
+    headers.set("cache-control", "public, max-age=86400")
+  } else {
+    headers.set("cache-control", "no-store")
+    headers.set("cdn-cache-control", "no-store")
+    headers.set("vercel-cdn-cache-control", "no-store")
+  }
+  return new NextResponse(body, { status, headers })
 }
 
 export function collectUploadResponse(

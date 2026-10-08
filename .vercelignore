@@ -1,0 +1,9 @@
+tmp
+public/uploads
+server/logs
+.pgdata
+backups
+profiles
+docs
+prototype
+references
