@@ -63,7 +63,7 @@ export function SoldSyncButton({
       triggerVariant={isSold ? "secondary" : "default"}
       triggerDisabled={isSold}
       title="Marcar como vendido"
-      description="Se marcará vendido en Wallapop (ventana aparte) y el producto pasará a Vendido en el CRM."
+      description="Se marcará vendido en Wallapop (ventana aparte) y el producto pasará a Vendido en el CRM. Úsala con cuidado: ahora no hay forma de devolver el anuncio a la venta desde aquí. Para volver a publicarlo habrá que subir el producto otra vez."
       confirmLabel="Confirmar"
       pendingLabel="En Wallapop…"
       error={error}
