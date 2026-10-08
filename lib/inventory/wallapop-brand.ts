@@ -6,6 +6,10 @@ export function brandFromTypeAttributes(
   for (const key of ["brand", "Marca", "marca"]) {
     const value = record[key]
     if (typeof value === "string" && value.trim()) return value.trim()
+    if (Array.isArray(value)) {
+      const first = value.find((item) => typeof item === "string" && item.trim())
+      if (typeof first === "string") return first.trim()
+    }
   }
   return null
 }

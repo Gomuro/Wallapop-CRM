@@ -1,6 +1,6 @@
 "use client"
 
-import { BrandPicker } from "@/components/product-form/product-form-brand"
+import { CategoryExtraFields } from "@/components/product-form/category-extra-fields"
 import { CategoryPicker } from "@/components/product-form/category-picker"
 import { Field, FormSection } from "@/components/product-form/product-form-chrome"
 import { ProductFormWeight } from "@/components/product-form/product-form-weight"
@@ -350,10 +350,11 @@ export function ProductFormSaleMeta({
           </SelectContent>
         </Select>
       </Field>
-      <BrandPicker
+      <CategoryExtraFields
         categoryId={categoryId}
-        defaultValue={product?.brand ?? draft?.brand ?? ""}
-        error={state.fieldErrors?.brand}
+        typeAttributes={product?.typeAttributes}
+        brandFallback={product?.brand ?? draft?.brand ?? ""}
+        fieldErrors={state.fieldErrors}
       />
       <Field label="Estado de venta" htmlFor="status" error={state.fieldErrors?.status}>
         <Select
