@@ -170,8 +170,30 @@ export function hasOpenWallapopBrowser(): boolean {
   return handle != null
 }
 
+async function connectOverCdp(cdpUrl: string) {
+  const versionUrl = `${cdpUrl.replace(/\/$/, "")}/json/version`
+  try {
+    const response = await fetch(versionUrl, {
+      signal: AbortSignal.timeout(3_000),
+    })
+    if (response.ok) {
+      const json = (await response.json()) as { webSocketDebuggerUrl?: string }
+      if (json.webSocketDebuggerUrl) {
+        const http = new URL(cdpUrl)
+        const ws = new URL(json.webSocketDebuggerUrl)
+        ws.hostname = http.hostname
+        ws.port = http.port
+        return chromium.connectOverCDP(ws.toString())
+      }
+    }
+  } catch {
+    // fall through to browserURL
+  }
+  return chromium.connectOverCDP(cdpUrl)
+}
+
 export async function connectCdpHandle(): Promise<WallapopBrowserHandle> {
-  const browser = await chromium.connectOverCDP(CDP_URL)
+  const browser = await connectOverCdp(CDP_URL)
   const context = browser.contexts()[0] ?? (await browser.newContext())
   const pages = context.pages()
   const preferred =
