@@ -1,7 +1,9 @@
 "use client"
 
+import { BrandPicker } from "@/components/product-form/product-form-brand"
 import { CategoryPicker } from "@/components/product-form/category-picker"
 import { Field, FormSection } from "@/components/product-form/product-form-chrome"
+import { ProductFormWeight } from "@/components/product-form/product-form-weight"
 import { Input } from "@/components/ui/input"
 import {
   Select,
@@ -28,6 +30,8 @@ export function ProductFormFields({
   state,
   shippingPackageSize,
   setShippingPackageSize,
+  weightKg,
+  setWeightKg,
   categoryId,
   setCategoryId,
   categories,
@@ -42,6 +46,8 @@ export function ProductFormFields({
   state: ProductActionState
   shippingPackageSize: ShippingPackageSize
   setShippingPackageSize: (value: ShippingPackageSize) => void
+  weightKg: string
+  setWeightKg: (value: string) => void
   categoryId: string
   setCategoryId: (value: string) => void
   categories?: ApiCategory[]
@@ -91,6 +97,8 @@ export function ProductFormFields({
         state={state}
         shippingPackageSize={shippingPackageSize}
         setShippingPackageSize={setShippingPackageSize}
+        weightKg={weightKg}
+        setWeightKg={setWeightKg}
         categoryId={categoryId}
         setCategoryId={setCategoryId}
         categories={categories}
@@ -115,6 +123,8 @@ export function ProductFormParams({
   state,
   shippingPackageSize,
   setShippingPackageSize,
+  weightKg,
+  setWeightKg,
   categoryId,
   setCategoryId,
   categories,
@@ -129,6 +139,8 @@ export function ProductFormParams({
   state: ProductActionState
   shippingPackageSize: ShippingPackageSize
   setShippingPackageSize: (value: ShippingPackageSize) => void
+  weightKg: string
+  setWeightKg: (value: string) => void
   categoryId: string
   setCategoryId: (value: string) => void
   categories?: ApiCategory[]
@@ -157,20 +169,12 @@ export function ProductFormParams({
         </Field>
       </FormSection>
       <FormSection title="Parámetros">
-        <Field label="Peso" htmlFor="weight" error={state.fieldErrors?.weight}>
-          <Input
-            id="weight"
-            name="weight"
-            type="number"
-            min="0"
-            step="0.01"
-            inputMode="decimal"
-            defaultValue={product?.weight ?? draft?.weight ?? ""}
-            className="h-11 scroll-mt-28 tabular-nums"
-            aria-invalid={Boolean(state.fieldErrors?.weight)}
-            aria-describedby={state.fieldErrors?.weight ? "weight-error" : undefined}
-          />
-        </Field>
+        <ProductFormWeight
+          weightKg={weightKg}
+          setWeightKg={setWeightKg}
+          shippingPackageSize={shippingPackageSize}
+          state={state}
+        />
         <Field
           label="Tamaño del paquete"
           htmlFor="shippingPackageSize"
@@ -346,27 +350,11 @@ export function ProductFormSaleMeta({
           </SelectContent>
         </Select>
       </Field>
-      <Field
-        label="Marca"
-        htmlFor="brand"
-        required
+      <BrandPicker
+        categoryId={categoryId}
+        defaultValue={product?.brand ?? draft?.brand ?? ""}
         error={state.fieldErrors?.brand}
-      >
-        <Input
-          id="brand"
-          name="brand"
-          required
-          aria-required="true"
-          maxLength={100}
-          defaultValue={product?.brand ?? draft?.brand ?? ""}
-          className="h-11"
-          placeholder="Quirumed, Nike…"
-          aria-invalid={Boolean(state.fieldErrors?.brand)}
-          aria-describedby={
-            state.fieldErrors?.brand ? "brand-error" : undefined
-          }
-        />
-      </Field>
+      />
       <Field label="Estado de venta" htmlFor="status" error={state.fieldErrors?.status}>
         <Select
           name="status"

@@ -62,6 +62,9 @@ export function useProductFormDraft(
   )
   const [shippingPackageSize, setShippingPackageSize] =
     useState<ShippingPackageSize>(product?.shippingPackageSize ?? "STANDARD")
+  const [weightKg, setWeightKg] = useState(
+    product?.weight != null ? String(product.weight) : "",
+  )
   const [status, setStatus] = useState<ProductStatus>(product?.status ?? "ACTIVE")
 
   const resetFormState = useCallback(() => {
@@ -71,6 +74,7 @@ export function useProductFormDraft(
     setCategoryId("")
     setCondition("GOOD")
     setShippingPackageSize("STANDARD")
+    setWeightKg("")
     setStatus("ACTIVE")
     setResetKey((prev) => prev + 1)
     isSubmittingRef.current = false
@@ -93,6 +97,7 @@ export function useProductFormDraft(
     ) {
       setShippingPackageSize(saved.shippingPackageSize)
     }
+    if (saved?.weight != null) setWeightKg(saved.weight)
     if (saved?.status) setStatus(saved.status as ProductStatus)
     if (!saved) {
       void clearDraftPhotos()
@@ -114,7 +119,7 @@ export function useProductFormDraft(
       sku: current?.sku ?? "",
       description: current?.description ?? "",
       price: current?.price ?? "",
-      weight: current?.weight ?? "",
+      weight: weightKg,
       shippingPackageSize: shippingPackageSize,
       widthCm: current?.widthCm ?? "",
       lengthCm: current?.lengthCm ?? "",
@@ -124,7 +129,7 @@ export function useProductFormDraft(
       status,
       brand: current?.brand ?? "",
     })
-  }, [categoryId, condition, draftReady, isNew, restoreDraft, shippingPackageSize, status])
+  }, [categoryId, condition, draftReady, isNew, restoreDraft, shippingPackageSize, status, weightKg])
 
   return {
     isNew,
@@ -140,6 +145,8 @@ export function useProductFormDraft(
     setCondition,
     shippingPackageSize,
     setShippingPackageSize,
+    weightKg,
+    setWeightKg,
     status,
     setStatus,
     resetFormState,
@@ -304,6 +311,8 @@ export function ProductForm({
     setCondition,
     shippingPackageSize,
     setShippingPackageSize,
+    weightKg,
+    setWeightKg,
     status,
     setStatus,
     resetFormState,
@@ -386,6 +395,8 @@ export function ProductForm({
           state={state}
           shippingPackageSize={shippingPackageSize}
           setShippingPackageSize={setShippingPackageSize}
+          weightKg={weightKg}
+          setWeightKg={setWeightKg}
           categoryId={categoryId}
           setCategoryId={setCategoryId}
           categories={categories}

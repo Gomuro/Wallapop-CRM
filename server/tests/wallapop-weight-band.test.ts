@@ -2,6 +2,8 @@ import { describe, expect, it } from "vitest"
 
 import {
   PACKAGING_BUFFER_KG,
+  STANDARD_WEIGHT_BANDS,
+  crmKgForStandardBand,
   wallapopEffectiveWeightKg,
   wallapopStandardWeightBandAriaName,
   wallapopStandardWeightBandFromCrm,
@@ -45,6 +47,15 @@ describe("wallapopStandardWeightBandFromCrm", () => {
     expect(wallapopStandardWeightBandFromCrm(30)).toBe("20 a 30 kg")
     expect(wallapopStandardWeightBandFromCrm(29.9)).toBe("20 a 30 kg")
     expect(wallapopStandardWeightBandFromCrm(30.01)).toBeNull()
+  })
+})
+
+describe("crmKgForStandardBand", () => {
+  it("lands each Estándar tramo after the packaging buffer", () => {
+    for (const band of STANDARD_WEIGHT_BANDS) {
+      const kg = crmKgForStandardBand(band.maxKg)
+      expect(wallapopStandardWeightBandFromCrm(kg)).toBe(band.needle)
+    }
   })
 })
 
