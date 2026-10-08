@@ -1,3 +1,5 @@
+import type { CategoryUploadField } from "../../../../lib/inventory/category-upload-fields";
+
 export const UPLOAD_URL = "https://es.wallapop.com/app/catalog/upload";
 export const SUMMARY_MAX = 50;
 export const PUBLICAR_SETTLE_MS = 5_000;
@@ -79,6 +81,8 @@ export type PublishWallapopInput = {
   widthCm?: number | null;
   lengthCm?: number | null;
   heightCm?: number | null;
+  typeAttributes?: unknown;
+  uploadFields?: CategoryUploadField[];
 };
 
 export type PublishWallapopResult = {

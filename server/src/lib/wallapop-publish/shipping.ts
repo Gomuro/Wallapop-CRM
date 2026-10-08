@@ -6,7 +6,6 @@ import {
   wallapopStandardWeightBandFromCrm,
 } from "../wallapop-weight-band";
 import { snapshotPublishForm } from "./debug";
-import { clickMainText } from "./nav";
 import { WallapopPublishError, type ShippingPackageType } from "./types";
 
 const WEIGHT_HEADING_RE =
@@ -304,13 +303,3 @@ export async function assertShippingReadyForPublish(
   }
 }
 
-const BODY_TEXT_EVAL = `document.body ? document.body.innerText : ""`;
-
-export async function ensureMaterialOtro(page: Page): Promise<void> {
-  const body = (await page.evaluate(BODY_TEXT_EVAL)) as string;
-  if (/Material/i.test(body) && !/Otro|Madera|Metal|Plástico/i.test(body)) {
-    await clickMainText(page, "Material");
-    await page.waitForTimeout(300);
-    await clickMainText(page, "Otro");
-  }
-}

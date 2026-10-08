@@ -11,10 +11,10 @@ import {
   fillPublishDescription,
   readPriceAmount,
 } from "./fields";
+import { ensureExtraUploadFields } from "./extra-fields";
 import { ensureMarcaIfShown } from "./marca";
 import { clickMainText, fillIfEmpty } from "./nav";
 import {
-  ensureMaterialOtro,
   ensurePackageSizeIfShown,
   ensureStandardWeightBand,
   fillMeasuresIfPresent,
@@ -41,7 +41,11 @@ async function fillCoreFormFields(
   await fillPrice(page, input.price);
   logPublishStep("form", page, { phase: "after_estado_price" });
   await ensureMarcaIfShown(page, input.brand);
-  await ensureMaterialOtro(page);
+  await ensureExtraUploadFields(
+    page,
+    input.uploadFields ?? [],
+    input.typeAttributes,
+  );
   return descriptionText;
 }
 

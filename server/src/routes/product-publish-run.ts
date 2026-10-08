@@ -4,6 +4,11 @@ import { listingJsonSelect, toListingJson } from "../lib/listing-json"
 import { log, serializeError } from "../lib/log"
 import { isBrowserBusyError, isPublishAbortedError } from "../lib/wallapop-cdp"
 import { publishWallapopInBrowser, WallapopPublishError } from "../lib/wallapop-publish"
+import {
+  extraUploadFields,
+  uploadFieldsFromCategoryAttributes,
+  validateExtraUploadFields,
+} from "../../../lib/inventory/category-upload-fields"
 import { wallapopBrandFromProduct } from "../../../lib/inventory/wallapop-brand"
 import {
   listingWithoutPublicItemUrlWhere,
@@ -154,7 +159,25 @@ export async function claimLivePublish(
   return { ok: true, claimed: true }
 }
 
+async function loadCategoryUploadFields(ready: PublishReady) {
+  const category = await ready.prisma.category.findUnique({
+    where: { id: ready.product.categoryId },
+    select: { attributes: true },
+  })
+  const fields = extraUploadFields(
+    uploadFieldsFromCategoryAttributes(category?.attributes),
+  )
+  const extraErrors = validateExtraUploadFields(
+    fields,
+    ready.product.typeAttributes,
+  )
+  const first = Object.values(extraErrors)[0]
+  if (first) throw new WallapopPublishError("form", first)
+  return fields
+}
+
 async function playwrightProductPublish(ready: PublishReady) {
+  const uploadFields = await loadCategoryUploadFields(ready)
   return publishWallapopInBrowser({
     title: ready.product.title,
     description: ready.product.description,
@@ -174,6 +197,8 @@ async function playwrightProductPublish(ready: PublishReady) {
     widthCm: ready.widthCm,
     lengthCm: ready.lengthCm,
     heightCm: ready.heightCm,
+    typeAttributes: ready.product.typeAttributes,
+    uploadFields,
   })
 }
 
