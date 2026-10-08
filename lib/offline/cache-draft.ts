@@ -94,6 +94,7 @@ export function inventoryFromOfflineDraft(input: {
     createdAt: prev?.createdAt ?? now,
     updatedAt: now,
     listing: prev?.listing ?? null,
+    typeAttributes: prev?.typeAttributes ?? {},
     listingActive: prev?.listingActive,
     shippingPublishReady: isShippingPublishReady({
       weightKg: measures.weight,

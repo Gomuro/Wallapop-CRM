@@ -45,10 +45,10 @@ export const productConditionSchema = z.enum([
 export const shippingPackageSizeSchema = z.enum(["STANDARD", "BULKY"])
 
 export const productBrandSchema = z
-  .string({ error: "Introduce una marca." })
+  .string()
   .trim()
-  .min(1, "Introduce una marca.")
   .max(100, "La marca es demasiado larga.")
+  .default("")
 
 const optionalMeasureCm = z
   .number({ error: "Introduce unas medidas válidas." })
@@ -90,6 +90,7 @@ const productFieldsSchema = z.object({
   images: productImagesSchema.default([]),
   status: productStatusSchema.default("ACTIVE"),
   externalLinks: z.array(z.string().trim().url()).default([]),
+  typeAttributes: z.record(z.string(), z.array(z.string())).default({}),
 })
 
 function refineProductDimensions(

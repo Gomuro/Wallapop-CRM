@@ -1,3 +1,4 @@
+import type { CategoryUploadField } from "@/lib/inventory/category-upload-fields"
 import type { ListingStatusRead } from "@/lib/inventory/types"
 import type { ProductCondition, ProductStatus } from "@/lib/validations"
 
@@ -13,6 +14,7 @@ export type ApiCategory = {
   depth: number
   path: string
   sortOrder: number
+  fields?: CategoryUploadField[]
 }
 
 export type ApiProductImage = {

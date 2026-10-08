@@ -1,5 +1,6 @@
 import type { Request, Response } from "express"
 
+import { uploadFieldsFromCategoryAttributes } from "../../../lib/inventory/category-upload-fields"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 
@@ -92,12 +93,17 @@ export async function getCategory(req: Request, res: Response) {
 
   const row = await prisma.category.findUnique({
     where: { id },
-    select: categorySelect,
+    select: { ...categorySelect, attributes: true },
   })
   if (!row) {
     sendError(res, 404, "NOT_FOUND", "Category not found.")
     return
   }
 
-  res.json({ category: toCategoryJson(row) })
+  res.json({
+    category: {
+      ...toCategoryJson(row),
+      fields: uploadFieldsFromCategoryAttributes(row.attributes),
+    },
+  })
 }

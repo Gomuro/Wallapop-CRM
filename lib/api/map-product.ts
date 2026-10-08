@@ -171,6 +171,7 @@ export function toListItemInventoryProduct(
     createdAt: asString(row.updatedAt),
     updatedAt: asString(row.updatedAt),
     listing,
+    typeAttributes: {},
     listingActive: listItemListingActive(row, listing),
     shippingPublishReady: row.shippingPublishReady === true,
   }
@@ -238,6 +239,10 @@ export function toInventoryProduct({
     createdAt: asString(product?.createdAt),
     updatedAt: asString(product?.updatedAt),
     listing,
+    typeAttributes:
+      product.typeAttributes && typeof product.typeAttributes === "object"
+        ? product.typeAttributes
+        : {},
     listingActive: listing?.status === "ACTIVE",
     shippingPublishReady: isShippingPublishReady({
       weightKg: asNullableNumber(product?.weightKg),

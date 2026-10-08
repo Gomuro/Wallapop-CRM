@@ -18,6 +18,12 @@ import {
   CATALOG_PAGE_SIZE,
   type InventoryProduct,
 } from "@/lib/inventory/types"
+import { apiGetCategory } from "@/lib/api/categories"
+import {
+  brandFromTypeAttributes,
+  typeAttributesFromFormData,
+  validateExtraUploadFields,
+} from "@/lib/inventory/category-upload-fields"
 import {
   productCreateSchema,
   productUpdateSchema,
@@ -57,6 +63,7 @@ function formToPayload(formData: FormData, fallbackSku?: string) {
   const conditionRaw = String(formData.get("condition") ?? "GOOD").trim()
   const rawSku = String(formData.get("sku") ?? "").trim()
   const packageRaw = String(formData.get("shippingPackageSize") ?? "").trim()
+  const typeAttributes = typeAttributesFromFormData(formData)
 
   return {
     sku: rawSku || fallbackSku || generateFallbackSku(),
@@ -65,7 +72,7 @@ function formToPayload(formData: FormData, fallbackSku?: string) {
     price: optionalFormNumber(formData, "price") ?? Number.NaN,
     categoryId: String(formData.get("categoryId") ?? ""),
     condition: conditionRaw as ProductCondition,
-    brand: String(formData.get("brand") ?? "").trim(),
+    brand: brandFromTypeAttributes(typeAttributes),
     weight: optionalFormNumber(formData, "weight"),
     shippingPackageSize:
       packageRaw === "STANDARD" || packageRaw === "BULKY" ? packageRaw : null,
@@ -74,6 +81,20 @@ function formToPayload(formData: FormData, fallbackSku?: string) {
     heightCm: optionalFormNumber(formData, "heightCm"),
     images: [],
     status: String(formData.get("status") || "ACTIVE") as ProductStatus,
+    typeAttributes,
+  }
+}
+
+async function extraFieldErrors(
+  categoryId: string,
+  typeAttributes: unknown,
+): Promise<Record<string, string>> {
+  if (!categoryId) return {}
+  try {
+    const category = await apiGetCategory(categoryId)
+    return validateExtraUploadFields(category.fields ?? [], typeAttributes)
+  } catch {
+    return {}
   }
 }
 
@@ -120,6 +141,16 @@ export async function createProductAction(
     return {
       error: "Revisa los campos marcados.",
       fieldErrors: firstFieldError(parsed.error),
+    }
+  }
+  const extraErrors = await extraFieldErrors(
+    parsed.data.categoryId,
+    parsed.data.typeAttributes,
+  )
+  if (Object.keys(extraErrors).length > 0) {
+    return {
+      error: "Revisa los campos marcados.",
+      fieldErrors: extraErrors,
     }
   }
 
@@ -169,6 +200,16 @@ export async function updateProductAction(
     return {
       error: "Revisa los campos marcados.",
       fieldErrors: firstFieldError(parsed.error),
+    }
+  }
+  const extraErrors = await extraFieldErrors(
+    parsed.data.categoryId ?? existing.categoryId,
+    parsed.data.typeAttributes,
+  )
+  if (Object.keys(extraErrors).length > 0) {
+    return {
+      error: "Revisa los campos marcados.",
+      fieldErrors: extraErrors,
     }
   }
 

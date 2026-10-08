@@ -43,6 +43,7 @@ export type InventoryProduct = {
   createdAt: string
   updatedAt: string
   listing: InventoryListing | null
+  typeAttributes: Record<string, unknown>
   /** From GET /products list when full listing is omitted. */
   listingActive?: boolean
   shippingPublishReady: boolean

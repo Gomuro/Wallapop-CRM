@@ -55,7 +55,7 @@ function warehouseCreateBody(input: ProductCreateInput) {
     widthCm: input.widthCm ?? null,
     lengthCm: input.lengthCm ?? null,
     heightCm: input.heightCm ?? null,
-    typeAttributes: {},
+    typeAttributes: input.typeAttributes ?? {},
   }
 }
 
@@ -75,6 +75,7 @@ function warehousePatchBody(input: ProductUpdateInput) {
   if (input.widthCm !== undefined) body.widthCm = input.widthCm
   if (input.lengthCm !== undefined) body.lengthCm = input.lengthCm
   if (input.heightCm !== undefined) body.heightCm = input.heightCm
+  if (input.typeAttributes !== undefined) body.typeAttributes = input.typeAttributes
   return body
 }
 
