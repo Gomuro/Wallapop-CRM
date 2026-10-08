@@ -1,0 +1,24 @@
+---
+description: Parallel Wallapop CDP workers (separate ports, same account) — do not invent DOM or implement unpublish without checking Wallapop
+globs: server/src/lib/wallapop-*/**/*.ts
+alwaysApply: true
+---
+
+# Wallapop CDP workers (plan only)
+
+One Wallapop **account**. Several **workers**, each with **its own chrome.exe and CDP port**. Do **not** collapse into one Chrome.
+
+Do **not** implement **sold** (C8, take-down) until the operator confirms the live Wallapop DOM (open the item URL, then the sold control). Guessing selectors is not allowed.
+
+## Workers (now)
+
+1. **Monitor** — not built. Chrome stays up.
+2. **Publish** — port **9222**, profile `ChromeCDP-Persistent`. **Look at the SKU first** (title vs Tu Catálogo). Do not post a duplicate; Wallapop Follow-up may delete it after Yuhu. After Publicar: grab first `tsl-catalog-item` `/item/` href immediately (DOM under Yuhu), then dismiss «Ahora no, gracias». Then quit **this** chrome.exe.
+3. **Sold** (C8, not built) — own port. After the job: quit **that** chrome.exe. Needs a saved public `/item/…` URL.
+
+Later: AI chat worker.
+
+## After a job (chosen)
+
+- **Publish / sold:** close the job tab, then **quit that worker’s chrome.exe**.
+- **Monitor:** do not quit.

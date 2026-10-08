@@ -13,6 +13,8 @@ import {
   ensurePackageSizeIfShown,
   ensureStandardWeightBand,
   envioToggleIsOn,
+  firstCatalogItemUrl,
+  grabCatalogItemUrl,
   isPublicarContextDestroyedError,
   queryMarcaCombo,
   readBrandValue,
@@ -153,6 +155,40 @@ describe("classifyPublishLanding", () => {
   })
 })
 
+describe("firstCatalogItemUrl", () => {
+  it("takes the first public /item/ href (new post is first ~98%)", () => {
+    expect(
+      firstCatalogItemUrl([
+        {
+          title: "Mesa Auxiliar Cama Teqler Regulable",
+          href: "https://es.wallapop.com/item/mesa-auxiliar-cama-teqler-regulable-1310760208",
+          priceText: "44,95 €",
+        },
+        {
+          title: "Silla Ducha Ajustable Altura",
+          href: "https://es.wallapop.com/item/silla-ducha-ajustable-altura-1310699845",
+          priceText: "27,95 €",
+        },
+      ]),
+    ).toBe(
+      "https://es.wallapop.com/item/mesa-auxiliar-cama-teqler-regulable-1310760208",
+    )
+  })
+
+  it("skips rows without a public /item/ href", () => {
+    expect(
+      firstCatalogItemUrl([
+        { title: "Empty", href: "", priceText: "1 €" },
+        {
+          title: "Next",
+          href: "https://es.wallapop.com/item/next-1",
+          priceText: "1 €",
+        },
+      ]),
+    ).toBe("https://es.wallapop.com/item/next-1")
+  })
+})
+
 describe("pickUniqueCatalogItemUrl", () => {
   const helmet = {
     title: "Casco Moto LS2 Advant Carbono XL",
@@ -237,6 +273,40 @@ describe("pickUniqueCatalogItemUrl", () => {
         "https://es.wallapop.com/item/casco-moto-ls2-advant-carbono-xl-1309517660",
       )
       expect(picked.reason).toBe("matched")
+      expect(firstCatalogItemUrl(rows)).toBe(picked.href)
+    } finally {
+      await browser.close()
+    }
+  })
+
+  it("grabs the first /item/ href even when Yuhu covers the row", async () => {
+    const html = fs.readFileSync(
+      path.join(__dirname, "fixtures/wallapop-tsl-catalog-item.html"),
+      "utf8",
+    )
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><html><body>
+        ${html}
+        <tsl-bump-suggestion-modal>
+          <walla-dialog class="BumpSuggestionModal">
+            <div style="position:fixed;inset:0;background:#000;z-index:9999">
+              <p>¡Yuhu! Producto subido</p>
+              <button type="button">Ahora no, gracias</button>
+            </div>
+          </walla-dialog>
+        </tsl-bump-suggestion-modal>
+      </body></html>`)
+      const grabbed = await grabCatalogItemUrl(
+        page,
+        { title: "other CRM title", price: 1 },
+        500,
+      )
+      expect(grabbed.reason).toBe("first_row")
+      expect(grabbed.href).toBe(
+        "https://es.wallapop.com/item/casco-moto-ls2-advant-carbono-xl-1309517660",
+      )
     } finally {
       await browser.close()
     }

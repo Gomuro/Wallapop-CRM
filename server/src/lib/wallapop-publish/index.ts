@@ -38,14 +38,19 @@ export type {
 export { WallapopPublishError, normalizePublishTitle } from "./types";
 export {
   catalogTitleMatchesWanted,
+  firstCatalogItemUrl,
+  grabCatalogItemUrl,
+  parseCatalogPriceEur,
+  pickUniqueCatalogItemUrl,
+  PUBLISHED_CATALOG_ITEMS_EVAL,
+  resolveItemUrlAfterPublish,
+} from "./catalog-url";
+export {
   classifyPublishLanding,
   isPublicarContextDestroyedError,
   isWallapopPublishedCatalogUrl,
   isWallapopUploadFormUrl,
   listingUrlFromPageUrl,
-  parseCatalogPriceEur,
-  pickUniqueCatalogItemUrl,
-  PUBLISHED_CATALOG_ITEMS_EVAL,
   readLandingAfterPublicarClick,
   readUrlAfterPublicarClick,
 } from "./verify";

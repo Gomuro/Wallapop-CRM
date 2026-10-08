@@ -4,87 +4,14 @@ import { wallapopItemUrlOrNull } from "../../../../lib/inventory/wallapop-item-u
 import { log } from "../log";
 import {
   PUBLICAR_SETTLE_MS,
-  normalizePublishTitle,
-  truncateSummary,
   type PageUrlReader,
-  type PublishedCatalogItem,
   type PublishLandingVerdict,
 } from "./types";
 
-export { normalizePublishTitle };
+export { normalizePublishTitle } from "./types";
 
 export function listingUrlFromPageUrl(url: string): string | null {
   return wallapopItemUrlOrNull(url);
-}
-
-/** Same scrape as live CDP — used in tests against captured Tu Catálogo HTML. */
-export const PUBLISHED_CATALOG_ITEMS_EVAL = `(() => {
-  const rows = [...document.querySelectorAll("tsl-catalog-item")];
-  return rows.map((el) => {
-    const group = el.querySelector("[role=group]");
-    const titleEl = el.querySelector("span.info-title");
-    const priceEl = el.querySelector("span.info-price");
-    const link = el.querySelector('a[href*="/item/"]');
-    return {
-      title: (titleEl?.textContent || group?.getAttribute("aria-label") || "").trim(),
-      href: link && "href" in link ? String(link.href) : "",
-      priceText: (priceEl?.textContent || "").trim(),
-    };
-  });
-})()`;
-
-export function parseCatalogPriceEur(text: string): number | null {
-  const compact = text.replace(/\u00a0/g, " ").replace(/[^\d,.\-]/g, "");
-  if (!compact) return null;
-  const normalized = compact.includes(",")
-    ? compact.replace(/\./g, "").replace(",", ".")
-    : compact;
-  const n = Number(normalized);
-  return Number.isFinite(n) ? n : null;
-}
-
-export function catalogTitleMatchesWanted(
-  catalogTitle: string,
-  crmTitle: string,
-): boolean {
-  const catalog = normalizePublishTitle(catalogTitle);
-  const wanted = normalizePublishTitle(crmTitle);
-  if (!catalog || !wanted) return false;
-  if (catalog === wanted) return true;
-  const summary = truncateSummary(wanted);
-  if (catalog === summary) return true;
-  const stripped = catalog.replace(/[.…]+$/u, "").trim();
-  if (stripped.length < 12) return false;
-  return wanted.startsWith(stripped) || summary.startsWith(stripped);
-}
-
-export function pickUniqueCatalogItemUrl(
-  items: PublishedCatalogItem[],
-  wanted: { title: string; price: number },
-): { href: string | null; reason: "matched" | "matched_price" | "none" | "ambiguous" } {
-  const matches = items.filter(
-    (row) =>
-      wallapopItemUrlOrNull(row.href) != null &&
-      catalogTitleMatchesWanted(row.title, wanted.title),
-  );
-  if (matches.length === 0) return { href: null, reason: "none" };
-  if (matches.length === 1) {
-    return {
-      href: wallapopItemUrlOrNull(matches[0].href),
-      reason: "matched",
-    };
-  }
-  const byPrice = matches.filter((row) => {
-    const price = parseCatalogPriceEur(row.priceText);
-    return price != null && Math.abs(price - wanted.price) < 0.009;
-  });
-  if (byPrice.length === 1) {
-    return {
-      href: wallapopItemUrlOrNull(byPrice[0].href),
-      reason: "matched_price",
-    };
-  }
-  return { href: null, reason: "ambiguous" };
 }
 
 export function isWallapopPublishedCatalogUrl(url: string): boolean {
@@ -195,55 +122,6 @@ export async function readUrlAfterPublicarClick(
   const landing = await readLandingAfterPublicarClick(page, settleMs);
   if (landing.urlReadFailed || landing.url == null) return null;
   return listingUrlFromPageUrl(landing.url);
-}
-
-async function readPublishedCatalogItems(
-  page: Page,
-): Promise<PublishedCatalogItem[]> {
-  try {
-    await page
-      .locator("tsl-catalog-item a[href*='/item/']")
-      .first()
-      .waitFor({ timeout: 10_000 });
-  } catch {
-    log("warn", "wallapop_publish_catalog_items_missing");
-  }
-  try {
-    return ((await page.evaluate(PUBLISHED_CATALOG_ITEMS_EVAL)) as
-      | PublishedCatalogItem[]
-      | null) ?? [];
-  } catch (error) {
-    log("warn", "wallapop_publish_catalog_scrape_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    });
-    return [];
-  }
-}
-
-export async function resolveItemUrlAfterPublish(
-  page: Page,
-  landing: Extract<PublishLandingVerdict, { ok: true }>,
-  landingUrl: string | null,
-  wanted: { title: string; price: number },
-): Promise<string | null> {
-  if (landing.reason === "item_url") {
-    return listingUrlFromPageUrl(landingUrl ?? "");
-  }
-  const rows = await readPublishedCatalogItems(page);
-  const picked = pickUniqueCatalogItemUrl(rows, wanted);
-  if (picked.href) {
-    log("info", "wallapop_publish_item_url", {
-      reason: picked.reason,
-      href: picked.href,
-      scanned: rows.length,
-    });
-    return picked.href;
-  }
-  log("warn", "wallapop_publish_item_url_unresolved", {
-    reason: picked.reason,
-    scanned: rows.length,
-  });
-  return null;
 }
 
 const UPLOAD_REVIEW_MESSAGE_EVAL = `(() => {

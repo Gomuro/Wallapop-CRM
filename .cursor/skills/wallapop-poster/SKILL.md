@@ -30,6 +30,14 @@ There is **no** `actions/post-item.ts`, Phase 2 placeholder, or extension simula
 
 Public import path stays `../lib/wallapop-publish` (folder `index.ts` re-exports).
 
+## After Publicar (Yuhu modal)
+
+Live DOM (2026-10-08): `tsl-bump-suggestion-modal` / `walla-dialog.BumpSuggestionModal`, title `¡Yuhu! Producto subido`. Dismiss `Ahora no, gracias` (or `button[aria-label="Close"]`). Do not click `Destacar producto` unless asked.
+
+**D11 — `catalog-url.ts`:** poll `tsl-catalog-item a[href*="/item/"]` via `evaluate` (not Playwright visible). The row is in the DOM under Yuhu; waiting for visibility misses it. First row ~98% (Follow-up can delete/shift — grab immediately). Title match is fallback only. Then dismiss Yuhu. Wallapop rewrites titles (CRM «Mesita de cama…» → «Mesa Auxiliar Cama Teqler Regulable»).
+
+**Do not live-post until the SKU is checked against Tu Catálogo.** Same product already on Wallapop → Follow-up can delete the new row after Yuhu. Yuhu ≠ the listing will stay. Never pick a READY_TO_POST that is a duplicate of an existing live caseta/title.
+
 ## Dry-run rule (D5)
 
 Live click on **Publicar** happens only when **`WALLAPOP_PUBLISH_DRY_RUN === "false"`** (string).

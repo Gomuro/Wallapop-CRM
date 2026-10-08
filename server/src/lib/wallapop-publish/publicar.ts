@@ -18,10 +18,12 @@ import {
   type SetPublishStep,
 } from "./types";
 import {
+  resolveItemUrlAfterPublish,
+} from "./catalog-url";
+import {
   classifyPublishLanding,
   isPublicarContextDestroyedError,
   readLandingAfterPublicarClick,
-  resolveItemUrlAfterPublish,
   wallapopUploadReviewMessage,
 } from "./verify";
 
