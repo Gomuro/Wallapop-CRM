@@ -19,6 +19,7 @@
     "db:seed": "npx tsx server/prisma/seed.ts",
     "db:seed:check": "npx tsx server/prisma/seed.ts --dry-run",
     "db:categories:fetch": "npx tsx server/prisma/fetch-wallapop-categories.ts",
+    "db:brands:fetch": "npx tsx server/prisma/fetch-wallapop-brands.ts",
     "server:dev": "tsx server/src/index.ts",
     "server:start": "tsx server/src/index.ts",
     "server:smoke": "tsx server/scripts/smoke.ts",

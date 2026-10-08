@@ -94,12 +94,36 @@ model Category {
   seoLegacyId              Int?       @map("seo_legacy_id")
   sortOrder                Int        @map("sort_order")
   products                 Product[]
+  brandLinks               BrandCategory[]
   createdAt                DateTime   @default(now()) @map("created_at")
   updatedAt                DateTime   @updatedAt @map("updated_at")
 
   @@index([parentId, sortOrder])
   @@index([path])
   @@map("categories")
+}
+
+model Brand {
+  id         String          @id @default(cuid())
+  wallapopId String          @unique @map("wallapop_id") @db.VarChar(200)
+  name       String          @db.VarChar(200)
+  categories BrandCategory[]
+  createdAt  DateTime        @default(now()) @map("created_at")
+  updatedAt  DateTime        @updatedAt @map("updated_at")
+
+  @@index([name])
+  @@map("brands")
+}
+
+model BrandCategory {
+  brandId    String   @map("brand_id")
+  categoryId String   @map("category_id")
+  brand      Brand    @relation(fields: [brandId], references: [id], onDelete: Cascade)
+  category   Category @relation(fields: [categoryId], references: [id], onDelete: Cascade)
+
+  @@id([brandId, categoryId])
+  @@index([categoryId])
+  @@map("brand_categories")
 }
 
 model Product {

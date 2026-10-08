@@ -213,6 +213,22 @@ describe("API v1 integration (Express + Postgres)", () => {
       expect(res.body.product?.sku).toBe(sku)
     })
 
+    it("lists Wallapop catalog brands for a category", async () => {
+      const anon = await request(app).get("/api/v1/brands")
+      expect(anon.status).toBe(401)
+      const prisma = getPrisma()
+      const leaf = await prisma?.category.findUnique({
+        where: { wallapopId: 9839 },
+        select: { id: true },
+      })
+      expect(leaf?.id).toBeTruthy()
+      const res = await agent.get(
+        `/api/v1/brands?categoryId=${encodeURIComponent(leaf!.id)}&q=Ni`,
+      )
+      expect(res.status).toBe(200)
+      expect(res.body.brands).toContain("Nike")
+    })
+
     it("rejects status on PATCH card body", async () => {
       const res = await agent
         .patch(`/api/v1/products/${productId}`)

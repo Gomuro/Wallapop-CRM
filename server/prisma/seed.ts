@@ -13,6 +13,7 @@ import {
   type FlatCategory,
   type WallapopApiNode,
 } from "./flatten-wallapop-categories"
+import { seedWallapopBrands } from "./seed-wallapop-brands"
 
 type SeedClient = {
   user: {
@@ -174,6 +175,7 @@ async function seedDatabase(rows: FlatCategory[]) {
     }
 
     await seedOperator(prisma)
+    await seedWallapopBrands(prisma)
   } finally {
     await prisma.$disconnect()
   }

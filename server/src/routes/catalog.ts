@@ -14,6 +14,7 @@ import {
   startDefaultAccountAutopost,
   stopDefaultAccountAutopost,
 } from "./accounts"
+import { listBrands } from "./brands"
 import {
   getCategory,
   listCategories,
@@ -43,6 +44,7 @@ export const catalog = Router()
 
 catalog.get("/categories", listCategories)
 catalog.get("/categories/:id", getCategory)
+catalog.get("/brands", listBrands)
 
 catalog.get("/products", listProducts)
 catalog.post("/products", createProduct)
