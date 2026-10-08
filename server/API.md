@@ -131,7 +131,7 @@ Dry-run default: `WALLAPOP_SOLD_DRY_RUN !== "false"` (або body `{ "dryRun": t
 **200** dry-run: `{ ok: true, dryRun: true, step: "before_confirm", product: null, error: null }`.  
 **200** live: `{ ok: true, dryRun: false, step: "sold", product, error: null }`.
 
-Модулі: `server/src/lib/wallapop-sold/`. UI `POST …/sold` не змінюється.
+Модулі: `server/src/lib/wallapop-sold/`. Кнопка картки **Marcar como vendido** → цей ендпоінт (не CRM-only `POST …/sold`). `POST …/sold` лишається для API.
 
 ## Photos (#58)
 

@@ -3,11 +3,12 @@
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 
-import {
-  deleteProductAction,
-  markProductSoldAction,
-} from "@/app/actions/products"
+import { deleteProductAction } from "@/app/actions/products"
 import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
+import {
+  markWallapopSold,
+  wallapopSoldErrorMessage,
+} from "@/lib/api/wallapop-sold"
 import { ConfirmAction } from "@/components/confirm-action"
 
 export function SoldSyncButton({
@@ -37,17 +38,18 @@ export function SoldSyncButton({
     setError(null)
     startTransition(async () => {
       try {
-        const result = await markProductSoldAction(productId)
-        if (result.error) {
-          setError(result.error)
+        const result = await markWallapopSold(productId)
+        if (result.dryRun) {
+          setError(
+            "Prueba: se encontró «Marcar como vendido» en Wallapop y se paró antes de confirmar. El anuncio no se ha vendido.",
+          )
           return
         }
         setSold(true)
         setOpen(false)
         router.refresh()
       } catch (caught) {
-        if (isNextRedirect(caught)) throw caught
-        setError(actionFailureMessage(caught))
+        setError(wallapopSoldErrorMessage(caught))
       }
     })
   }
@@ -61,9 +63,9 @@ export function SoldSyncButton({
       triggerVariant={isSold ? "secondary" : "default"}
       triggerDisabled={isSold}
       title="Marcar como vendido"
-      description="El producto pasará a Vendido y se desactivarán todos los anuncios vinculados."
+      description="Se marcará vendido en Wallapop (ventana aparte) y el producto pasará a Vendido en el CRM."
       confirmLabel="Confirmar"
-      pendingLabel="Sincronizando…"
+      pendingLabel="En Wallapop…"
       error={error}
       pending={pending}
       onConfirm={confirmSold}
