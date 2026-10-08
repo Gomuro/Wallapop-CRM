@@ -19,20 +19,21 @@ function titlesForIds(
   });
 }
 
-const OPEN_FIELD_JS = `((id, label) => {
+const FIND_HOST_JS = `(function findHost(id, label) {
   const byTest = document.querySelector('walla-dropdown[data-testid="' + id + '"]');
-  const host =
-    byTest ||
-    (() => {
-      const labels = [...document.querySelectorAll("label, .walla-text-input__label")];
-      const lab = labels.find((el) =>
-        (el.textContent || "").replace(/\\s+/g, " ").includes(label),
-      );
-      return (
-        lab?.closest("walla-dropdown, tsl-upload-form-dropdown, tsl-upload-form-field-host") ||
-        null
-      );
-    })();
+  if (byTest) return byTest;
+  const labels = [...document.querySelectorAll("label, .walla-text-input__label")];
+  const lab = labels.find((el) =>
+    (el.textContent || "").replace(/\\s+/g, " ").includes(label),
+  );
+  return (
+    lab?.closest("walla-dropdown, tsl-upload-form-dropdown, tsl-upload-form-field-host") ||
+    null
+  );
+})`;
+
+const OPEN_FIELD_JS = `((id, label) => {
+  const host = ${FIND_HOST_JS}(id, label);
   if (!host) return false;
   const btn =
     host.querySelector?.('[role="button"]') ||
@@ -43,12 +44,18 @@ const OPEN_FIELD_JS = `((id, label) => {
   return true;
 })`;
 
-const CLICK_TITLES_JS = `((titles) => {
+/** Options + Aplicar only inside this field's listbox — not Color's «Otro» on Material. */
+const CLICK_TITLES_IN_HOST_JS = `((id, label, titles) => {
   const norm = (s) =>
     (s || "").replace(/\\s+/g, " ").trim().toLowerCase();
   const wanted = titles.map(norm);
+  const host = ${FIND_HOST_JS}(id, label);
+  if (!host) return 0;
+  const expanded = host.querySelector('[aria-expanded="true"]');
+  const listId = expanded?.getAttribute("aria-controls");
+  const list = (listId && document.getElementById(listId)) || host;
   const items = [
-    ...document.querySelectorAll(
+    ...list.querySelectorAll(
       'walla-dropdown-item[role="option"], [role="listbox"] [role="option"]',
     ),
   ];
@@ -56,16 +63,16 @@ const CLICK_TITLES_JS = `((titles) => {
   for (const el of items) {
     const aria = norm(el.getAttribute("aria-label"));
     const body = norm(el.textContent);
-    if (!wanted.some((w) => aria === w || body === w || aria.includes(w) || body.includes(w))) {
-      continue;
-    }
+    if (!wanted.some((w) => aria === w || body === w)) continue;
     const box = el.querySelector("input[type=checkbox]");
     if (box && !box.checked) box.click();
     else el.click();
     n += 1;
   }
-  const apply = [...document.querySelectorAll("walla-button, button")].find((el) =>
-    /aplicar|confirmar|guardar|ok/i.test(el.innerText || el.getAttribute("text") || ""),
+  const apply = [...list.querySelectorAll("walla-button, button")].find((el) =>
+    /aplicar|confirmar|guardar|ok/i.test(
+      el.innerText || el.getAttribute("text") || "",
+    ),
   );
   if (apply) (apply.shadowRoot?.querySelector("button") || apply).click();
   return n;
@@ -95,7 +102,7 @@ export async function ensureExtraUploadFields(
     await page.waitForTimeout(400);
     const clicked = opened
       ? ((await page.evaluate(
-          `${CLICK_TITLES_JS}(${JSON.stringify(titles)})`,
+          `${CLICK_TITLES_IN_HOST_JS}(${JSON.stringify(field.id)}, ${JSON.stringify(field.label)}, ${JSON.stringify(titles)})`,
         )) as number)
       : 0;
     await closeOpenDropdowns(page);
