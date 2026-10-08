@@ -32,28 +32,55 @@ const FIND_HOST_JS = `(function findHost(id, label) {
   );
 })`;
 
+const WALK_JS = `function walk(node, acc) {
+  if (!node) return acc;
+  if (node.querySelectorAll) {
+    for (const el of node.querySelectorAll("*")) {
+      acc.push(el);
+      if (el.shadowRoot) walk(el.shadowRoot, acc);
+    }
+  }
+  return acc;
+}`;
+
 const OPEN_FIELD_JS = `((id, label) => {
+  ${WALK_JS}
   const host = ${FIND_HOST_JS}(id, label);
   if (!host) return false;
-  const btn =
-    host.querySelector?.('[role="button"]') ||
-    host.querySelector?.("walla-dropdown [role=button]");
+  const btn = walk(host, []).find(
+    (el) => el.getAttribute && el.getAttribute("role") === "button",
+  );
   const target = btn || host;
   target.scrollIntoView?.({ block: "center" });
   target.click?.();
   return true;
 })`;
 
-/** Options + Aplicar only inside this field's listbox — not Color's «Otro» on Material. */
-const CLICK_TITLES_IN_HOST_JS = `((id, label, titles) => {
+/** Portaled list + checkbox id + sticky confirm (label varies). Borrar clears leftover Metal. */
+const CLICK_TITLES_IN_HOST_JS = `((id, label, titles, optionIds) => {
+  ${WALK_JS}
   const norm = (s) =>
     (s || "").replace(/\\s+/g, " ").trim().toLowerCase();
   const wanted = titles.map(norm);
+  const ids = optionIds.map(norm);
   const host = ${FIND_HOST_JS}(id, label);
   if (!host) return 0;
-  const expanded = host.querySelector('[aria-expanded="true"]');
+  const expanded = walk(host, []).find(
+    (el) => el.getAttribute && el.getAttribute("aria-expanded") === "true",
+  );
   const listId = expanded?.getAttribute("aria-controls");
-  const list = (listId && document.getElementById(listId)) || host;
+  const floating = [...document.querySelectorAll(".walla-dropdown__floating-area")].find(
+    (el) => el.getBoundingClientRect().height > 40,
+  );
+  const list = (listId && document.getElementById(listId)) || floating || host;
+  const clear = [...list.querySelectorAll("walla-button")].find((el) => {
+    const t =
+      el.shadowRoot?.querySelector("[part=button-text]")?.textContent ||
+      el.innerText ||
+      "";
+    return /borrar|limpiar/i.test(t);
+  });
+  if (clear) (clear.shadowRoot?.querySelector("button") || clear).click();
   const items = [
     ...list.querySelectorAll(
       'walla-dropdown-item[role="option"], [role="listbox"] [role="option"]',
@@ -61,20 +88,20 @@ const CLICK_TITLES_IN_HOST_JS = `((id, label, titles) => {
   ];
   let n = 0;
   for (const el of items) {
+    const box = el.querySelector("input[type=checkbox], input[type=radio]");
+    const boxId = norm(box?.id || box?.getAttribute("name"));
     const aria = norm(el.getAttribute("aria-label"));
-    const body = norm(el.textContent);
-    if (!wanted.some((w) => aria === w || body === w)) continue;
-    const box = el.querySelector("input[type=checkbox]");
+    const hit =
+      ids.some((oid) => boxId === oid) || wanted.some((w) => aria === w);
+    if (!hit) continue;
     if (box && !box.checked) box.click();
     else el.click();
     n += 1;
   }
-  const apply = [...list.querySelectorAll("walla-button, button")].find((el) =>
-    /aplicar|confirmar|guardar|ok/i.test(
-      el.innerText || el.getAttribute("text") || "",
-    ),
+  const sticky = list.querySelector(
+    ".walla-dropdown__sticky-button walla-button, .walla-dropdown__sticky-button button",
   );
-  if (apply) (apply.shadowRoot?.querySelector("button") || apply).click();
+  if (sticky) (sticky.shadowRoot?.querySelector("button") || sticky).click();
   return n;
 })`;
 
@@ -102,9 +129,10 @@ export async function ensureExtraUploadFields(
     await page.waitForTimeout(400);
     const clicked = opened
       ? ((await page.evaluate(
-          `${CLICK_TITLES_IN_HOST_JS}(${JSON.stringify(field.id)}, ${JSON.stringify(field.label)}, ${JSON.stringify(titles)})`,
+          `${CLICK_TITLES_IN_HOST_JS}(${JSON.stringify(field.id)}, ${JSON.stringify(field.label)}, ${JSON.stringify(titles)}, ${JSON.stringify(ids)})`,
         )) as number)
       : 0;
+    await page.waitForTimeout(400);
     await closeOpenDropdowns(page);
     log("info", "wallapop_publish_extra_field", {
       id: field.id,
