@@ -1,6 +1,7 @@
 import type { Page } from "playwright";
 
 import {
+  inspectHold,
   isInFlightPublishAborted,
   isPublishAbortedError,
   PublishAbortedError,
@@ -150,25 +151,6 @@ export type FinishPublishArgs = {
   mark: SetPublishStep;
 };
 
-/** Pause before Publicar so the operator can check Color/Material. `0` skips. Default 120s. */
-function publishHoldMs(): number {
-  const raw = process.env.WALLAPOP_PUBLISH_HOLD_MS?.trim();
-  if (raw === undefined || raw === "") return 120_000;
-  const n = Number(raw);
-  return Number.isFinite(n) && n > 0 ? n : 0;
-}
-
-async function holdBeforePublicar(page: Page): Promise<void> {
-  const ms = publishHoldMs();
-  if (ms <= 0) return;
-  log("info", "wallapop_publish_hold_before_publicar", { ms });
-  const deadline = Date.now() + ms;
-  while (Date.now() < deadline) {
-    throwIfPublishAborted();
-    await page.waitForTimeout(Math.min(1_000, deadline - Date.now()));
-  }
-}
-
 export async function finishPublishOrDryRun(
   args: FinishPublishArgs,
 ): Promise<PublishWallapopResult> {
@@ -189,6 +171,6 @@ export async function finishPublishOrDryRun(
       externalUrl: null,
     };
   }
-  await holdBeforePublicar(page);
+  await inspectHold(page, "before_publicar");
   return publishLive(page, input);
 }
