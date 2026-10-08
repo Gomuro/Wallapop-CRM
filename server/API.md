@@ -28,6 +28,7 @@
 | `CORS_ORIGIN` | Origin Next (локально `http://localhost:3000`, проді — Vercel). Кілька через кому |
 | `API_ORIGIN` | Опційно для `npm run server:smoke`, якщо не `http://127.0.0.1:$PORT` |
 | `WALLAPOP_PUBLISH_DRY_RUN` | Publish: не `false` = стоп перед Publicar. Див. [Publish](#publish-phase-1) |
+| `WALLAPOP_SOLD_DRY_RUN` | C8 sold: не `false` = стоп перед confirm `#markAsSoldButton`. Не reuse publish-env. Див. [Wallapop sold](#wallapop-sold-c8) |
 | `WALLAPOP_AUTOPOST` | Deprecated / ignored. Черга вмикається з UI `POST /accounts/default/autopost/start` (`accounts.autopost_enabled`) |
 | `WALLAPOP_AUTOPOST_INTERVAL_MS` | Fallback інтервалу, якщо `accounts.autopost_interval_ms` null. Default `900000` = 15 хв + ±20% jitter. UI `PATCH /accounts/default/autopost` перемагає env |
 | `WALLAPOP_POSTING_STALE_MS` | Watchdog: `POSTING` старший за це (default `1200000` = 20 хв) і Chrome не в `publish` → retry. Див. [Autopost queue](#autopost-queue) |
@@ -48,7 +49,10 @@
 | 401 | `UNAUTHORIZED` | Немає/битий токен |
 | 404 | `NOT_FOUND` | Немає ресурсу або невідомий шлях |
 | 409 | `SKU_TAKEN` | Унікальний SKU |
-| 409 | `ALREADY_SOLD` | Повторний `POST …/sold` |
+| 409 | `ALREADY_SOLD` | Повторний `POST …/sold` або `…/wallapop-sold` |
+| 409 | `LISTING_NOT_ACTIVE` | `POST …/wallapop-sold` без listing `ACTIVE` |
+| 409 | `NO_ITEM_URL` | Немає `https://es.wallapop.com/item/…` |
+| 500 | `SOLD_FAILED` | Браузер C8 упав, або Wallapop уже vendido а DB не записала |
 | 409 | `PRODUCT_SOLD` | `PATCH …/status` на вже проданому SKU |
 | 500 | `INTERNAL` | Несподівана помилка |
 | 501 | `NOT_IMPLEMENTED` | Контракт є, хендлера ще немає |
@@ -111,7 +115,23 @@ Postman-колекція: `server/postman/`.
 | Метод | Шлях | Нотатки |
 |-------|------|---------|
 | PATCH | `/api/v1/products/:id/status` | JSON `{ "status": "ACTIVE" \| "INACTIVE" }`. Лише складський статус; listings не чіпаються. **200** `{ product }` (той самий shape, що GET `/:id`). `SOLD` у body → **400** `VALIDATION_ERROR`. Продукт уже `SOLD` → **409** `PRODUCT_SOLD`. |
-| POST | `/api/v1/products/:id/sold` | Опційно `{ "soldPrice": number }` (EUR, як `price`); порожнє `{}` або без body — `soldPrice` = поточний `price`. Одна транзакція: `status` `SOLD`, `soldAt` (серверний now), усі `product_listings` → `DEACTIVATED` (`external_url` не змінюється). **200** `{ product }`. Повтор → **409** `ALREADY_SOLD`. |
+| POST | `/api/v1/products/:id/sold` | Опційно `{ "soldPrice": number }` (EUR, як `price`); порожнє `{}` або без body — `soldPrice` = поточний `price`. Одна транзакція: `status` `SOLD`, `soldAt` (серверний now), усі `product_listings` → `DEACTIVATED` (`external_url` не змінюється). **200** `{ product }`. Повтор → **409** `ALREADY_SOLD`. CRM-only, без браузера. |
+| POST | `/api/v1/products/:id/wallapop-sold` | C8: Wallapop **Marcar como vendido** потім та сама транзакція, що `POST …/sold`. Див. [Wallapop sold](#wallapop-sold-c8). |
+
+## Wallapop sold (C8)
+
+Один Chrome **9222** / `ChromeCDP-Persistent`. Sold — **окреме вікно** (не другий порт). Слот `sold` може йти паралельно з `publish`; повторний sold → **409** `BROWSER_BUSY`. Login/logout/rehydrate ексклюзивні.
+
+Канон: лише `ProductListing.externalUrl` = `https://es.wallapop.com/item/…`. Listing має бути `ACTIVE`. Продукт уже `SOLD` → **409** `ALREADY_SOLD` (браузер ні). Session не `ACTIVE` → **409** `NOT_ACTIVE`.
+
+Браузер (живий DOM 2026-10-08): `[class*="ItemDetailSellerButtons"]` `walla-button[text="Marcar como vendido"]` (не Destacar / Editar / Reservar / Eliminar) → нова вкладка `tsl-sold-modal` → `#markAsSoldButton` (не Cancelar) → `/app/catalog/sold`, перший `.CatalogItem__content--sold` **href** збігається з `externalUrl`. Немає match → **500** `SOLD_FAILED`, CRM не писати. Після Wallapop OK — `markProductSoldTx` (`external_url` не затирати). DB fail — **без** rollback на Wallapop.
+
+Dry-run default: `WALLAPOP_SOLD_DRY_RUN !== "false"` (або body `{ "dryRun": true }`) — знайти кнопку, **не** confirm. Live: env рівно `false`.
+
+**200** dry-run: `{ ok: true, dryRun: true, step: "before_confirm", product: null, error: null }`.  
+**200** live: `{ ok: true, dryRun: false, step: "sold", product, error: null }`.
+
+Модулі: `server/src/lib/wallapop-sold/`. UI `POST …/sold` не змінюється.
 
 ## Photos (#58)
 
@@ -368,7 +388,7 @@ Chrome / вкладки Wallapop відкриваються коли потрі�
 | Login / 2FA | `attachOrLaunch` | після logout / FAILED — `closeWallapopBrowser` = quit Chrome |
 | `GET /accounts/status` reconcile | attach-only; при NONE — quit | не spawn зі status |
 | Publish / **Probar publicación** | live: після дії **quit chrome.exe**. Dry-run (Probar): лише закрити upload-таб, Chrome лишається подивитись форму | — |
-| `closeWallapopBrowser()` / `quitWallapopChrome()` | disconnect + **quit chrome.exe**; профіль на диску. Під час publish busy logout кидає `BROWSER_BUSY`. | — |
+| `closeWallapopBrowser()` / `quitWallapopChrome()` | disconnect + **quit chrome.exe**; профіль на диску. Logout кидає `BROWSER_BUSY`, якщо слот publish або sold зайнятий. | — |
 
 **Probar:** dry-run зупиняється **перед** `Publicar` (форма заповнена в Chrome, клік Publicar не робиться). Повідомлення UI типу «Rellena el formulario…» — очікувана підказка для live publish; при успішному dry-run API повертає `step: "before_publicar"`.
 
@@ -403,7 +423,7 @@ Revert `POSTING` → `READY_TO_POST` лише якщо був claim і Publicar 
 | 401 | `UNAUTHORIZED` | Немає cookie |
 | 404 | `NOT_FOUND` | Продукт / default account |
 | 409 | `NOT_ACTIVE` | Session не ACTIVE |
-| 409 | `BROWSER_BUSY` | Chrome зайнятий іншою дією (login / logout / publish / rehydrate) |
+| 409 | `BROWSER_BUSY` | Chrome зайнятий іншою дією (login / logout / publish / sold / rehydrate). Слоти publish+sold можуть бути разом; два publish або два sold — ні |
 | 409 | `ALREADY_POSTED` | Listing уже опублікований / claimed / має публічний `/item/…` |
 | 409 | `NOT_PUBLISHABLE` | Складський статус продукту `SOLD` або `INACTIVE` |
 | 400 | `SHIPPING_NOT_READY` | Немає peso (live publish, до claim). Medidas не обов’язкові. |

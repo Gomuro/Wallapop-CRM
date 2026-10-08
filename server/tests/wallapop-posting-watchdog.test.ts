@@ -92,6 +92,16 @@ describe("classifyStalePostingReason", () => {
       }),
     ).toBe("timeout")
   })
+
+  it("does not treat sold as an in-flight publish", () => {
+    expect(
+      classifyStalePostingReason({
+        busy: "sold",
+        chromeAlive: true,
+        pageClosed: false,
+      }),
+    ).toBe("timeout")
+  })
 })
 
 describe("statusAfterStalePosting", () => {

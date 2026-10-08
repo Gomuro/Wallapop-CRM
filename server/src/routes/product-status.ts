@@ -8,6 +8,7 @@ import {
 import { deleteLocalImage } from "../../../lib/uploads/delete-local-image"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
+import { markProductSoldTx, type SoldTxResult } from "../lib/product-sold"
 import { prismaErrorCode } from "../lib/prisma-error"
 import { loadProductCard, paramId, sendZod, toProductJson } from "./product-json"
 
@@ -85,41 +86,6 @@ export async function patchProductStatus(req: Request, res: Response) {
     return
   }
   res.json({ product: toProductJson(product) })
-}
-
-type SoldTxResult =
-  | { kind: "not_found" }
-  | { kind: "already_sold" }
-  | { kind: "ok" }
-
-type SoldBody = ReturnType<typeof productSoldBodySchema.parse>
-
-async function markProductSoldTx(
-  prisma: PrismaDb,
-  id: string,
-  body: SoldBody,
-): Promise<SoldTxResult> {
-  return prisma.$transaction(async (tx) => {
-    const existing = await tx.product.findUnique({
-      where: { id },
-      select: { id: true, status: true, price: true },
-    })
-    if (!existing) return { kind: "not_found" }
-    if (existing.status === "SOLD") return { kind: "already_sold" }
-    await tx.product.update({
-      where: { id },
-      data: {
-        status: "SOLD",
-        soldAt: new Date(),
-        soldPrice: body.soldPrice ?? existing.price,
-      },
-    })
-    await tx.productListing.updateMany({
-      where: { productId: id },
-      data: { status: "DEACTIVATED" },
-    })
-    return { kind: "ok" }
-  })
 }
 
 function sendSoldTxResult(res: Response, txResult: SoldTxResult): boolean {

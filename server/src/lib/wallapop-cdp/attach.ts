@@ -241,12 +241,6 @@ function cdpUnavailableMessage(cause: unknown): string {
   return `Chrome CDP no disponible (${CDP_URL}). Comprueba que Google Chrome esté instalado o conecta la cuenta Wallapop. ${detail}`
 }
 
-/**
- * Page for publish / dry-run. Reuses cached CDP handle when the connection is alive.
- * Always opens a **new** tab (`ownedPage: true`) for the upload flow so `/wall` stays.
- * If Chrome is not listening on CDP, spawns Chrome (same as login / boot rehydrate).
- * After publish the API quits chrome.exe (`quitWallapopChrome`); next run spawn/attach again.
- */
 async function resetStaleCdpHandle(): Promise<void> {
   if (!handle) return
   const connected = await isCdpConnected(handle)
@@ -287,23 +281,18 @@ async function reopenCdpIfPagesFail(): Promise<void> {
   }
 }
 
-async function openOwnedUploadTab(): Promise<Page> {
-  if (!handle) {
-    throw new Error(cdpUnavailableMessage(new Error("CDP handle missing")))
-  }
-  const page = await handle.context.newPage()
-  page.setDefaultTimeout(ACTION_TIMEOUT_MS)
-  await page.bringToFront().catch(() => {})
-  handle = { ...handle, page, ownedPage: true }
-  log("info", "wallapop_upload_tab_opened", { ownedPage: true })
-  return page
-}
-
-export async function ensureWallapopPage(): Promise<Page> {
+/**
+ * Attach (or spawn) Chrome CDP. Shared by publish/sold worker windows
+ * and login. Does not open a job tab/window.
+ */
+export async function ensureCdpAttached(): Promise<WallapopBrowserHandle> {
   await resetStaleCdpHandle()
   await attachCdpHandleOrThrow()
   await reopenCdpIfPagesFail()
-  return openOwnedUploadTab()
+  if (!handle) {
+    throw new Error(cdpUnavailableMessage(new Error("CDP handle missing")))
+  }
+  return handle
 }
 
 async function isCdpConnected(current: WallapopBrowserHandle): Promise<boolean> {

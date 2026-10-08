@@ -6,6 +6,7 @@ import {
   getBrowserBusy,
   getWallapopHandle,
   isClosedPage,
+  peekWorkerPage,
   type BrowserBusy,
 } from "./wallapop-cdp"
 
@@ -44,6 +45,8 @@ export function isWallapopChromeAlive(): boolean {
 }
 
 export function isWallapopHandlePageClosed(): boolean {
+  const publishPage = peekWorkerPage("publish")
+  if (publishPage) return isClosedPage(publishPage)
   const handle = getWallapopHandle()
   if (!handle) return false
   return isClosedPage(handle.page)

@@ -3,6 +3,9 @@ import { afterEach, describe, expect, it } from "vitest"
 import {
   abortInFlightPublish,
   consumeKeepChromeAfterAbort,
+  isBrowserBusyError,
+  isBrowserPublishBusy,
+  isBrowserSoldBusy,
   isClosedPage,
   isHandleAlive,
   isInFlightPublishAborted,
@@ -226,5 +229,48 @@ describe("abortInFlightPublish", () => {
     releaseGate()
     await expect(run).rejects.toSatisfy(isPublishAbortedError)
     expect(consumeKeepChromeAfterAbort()).toBe(true)
+  })
+})
+
+describe("worker slots", () => {
+  afterEach(() => {
+    resetWallapopPublishAbortForTests()
+  })
+
+  it("allows publish and sold together, not two publishes", async () => {
+    let releasePublish!: () => void
+    const publishGate = new Promise<void>((resolve) => {
+      releasePublish = resolve
+    })
+    const publishRun = runWithBrowserBusy("publish", async () => {
+      await publishGate
+    })
+    expect(isBrowserPublishBusy()).toBe(true)
+    await runWithBrowserBusy("sold", async () => {
+      expect(isBrowserSoldBusy()).toBe(true)
+      expect(isBrowserPublishBusy()).toBe(true)
+    })
+    await expect(runWithBrowserBusy("publish", async () => {})).rejects.toSatisfy(
+      isBrowserBusyError,
+    )
+    releasePublish()
+    await publishRun
+    expect(isBrowserPublishBusy()).toBe(false)
+    expect(isBrowserSoldBusy()).toBe(false)
+  })
+
+  it("blocks login while sold is running", async () => {
+    let releaseSold!: () => void
+    const soldGate = new Promise<void>((resolve) => {
+      releaseSold = resolve
+    })
+    const soldRun = runWithBrowserBusy("sold", async () => {
+      await soldGate
+    })
+    await expect(runWithBrowserBusy("login", async () => {})).rejects.toSatisfy(
+      isBrowserBusyError,
+    )
+    releaseSold()
+    await soldRun
   })
 })

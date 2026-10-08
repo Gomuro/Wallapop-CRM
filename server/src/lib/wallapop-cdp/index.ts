@@ -12,7 +12,7 @@ export {
   CDP_PORT,
   CDP_URL,
   connectCdpHandle,
-  ensureWallapopPage,
+  ensureCdpAttached,
   getWallapopHandle,
   hasOpenWallapopBrowser,
   isClosedPage,
@@ -31,8 +31,10 @@ export {
   BrowserBusyError,
   consumeKeepChromeAfterAbort,
   getBrowserBusy,
+  isAnyWorkerSlotBusy,
   isBrowserBusyError,
   isBrowserPublishBusy,
+  isBrowserSoldBusy,
   isInFlightPublishAborted,
   isPublishAbortedError,
   PublishAbortedError,
@@ -40,6 +42,7 @@ export {
   runWithBrowserBusy,
   throwIfPublishAborted,
   type BrowserBusy,
+  type BrowserWorkerSlot,
 } from "./busy"
 
 export {
@@ -48,10 +51,19 @@ export {
   isLoginOr2faUrl,
   isWallFeedUrl,
   pickLiveSessionPage,
+  quitChromeIfNoWorkerSlots,
   quitWallapopChrome,
   shouldCloseUploadTab,
   type PageUrlSnapshot,
 } from "./tabs"
+
+export {
+  closeSoldJobPages,
+  ensureWallapopPage,
+  ensureWorkerWindow,
+} from "./windows"
+
+export { getWorkerPage, peekWorkerPage, registerSoldJobPage } from "./worker-pages"
 
 export async function firstVisible(
   page: Page,

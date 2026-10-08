@@ -11,7 +11,11 @@ import {
   WALLAPOP_WALL_URL,
   type WallapopBrowserHandle,
 } from "./attach"
-import { BrowserBusyError, getBrowserBusy } from "./busy"
+import {
+  BrowserBusyError,
+  isBrowserPublishBusy,
+  isBrowserSoldBusy,
+} from "./busy"
 
 async function sendCdpBrowserClose(
   browser: WallapopBrowserHandle["browser"],
@@ -52,11 +56,26 @@ export async function quitWallapopChrome(): Promise<void> {
 
 /**
  * Disconnect Playwright, quit chrome.exe, keep the Persistent profile on disk.
- * Blocked while publish holds the busy lock (use `quitWallapopChrome` after the lock).
+ * Blocked while a worker slot holds Chrome (use `quitWallapopChrome` after the lock).
  */
 export async function closeWallapopBrowser(): Promise<void> {
-  if (getBrowserBusy() === "publish") {
+  if (isBrowserPublishBusy()) {
     throw new BrowserBusyError("publish", "logout")
+  }
+  if (isBrowserSoldBusy()) {
+    throw new BrowserBusyError("sold", "logout")
+  }
+  await quitWallapopChrome()
+}
+
+/** After a worker job: quit chrome.exe only if the other slot is idle. */
+export async function quitChromeIfNoWorkerSlots(): Promise<void> {
+  if (isBrowserPublishBusy() || isBrowserSoldBusy()) {
+    log("info", "wallapop_chrome_kept_other_slot", {
+      publish: isBrowserPublishBusy(),
+      sold: isBrowserSoldBusy(),
+    })
+    return
   }
   await quitWallapopChrome()
 }

@@ -24,6 +24,7 @@ import {
   putProductListing,
 } from "./product-listings"
 import { publishProduct } from "./product-publish"
+import { postProductWallapopSold } from "./product-wallapop-sold"
 import {
   deleteProductImage,
   patchProductImages,
@@ -66,6 +67,7 @@ catalog.delete("/products/:id/images/:imageId", deleteProductImage)
 catalog.get("/products/:id/listing", getProductListing)
 catalog.put("/products/:id/listing", putProductListing)
 catalog.post("/products/:id/publish", publishProduct)
+catalog.post("/products/:id/wallapop-sold", postProductWallapopSold)
 
 catalog.get("/accounts/default", getDefaultAccount)
 catalog.patch("/accounts/default/autopost", patchDefaultAccountAutopost)

@@ -21,6 +21,33 @@ export function isWallapopItemUrl(url: string | null | undefined): boolean {
   return wallapopItemUrlOrNull(url) != null
 }
 
+/** C8: public item URL on es.wallapop.com only. */
+export function wallapopEsItemUrlOrNull(
+  url: string | null | undefined,
+): string | null {
+  const href = wallapopItemUrlOrNull(url)
+  if (!href) return null
+  try {
+    if (new URL(href).hostname.toLowerCase() !== "es.wallapop.com") return null
+    return href
+  } catch {
+    return null
+  }
+}
+
+/** Compare two /item/ URLs ignoring host/query (same listing). */
+export function wallapopItemPathKey(
+  url: string | null | undefined,
+): string | null {
+  const href = wallapopItemUrlOrNull(url)
+  if (!href) return null
+  try {
+    return new URL(href).pathname.replace(/\/$/, "").toLowerCase()
+  } catch {
+    return null
+  }
+}
+
 /** Prisma `ProductListing` filter: no public `/item/` URL (null or leftover junk). */
 export const listingWithoutPublicItemUrlWhere = {
   OR: [

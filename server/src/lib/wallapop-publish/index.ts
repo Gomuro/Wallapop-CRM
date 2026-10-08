@@ -12,7 +12,7 @@ import {
   isInFlightPublishAborted,
   isPublishAbortedError,
   PublishAbortedError,
-  quitWallapopChrome,
+  quitChromeIfNoWorkerSlots,
   runWithBrowserBusy,
 } from "../wallapop-cdp";
 import { log, serializeError } from "../log";
@@ -156,7 +156,8 @@ export async function publishWallapopInBrowser(
     } else if (input.dryRun) {
       await closeWallapopUploadTab();
     } else {
-      await quitWallapopChrome();
+      await closeWallapopUploadTab();
+      await quitChromeIfNoWorkerSlots();
     }
   }
 }

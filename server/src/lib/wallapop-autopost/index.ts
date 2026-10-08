@@ -4,7 +4,7 @@ import { getRecentAutopostSkips } from "../autopost-recent-skips"
 import { findDefaultAccountId } from "../default-account"
 import { getPrisma } from "../db"
 import { log, serializeError } from "../log"
-import { getBrowserBusy } from "../wallapop-cdp"
+import { isBrowserPublishBusy } from "../wallapop-cdp"
 import { getWallapopSessionSnapshot } from "../wallapop-session"
 import { recoverStalePostingListings } from "../wallapop-posting-watchdog"
 import { runProductPublish } from "../../routes/product-publish"
@@ -212,9 +212,8 @@ async function autopostTickGates(
     log("info", "wallapop_autopost_skip_session", { status: session.status })
     return null
   }
-  const busy = getBrowserBusy()
-  if (busy !== "idle") {
-    log("info", "wallapop_autopost_skip_busy", { busy })
+  if (isBrowserPublishBusy()) {
+    log("info", "wallapop_autopost_skip_busy", { busy: "publish" })
     return null
   }
   const accountId = await findDefaultAccountId(prisma)
