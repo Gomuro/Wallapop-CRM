@@ -1,0 +1,576 @@
+{
+  "components": [
+    {
+      "id": "suggested_data_banner",
+      "reloads_when_changed": false,
+      "is_required": false,
+      "is_disabled": false,
+      "type": "feature_banner",
+      "data": {
+        "type": "banner",
+        "title": "Completa la información manualmente",
+        "paragraph": "No se han podido rellenar los detalles del producto por ti. Complétalos para terminar.",
+        "background": "low_contrast",
+        "size": "S"
+      },
+      "breakpoints": {
+        "extra_small": 12,
+        "small": 12,
+        "medium": 12,
+        "large": 12
+      }
+    },
+    {
+      "id": "photo",
+      "reloads_when_changed": false,
+      "is_required": false,
+      "is_disabled": false,
+      "type": "custom",
+      "data": {
+        "type": "photo",
+        "photos": [],
+        "max_number_of_pictures": 10,
+        "label": "Not used",
+        "placeholder": "Not used"
+      },
+      "breakpoints": {
+        "extra_small": 12,
+        "small": 12,
+        "medium": 12,
+        "large": 12
+      }
+    },
+    {
+      "id": "brand",
+      "reloads_when_changed": false,
+      "is_required": false,
+      "is_disabled": false,
+      "type": "combo_box",
+      "data": {
+        "type": "combo_box_data",
+        "search_placeholder": "Busca una marca",
+        "label": "Marca",
+        "source": {
+          "path": "/api/v3/attributes/brand/options?category_leaf_id=24250"
+        },
+        "title": "Selecciona una marca"
+      },
+      "breakpoints": {
+        "extra_small": 12,
+        "small": 12,
+        "medium": 6,
+        "large": 6
+      }
+    },
+    {
+      "id": "color",
+      "reloads_when_changed": false,
+      "is_required": true,
+      "is_disabled": false,
+      "type": "select_box",
+      "data": {
+        "type": "select_box_data",
+        "placeholder": "Color*",
+        "action": {
+          "title": "Color",
+          "subtitle": "Selecciona hasta 2 colores",
+          "minimum": 1,
+          "maximum": 2,
+          "options": [
+            {
+              "id": "black",
+              "title": "Negro",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_black.png"
+            },
+            {
+              "id": "brown",
+              "title": "Marrón",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_brown.png"
+            },
+            {
+              "id": "beige",
+              "title": "Beige",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_beige.png"
+            },
+            {
+              "id": "gray",
+              "title": "Gris",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_gray.png"
+            },
+            {
+              "id": "white",
+              "title": "Blanco",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_white.png"
+            },
+            {
+              "id": "blue",
+              "title": "Azul",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_blue.png"
+            },
+            {
+              "id": "teal",
+              "title": "Verde azulado",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_teal.png"
+            },
+            {
+              "id": "turquoise",
+              "title": "Turquesa",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_turquoise.png"
+            },
+            {
+              "id": "green",
+              "title": "Verde",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_green.png"
+            },
+            {
+              "id": "olive_green",
+              "title": "Verde oliva",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_olive_green.png"
+            },
+            {
+              "id": "yellow",
+              "title": "Amarillo",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_yellow.png"
+            },
+            {
+              "id": "orange",
+              "title": "Naranja",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_orange.png"
+            },
+            {
+              "id": "red",
+              "title": "Rojo",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_red.png"
+            },
+            {
+              "id": "pink",
+              "title": "Rosa",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_pink.png"
+            },
+            {
+              "id": "purple",
+              "title": "Morado",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_purple.png"
+            },
+            {
+              "id": "gold",
+              "title": "Dorado",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_gold.png"
+            },
+            {
+              "id": "silver",
+              "title": "Plateado",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_silver.png"
+            },
+            {
+              "id": "multicolor",
+              "title": "Multicolor",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_multicolor.png"
+            },
+            {
+              "id": "other",
+              "title": "Otro",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_other.png"
+            },
+            {
+              "id": "transparent",
+              "title": "Transparente",
+              "icon": "https://catalog-assets-cdn.wallapop.com/icon_color_transparent.png"
+            }
+          ]
+        },
+        "action_type": "static_multi_selector",
+        "title": "Color*"
+      }
+    },
+    {
+      "id": "material",
+      "reloads_when_changed": false,
+      "is_required": true,
+      "is_disabled": false,
+      "type": "select_box",
+      "data": {
+        "type": "select_box_data",
+        "placeholder": "Material*",
+        "action": {
+          "title": "Material",
+          "subtitle": "Selecciona hasta 3 materiales",
+          "minimum": 1,
+          "maximum": 3,
+          "options": [
+            {
+              "id": "acrylic",
+              "title": "Acrílico"
+            },
+            {
+              "id": "cotton",
+              "title": "Algodón"
+            },
+            {
+              "id": "suede",
+              "title": "Ante"
+            },
+            {
+              "id": "bamboo",
+              "title": "Bambú"
+            },
+            {
+              "id": "cashmere",
+              "title": "Cachemir"
+            },
+            {
+              "id": "hemp",
+              "title": "Cáñamo"
+            },
+            {
+              "id": "ceramics",
+              "title": "Cerámica"
+            },
+            {
+              "id": "chenille",
+              "title": "Chenilla"
+            },
+            {
+              "id": "chiffon",
+              "title": "Chifón"
+            },
+            {
+              "id": "cork",
+              "title": "Corcho"
+            },
+            {
+              "id": "flannel",
+              "title": "Franela"
+            },
+            {
+              "id": "rubber",
+              "title": "Goma"
+            },
+            {
+              "id": "wool",
+              "title": "Lana"
+            },
+            {
+              "id": "linen",
+              "title": "Lino"
+            },
+            {
+              "id": "wood",
+              "title": "Madera"
+            },
+            {
+              "id": "metal",
+              "title": "Metal"
+            },
+            {
+              "id": "microfiber",
+              "title": "Microfibra"
+            },
+            {
+              "id": "wicker",
+              "title": "Mimbre"
+            },
+            {
+              "id": "nylon",
+              "title": "Nailon"
+            },
+            {
+              "id": "corduroy",
+              "title": "Pana"
+            },
+            {
+              "id": "paper",
+              "title": "Papel"
+            },
+            {
+              "id": "stone",
+              "title": "Piedra"
+            },
+            {
+              "id": "leather",
+              "title": "Piel"
+            },
+            {
+              "id": "synthetic_leather",
+              "title": "Piel sintética"
+            },
+            {
+              "id": "plastic",
+              "title": "Plástico"
+            },
+            {
+              "id": "fleece",
+              "title": "Polar"
+            },
+            {
+              "id": "polyester",
+              "title": "Poliéster"
+            },
+            {
+              "id": "rattan",
+              "title": "Ratán"
+            },
+            {
+              "id": "rayon",
+              "title": "Rayón"
+            },
+            {
+              "id": "satin",
+              "title": "Satén"
+            },
+            {
+              "id": "silk",
+              "title": "Seda"
+            },
+            {
+              "id": "silicone",
+              "title": "Silicona"
+            },
+            {
+              "id": "sisal",
+              "title": "Sisal"
+            },
+            {
+              "id": "fabric",
+              "title": "Tela"
+            },
+            {
+              "id": "velvet",
+              "title": "Terciopelo"
+            },
+            {
+              "id": "glass",
+              "title": "Vidrio"
+            },
+            {
+              "id": "jute",
+              "title": "Yute"
+            },
+            {
+              "id": "marble",
+              "title": "Mármol"
+            },
+            {
+              "id": "terracotta",
+              "title": "Terracotta"
+            },
+            {
+              "id": "porcelain",
+              "title": "Porcelana"
+            },
+            {
+              "id": "other",
+              "title": "Otro"
+            }
+          ]
+        },
+        "action_type": "static_multi_selector",
+        "title": "Material*"
+      }
+    },
+    {
+      "id": "title",
+      "reloads_when_changed": false,
+      "is_required": true,
+      "is_disabled": false,
+      "type": "text_input",
+      "data": {
+        "type": "text_input_data",
+        "value": "Probe CRM leaf Armarios y almacenaje",
+        "label": "Título*",
+        "max_length": 50,
+        "show_char_counter": true,
+        "keyboard_type": "text",
+        "rules": [
+          {
+            "regex": {
+              "type": "contains",
+              "value": "(?!(?:(https?:\\/\\/(www.)?|www.))([\\w\\d]*\\.)?(wallapop\\.[com|es|co\\.uk|uk|fr|com\\.br|pro|prod|test|beta|api\\.beta|alfa|us|corp])($|/|:)?)(?:(?:(https?:\\/\\/(www.)?|www.))\\S+)",
+              "message": "Este campo no puede contener enlaces a sitios web.",
+              "flags": "gi"
+            }
+          },
+          {
+            "regex": {
+              "type": "match",
+              "value": "^(\\s+$)",
+              "message": "Este campo no puede contener solo un espacio. Por favor, edítalo.",
+              "flags": "gi"
+            }
+          },
+          {
+            "regex": {
+              "type": "contains",
+              "value": "\\p{Extended_Pictographic}",
+              "message": "Este campo no puede contener emojis. Por favor, edítalo.",
+              "flags": "u"
+            }
+          }
+        ]
+      },
+      "breakpoints": {
+        "extra_small": 12,
+        "small": 12,
+        "medium": 12,
+        "large": 12
+      }
+    },
+    {
+      "id": "description",
+      "reloads_when_changed": false,
+      "is_required": true,
+      "is_disabled": false,
+      "type": "text_area",
+      "data": {
+        "type": "text_area_data",
+        "label": "Descripción*",
+        "max_length": 640,
+        "rules": [
+          {
+            "regex": {
+              "type": "contains",
+              "value": "(?!(?:(https?:\\/\\/(www.)?|www.))([\\w\\d]*\\.)?(wallapop\\.[com|es|co\\.uk|uk|fr|com\\.br|pro|prod|test|beta|api\\.beta|alfa|us|corp])($|/|:)?)(?:(?:(https?:\\/\\/(www.)?|www.))\\S+)",
+              "message": "Este campo no puede contener enlaces a sitios web.",
+              "flags": "gi"
+            }
+          },
+          {
+            "regex": {
+              "type": "match",
+              "value": "^(\\s+$)",
+              "message": "Este campo no puede contener solo un espacio. Por favor, edítalo.",
+              "flags": "gi"
+            }
+          }
+        ]
+      },
+      "breakpoints": {
+        "extra_small": 12,
+        "small": 12,
+        "medium": 12,
+        "large": 12
+      }
+    },
+    {
+      "id": "condition",
+      "reloads_when_changed": true,
+      "is_required": true,
+      "is_disabled": false,
+      "type": "dropdown",
+      "data": {
+        "type": "dropdown_data",
+        "label": "Estado*",
+        "source_type": "static",
+        "source": {
+          "options": [
+            {
+              "id": "new",
+              "title": "Nuevo",
+              "description": "Nunca se ha usado"
+            },
+            {
+              "id": "as_good_as_new",
+              "title": "Como nuevo",
+              "description": "En perfectas condiciones"
+            },
+            {
+              "id": "good",
+              "title": "En buen estado",
+              "description": "Bastante usado, pero bien conservado"
+            },
+            {
+              "id": "fair",
+              "title": "En condiciones aceptables",
+              "description": "Con evidentes signos de desgaste"
+            },
+            {
+              "id": "has_given_it_all",
+              "title": "Lo ha dado todo",
+              "description": "Puede que toque repararlo"
+            }
+          ]
+        },
+        "is_multiple": false
+      },
+      "breakpoints": {
+        "extra_small": 12,
+        "small": 12,
+        "medium": 6,
+        "large": 6
+      }
+    },
+    {
+      "id": "price_amount",
+      "reloads_when_changed": false,
+      "is_required": true,
+      "is_disabled": false,
+      "type": "text_input",
+      "data": {
+        "type": "text_input_data",
+        "label": "Precio*",
+        "max_length": 11,
+        "show_char_counter": false,
+        "helper_message": "Ten en cuenta que productos de precio inferior a 1 € o superior a 2.500 € no se pueden enviar.",
+        "conditional_helper_message": {
+          "message": "Ten en cuenta que productos de precio inferior a 1 € o superior a 2.500 € no se pueden enviar.",
+          "regex_condition": "^(0(\\.[0-9]{0,2})?|2500\\.(0[1-9]|[1-9][0-9]?)|(250[1-9]|25[1-9][0-9]|2[6-9][0-9]{2}|[3-9][0-9]{3}|[1-9][0-9]{4,})(\\.[0-9]{0,2})?)$|^(?!(0|[1-9]\\d*)(\\.\\d{1,2})?$).*"
+        },
+        "keyboard_type": "decimal",
+        "variant": "currency",
+        "rules": [
+          {
+            "regex": {
+              "type": "match",
+              "value": "^$|[^0-9.,\\s]|^[.,\\s]|[.,\\s]$|[.,\\s]{2,}",
+              "message": "¡Ups! Algo salió mal, por favor revisa la información."
+            }
+          }
+        ]
+      },
+      "breakpoints": {
+        "extra_small": 12,
+        "small": 12,
+        "medium": 6,
+        "large": 6
+      }
+    },
+    {
+      "id": "measures",
+      "reloads_when_changed": false,
+      "is_required": false,
+      "is_disabled": false,
+      "type": "custom",
+      "data": {
+        "type": "measures",
+        "label": "Medidas del producto",
+        "placeholder": "Medidas del producto",
+        "unit": "cm"
+      },
+      "breakpoints": {
+        "extra_small": 12,
+        "small": 12,
+        "medium": 12,
+        "large": 12
+      }
+    },
+    {
+      "id": "lock_stocks",
+      "reloads_when_changed": false,
+      "is_required": false,
+      "is_disabled": false,
+      "type": "lock",
+      "data": {
+        "type": "IGNORED",
+        "variant": "stocks",
+        "label": "Añadir más unidades",
+        "root_category_id": 12467
+      },
+      "breakpoints": {
+        "extra_small": 12,
+        "small": 12,
+        "medium": 12,
+        "large": 12
+      }
+    }
+  ]
+}
