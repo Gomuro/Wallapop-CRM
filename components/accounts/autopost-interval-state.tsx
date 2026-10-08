@@ -24,7 +24,7 @@ import {
 } from "@/lib/validations/account"
 
 let nowMs = 0
-let nowTimer: ReturnType<typeof window.setInterval> | undefined
+let nowTimer: ReturnType<typeof setInterval> | number | undefined
 const nowListeners = new Set<() => void>()
 
 function emitNow() {
