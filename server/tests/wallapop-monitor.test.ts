@@ -21,6 +21,7 @@ import {
   planMonitorUpdates,
   PUBLISHED_CATALOG_ROWS_EVAL,
 } from "../src/lib/wallapop-monitor"
+import { parseSnapshotText } from "../scripts/apply-catalog-url-snapshot"
 
 const ARMARIO = "https://es.wallapop.com/item/armario-escobero-1308052780"
 const SILLA = "https://es.wallapop.com/item/silla-oficina-1310000001"
@@ -158,6 +159,18 @@ describe("published catalog DOM", () => {
     } finally {
       await browser.close()
     }
+  })
+})
+
+describe("parseSnapshotText", () => {
+  it("reads MATCH lines from a dry-run paste", () => {
+    const rows = parseSnapshotText(
+      `MATCH  RULE  J  Ventilador  ->  https://es.wallapop.com/item/ventilador-rowenta-70w-blanco-1307308381
+MATCH  LLM  WP-408492  Lionelo  ->  https://es.wallapop.com/item/barrera-seguridad-ninos-lionelo-truus-slim-1309522264`,
+    )
+    expect(rows).toHaveLength(2)
+    expect(rows[1]?.sku).toBe("WP-408492")
+    expect(rows[1]?.href).toContain("lionelo-truus-slim")
   })
 })
 

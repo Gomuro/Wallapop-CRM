@@ -1,0 +1,95 @@
+# Dry-run 2026-10-10 (94 links, catalogCards 128). Paste from link-catalog-urls-llm.ts output.
+MATCH  RULE  WP-103961  Silla de Paseo hauck Citi Neo II  ->  https://es.wallapop.com/item/silla-de-paseo-hauck-citi-neo-ii-negra-1308031081
+MATCH  RULE  WP-894671  Mesa para Exterior 116 x 71,5 x 66,5 cm  ->  https://es.wallapop.com/item/mesa-de-exterior-gris-116x71-5x66-5-cm-1308033412
+MATCH  RULE  WP-328811  Pack de 2 sillas para playa Vevor  ->  https://es.wallapop.com/item/pack-2-sillas-playa-vevor-azul-1308035895
+MATCH  RULE  WP-225230  Keter 6x3- Caseta de jardín Exterior 2m2 cobertizo  ->  https://es.wallapop.com/item/caseta-jardin-keter-2m2-exterior-1308376298
+MATCH  RULE  WP-192797  Bascula digital para bebe Cecotec  ->  https://es.wallapop.com/item/bascula-bebe-digital-cecotec-nana-1308699388
+MATCH  RULE  WP-769545  Barrera de seguridad 73.6-122cm  ->  https://es.wallapop.com/item/barrera-seguridad-73-6-122cm-1307980713
+MATCH  RULE  WP-456210  Cobertizo caseta 6x4 verde de metal 202x122x180  ->  https://es.wallapop.com/item/caseta-cobertizo-verde-6x4-metal-1308389094
+MATCH  RULE  WP-192527  Silla de coche DUALFIX PLUS Giro de 360 BRITAX  ->  https://es.wallapop.com/item/silla-coche-britax-dualfix-plus-360-1308206407
+MATCH  RULE  WP-610909  Neumatico Tomket Sport 205 / 60R16 92V 92 V  ->  https://es.wallapop.com/item/neumatico-tomket-sport-205-60r16-92v-1307944557
+MATCH  RULE  WP-771159  Silla de Paseo de Viaje Plegable  ->  https://es.wallapop.com/item/silla-de-paseo-plegable-para-viaje-1307947440
+MATCH  RULE  3  Russell Hobbs Plancha Vertical 1800W  ->  https://es.wallapop.com/item/russell-hobbs-plancha-vertical-1800w-1307297950
+MATCH  RULE  4  SEVERIN Espumador de Leche por Inducción, 550 W  ->  https://es.wallapop.com/item/severin-espumador-leche-induccion-550w-1307305788
+MATCH  RULE  WP-746105  Cortacesped de bateria  ->  https://es.wallapop.com/item/cortacesped-a-bateria-azul-1307952958
+MATCH  RULE  45  Samsung Galaxy Watch 6 BT 44mm  ->  https://es.wallapop.com/item/samsung-galaxy-watch-6-bt-44mm-1307307837
+MATCH  RULE  J  Ventilador de rowenta 70 w  ->  https://es.wallapop.com/item/ventilador-rowenta-70w-blanco-1307308381
+MATCH  RULE  WP-098821  Lámpara de escritorio  ->  https://es.wallapop.com/item/lampara-escritorio-led-moderna-1307308862
+MATCH  RULE  WP-215923  Cecotec Cafetera Express Manual con 20 Bares  ->  https://es.wallapop.com/item/cafetera-cecotec-express-20-bares-1307310347
+MATCH  RULE  WP-810961  Cajon almacenamiento 170 l  ->  https://es.wallapop.com/item/cajon-de-almacenamiento-170l-con-ruedas-1308017790
+MATCH  RULE  WP-768755  FUNLIO Saltador de Puerta con Soporte para bebé  ->  https://es.wallapop.com/item/saltador-funlio-para-bebe-con-soporte-1308025720
+MATCH  RULE  WP-708823  Barrera de Seguridad para Bebés + 9 cm  ->  https://es.wallapop.com/item/barrera-de-seguridad-para-bebes-1308407296
+MATCH  RULE  WP-916404  Robot limpiafondos para piscina  Ultenic  ->  https://es.wallapop.com/item/robot-limpiafondos-ultenic-piscina-1308042934
+MATCH  RULE  WP-470766  Kinderkraft Silla de coche, I-SIZE 40-150 cm  ->  https://es.wallapop.com/item/silla-coche-kinderkraft-i-size-40-150cm-1308210816
+MATCH  RULE  WP-100290  Jané iXpert, Silla de Coche iSize con Isofix, de 40 a 105 cm  ->  https://es.wallapop.com/item/jane-ixpert-silla-coche-isize-isofix-1308223041
+MATCH  RULE  WP-528484  Duramax - Caja almacenamiento 1450L  caseta  ->  https://es.wallapop.com/item/caja-almacenamiento-duramax-1450l-1308234360
+MATCH  RULE  WP-760634  JapanNext Monitor 27" IPS 4K UHD 3840x2160  ->  https://es.wallapop.com/item/monitor-japannext-27-ips-4k-uhd-1309508659
+MATCH  RULE  WP-379561  Mobicool Nevera eléctrica  23L  ->  https://es.wallapop.com/item/nevera-electrica-mobicool-23l-1309513278
+MATCH  RULE  WP-976153  Keter Manor 4X6 - Caseta de jardín 130x192x198cm  ->  https://es.wallapop.com/item/caseta-jardin-keter-manor-4x6-1308271351
+MATCH  RULE  WP-039958  Maxi-Cosi Kori Hamaca Bebé 2 en 1  ->  https://es.wallapop.com/item/maxi-cosi-kori-hamaca-bebe-2-en-1-1309515459
+MATCH  RULE  WP-234021  Kinderkraft NEA 2 Silla de paseo  ->  https://es.wallapop.com/item/silla-de-paseo-kinderkraft-nea-2-gris-1308401598
+MATCH  RULE  WP-518398  Chicco Cochecito Seety Silla de paseo  ->  https://es.wallapop.com/item/cochecito-chicco-seety-silla-de-paseo-gris-1309536031
+MATCH  RULE  WP-306056  PEPE Mobility Elevador WC Adulto  ->  https://es.wallapop.com/item/elevador-wc-pepe-mobility-15-cm-1308632047
+MATCH  RULE  WP-425735  Hamaca Mecedora para Bebé  ->  https://es.wallapop.com/item/hamaca-mecedora-bebe-selva-1309541705
+MATCH  RULE  WP-360694  Babybay Maxi cuna colecho de madera  ->  https://es.wallapop.com/item/babybay-maxi-cuna-colecho-madera-1308641324
+MATCH  RULE  WP-850887  Silla con wc para adultos Vevor  ->  https://es.wallapop.com/item/silla-wc-vevor-para-adultos-1309548439
+MATCH  RULE  WP-907422  Asiento delantero de bicicleta para niños  ->  https://es.wallapop.com/item/asiento-bici-nino-delantero-1309551006
+MATCH  RULE  WP-024292  Ariston Velis 100 WiFi Termo Eléctrico 80L  ->  https://es.wallapop.com/item/ariston-velis-100-wifi-termo-electrico-80l-1308672382
+MATCH  RULE  WP-333625  Silla de baño para personas mayores  ->  https://es.wallapop.com/item/silla-de-bano-para-mayores-1309553548
+MATCH  RULE  WP-961752  Asiento de Actividades para Bebés  ->  https://es.wallapop.com/item/asiento-de-actividades-para-bebe-1308681059
+MATCH  RULE  WP-114534  Silla Coche Evolutiva, 76–150 cm Maxi-Cosi  ->  https://es.wallapop.com/item/silla-coche-maxi-cosi-76-150-cm-1308689426
+MATCH  RULE  WP-630838  Cuna 3 en 1, Night con Colchón Mobiclinic  ->  https://es.wallapop.com/item/cuna-mobiclinic-3-en-1-con-colchon-1310674427
+MATCH  RULE  WP-634117  Lámpara led inteligente Meross  ->  https://es.wallapop.com/item/lampara-led-meross-inteligente-rgb-1310677995
+MATCH  RULE  WP-763943  Manguera de drenaje 30,5 m Vevor  ->  https://es.wallapop.com/item/manguera-de-drenaje-vevor-30-5-m-1310679264
+MATCH  RULE  WP-764539  Ducha Exterior Solar con Grifo VEVOR  ->  https://es.wallapop.com/item/ducha-solar-exterior-vevor-con-grifo-1310683586
+MATCH  RULE  WP-057641  Gardena Carrete de manguera de pared 35 m  ->  https://es.wallapop.com/item/carrete-manguera-pared-gardena-35m-1310684702
+MATCH  RULE  WP-193212  Mobicool ME24 Nevera 26 l  ->  https://es.wallapop.com/item/mobicool-me24-nevera-26l-1310686991
+MATCH  RULE  WP-057342  Singer  Maquina De Coser Mecanica  ->  https://es.wallapop.com/item/maquina-de-coser-singer-mecanica-1310688147
+MATCH  RULE  WP-943130  Plancha de vapor Rowenta 2500W  ->  https://es.wallapop.com/item/plancha-de-vapor-rowenta-2500w-1310693964
+MATCH  RULE  WP-996918  VEVOR Cambiador para Bebé Cambiador Plegable Portátil  ->  https://es.wallapop.com/item/cambiador-vevor-plegable-portatil-bebe-1310695443
+MATCH  RULE  WP-829494  Barrera Seguridad Infantil 73–80 cm  ->  https://es.wallapop.com/item/barrera-seguridad-infantil-73-80-cm-1310323214
+MATCH  RULE  WP-671689  Aspiradora para tapicería 400 w  ->  https://es.wallapop.com/item/aspiradora-tapiceria-haushof-400w-1308041140
+MATCH  RULE  WP-321404  Andador para adultos con asiento  ->  https://es.wallapop.com/item/andador-para-adultos-con-asiento-y-cesta-1308684317
+MATCH  RULE  WP-104583  Cepillo de aire moldeador Cecotec  ->  https://es.wallapop.com/item/cepillo-moldeador-aire-cecotec-bamba-1308228424
+MATCH  RULE  WP-195259  Armario escobero para exterior  ->  https://es.wallapop.com/item/armario-escobero-exterior-plastico-1308052780
+MATCH  RULE  WP-821769  Casco de moto XL Advant carbono LS2  ->  https://es.wallapop.com/item/casco-moto-ls2-advant-carbono-xl-1309517660
+MATCH  RULE  WP-414747  Casco Moto Integral HJC XXS  ->  https://es.wallapop.com/item/casco-moto-integral-hjc-xxs-gris-1309901626
+MATCH  RULE  WP-668983  Manillar Accossato Negro por Yamaha  ->  https://es.wallapop.com/item/manillar-accossato-negro-yamaha-1310697934
+MATCH  RULE  WP-846396  Termo Eléctrico Ceramics Digital 100 L  ->  https://es.wallapop.com/item/termo-electrico-ceramics-digital-100l-1310698885
+MATCH  RULE  WP-974450  Silla de Ducha Ajustable en Altura  ->  https://es.wallapop.com/item/silla-ducha-ajustable-altura-1310699845
+MATCH  LLM  WP-902740  Ariston Velis Pro Wifi 100 termo eléctrico plano  ->  https://es.wallapop.com/item/ariston-velis-pro-wifi-100l-termo-electrico-plano-1310685769
+MATCH  LLM  WP-408492  Lionelo Truus Slim Barrera Seguridad para Niños  ->  https://es.wallapop.com/item/barrera-seguridad-ninos-lionelo-truus-slim-1309522264
+MATCH  LLM  WP-793104  Keter 6x3 caseta de jardín cobertizo 2m2  ->  https://es.wallapop.com/item/caseta-jardin-keter-6x3-plastico-1308713090
+MATCH  LLM  WP-376695  Navaris olla de hierro fundido con tapa, 3,5 l  ->  https://es.wallapop.com/item/navaris-olla-hierro-fundido-3-5l-azul-1307309406
+MATCH  LLM  WP-724547  Brigitte Color cafetera de 6 Tazas, Aluminio, Blanco, 12 x 14 x 22 cm  ->  https://es.wallapop.com/item/cafetera-brigitte-6-tazas-aluminio-blanca-1307309830
+MATCH  LLM  WP-119934  caseta cobertizo jardín 8x4 metal  ->  https://es.wallapop.com/item/caseta-jardin-metal-8x4-gris-1308045379
+MATCH  LLM  WP-471829  Caseta cobertizo 5x3 almacenaje exterior  ->  https://es.wallapop.com/item/caseta-cobertizo-5x3-almacenamiento-exterior-1309214228
+MATCH  LLM  WP-816524  Silla de Coche Elevador ligero con respaldo, de 100 a 150 cm  ->  https://es.wallapop.com/item/silla-de-coche-elevador-graco-con-respaldo-1309510734
+MATCH  LLM  WP-246353  Keter caseta cobertizo 6x5 almacenaje  ->  https://es.wallapop.com/item/caseta-keter-6x5-almacenaje-jardin-1308283572
+MATCH  LLM  WP-005588  Termo eléctrico CORBERÓ CTWB150 150l  ->  https://es.wallapop.com/item/termo-electrico-corbero-150l-clase-c-1310697093
+MATCH  LLM  WP-439178  KikkaBoo Bañera para Bebés WILLY, Diseño  ->  https://es.wallapop.com/item/banera-bebe-kikkaboo-willy-plegable-1308038354
+MATCH  LLM  WP-452552  Asiento Elevador Coche, 6-12 Años, 125-150 cm  ->  https://es.wallapop.com/item/asiento-elevador-coche-bebeconfort-1308702310
+MATCH  LLM  1  Philips 2000 Humidificador de aire NanoCloud, 31 m  ->  https://es.wallapop.com/item/humidificador-philips-nanocloud-31m-1307285440
+MATCH  LLM  2  Wessper Jarra Filtrante de Vidrio con cartuchos filtrantes para Agua Potable  ->  https://es.wallapop.com/item/jarra-filtrante-wessper-d4-borosilicate-mini-1307290223
+MATCH  LLM  WP-485913  Carretilla de jardín Draper de 65 litros  ->  https://es.wallapop.com/item/carretilla-jardin-draper-65l-1308023089
+MATCH  LLM  WP-877453  Bosch Cable de Carga EV  para coche  ->  https://es.wallapop.com/item/cable-carga-bosch-ev-tipo-2-11kw-7m-1308719838
+MATCH  LLM  WP-138203  Carrito andador con asiento Carlett  ->  https://es.wallapop.com/item/andador-carlett-con-asiento-y-bolsa-1309212958
+MATCH  LLM  WP-543369  Estante de pared CD madera blanco  ->  https://es.wallapop.com/item/estante-flotante-blanco-madera-1308278312
+MATCH  LLM  WP-082774  Caseta de exterior 6x5 cobertizo 185x152x226cm  ->  https://es.wallapop.com/item/caseta-exterior-plastico-6x5-gris-1308404641
+MATCH  LLM  WP-756465  lionelo Aurora Cuna 3 en 1 hasta 9 kg  ->  https://es.wallapop.com/item/cuna-de-colecho-lionelo-aurora-3-en-1-1309528902
+MATCH  LLM  WP-378819  Rowenta  Placha de vapor 2700W  ->  https://es.wallapop.com/item/plancha-de-vapor-rowenta-2700w-1310690876
+MATCH  LLM  WP-631988  Cecotec Barbacoa Eléctrica de Sobremesa  ->  https://es.wallapop.com/item/cecotec-barbacoa-electrica-mesa-negra-1310693308
+MATCH  LLM  WP-614289  Kesper Mesa infantil con 2 aceras, blanco  ->  https://es.wallapop.com/item/mesa-infantil-kesper-con-2-sillas-1310324803
+MATCH  LLM  WP-042472  Termo Eléctrico Vertical CTWB200 200L  ->  https://es.wallapop.com/item/termo-electrico-corbero-200l-clase-c-1310696222
+MATCH  LLM  WP-048916  Carretilla Plegable para Subir Escaleras, 50 kg  ->  https://es.wallapop.com/item/carretilla-plegable-50kg-para-escaleras-1310700793
+MATCH  LLM  WP-846442  Mesita de noche blanco  ->  https://es.wallapop.com/item/mesita-de-noche-redonda-blanca-1308028288
+MATCH  LLM  7  Pack de 12 perchas 45 cm  ->  https://es.wallapop.com/item/pack-12-perchas-madera-con-pinzas-45cm-1307306337
+MATCH  LLM  WP-773515  Robot de piscina ZX 50 Intex  ->  https://es.wallapop.com/item/robot-limpiafondos-zx50-intex-1308048093
+MATCH  LLM  WP-525826  Andador plegable para adultos  ->  https://es.wallapop.com/item/andador-plegable-naranja-con-asiento-1308403274
+MATCH  LLM  WP-546964  Caseta cobertizo para Guardar 4 Bicicletas  ->  https://es.wallapop.com/item/caseta-metalica-para-4-bicicletas-gris-1308623006
+MATCH  LLM  WP-824720  Asiento elevador wc para adultos  ->  https://es.wallapop.com/item/asiento-elevador-wc-con-brazos-1308636969
+MATCH  LLM  WP-169330  Ventilador de techo para caravana  ->  https://es.wallapop.com/item/ventilador-techo-autocaravana-blanco-1310675622
+MATCH  LLM  WP-837938  Equipo de Osmosis Inversa  ->  https://es.wallapop.com/item/sistema-osmosis-inversa-nature-gold-1310676821
+MATCH  LLM  WP-612300  Moulinex picadora eléctrica, 2 cuchillas  ->  https://es.wallapop.com/item/picadora-moulinex-1-2-3-ultimate-1300w-1310688747
+MATCH  LLM  WP-827453  Bialetti Cafetera 1200W  ->  https://es.wallapop.com/item/cafetera-bialetti-roja-1310690255
+MATCH  LLM  WP-173625  Silla wc inodoro para adultos  ->  https://es.wallapop.com/item/silla-wc-mobiclinic-para-adultos-1308669741
