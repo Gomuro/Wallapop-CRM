@@ -6,6 +6,10 @@ import { describe, expect, it } from "vitest"
 
 import { wallapopItemPathKey } from "../../lib/inventory/wallapop-item-url"
 import {
+  CATALOG_TITLE_CARDS_EVAL,
+  planTitleUrlLinks,
+} from "../src/lib/wallapop-monitor/link-by-title"
+import {
   planMonitorUpdates,
   PUBLISHED_CATALOG_ROWS_EVAL,
 } from "../src/lib/wallapop-monitor"
@@ -124,5 +128,94 @@ describe("published catalog DOM", () => {
     } finally {
       await browser.close()
     }
+  })
+
+  it("reads card titles from info-title", async () => {
+    const html = fs.readFileSync(
+      path.join(__dirname, "fixtures/wallapop-catalog-published.html"),
+      "utf8",
+    )
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(html)
+      const rows = (await page.evaluate(CATALOG_TITLE_CARDS_EVAL)) as {
+        href: string
+        title: string
+      }[]
+      expect(
+        rows.find((row) => wallapopItemPathKey(row.href) === wallapopItemPathKey(ARMARIO))
+          ?.title,
+      ).toBe("Armario Escobero Exterior Plastico")
+    } finally {
+      await browser.close()
+    }
+  })
+})
+
+describe("planTitleUrlLinks", () => {
+  it("links only an exact unique title to a catalog href", () => {
+    const plan = planTitleUrlLinks(
+      [
+        {
+          listingId: "l1",
+          sku: "SKU-1",
+          title: "  Armario Escobero Exterior Plastico ",
+          externalUrl: null,
+        },
+        {
+          listingId: "l2",
+          sku: "SKU-2",
+          title: "Other",
+          externalUrl: null,
+        },
+        {
+          listingId: "l3",
+          sku: "SKU-3",
+          title: "Already linked",
+          externalUrl: ARMARIO,
+        },
+      ],
+      [
+        {
+          href: ARMARIO,
+          title: "Armario Escobero Exterior Plastico",
+        },
+      ],
+    )
+    expect(plan.links).toEqual([
+      {
+        listingId: "l1",
+        sku: "SKU-1",
+        title: "  Armario Escobero Exterior Plastico ",
+        href: ARMARIO,
+      },
+    ])
+    expect(plan.skips.some((skip) => skip.sku === "SKU-2")).toBe(true)
+    expect(plan.links.some((link) => link.listingId === "l3")).toBe(false)
+  })
+
+  it("does not link duplicate titles", () => {
+    const plan = planTitleUrlLinks(
+      [
+        {
+          listingId: "a",
+          sku: "A",
+          title: "Silla",
+          externalUrl: null,
+        },
+        {
+          listingId: "b",
+          sku: "B",
+          title: "Silla",
+          externalUrl: null,
+        },
+      ],
+      [{ href: SILLA, title: "Silla" }],
+    )
+    expect(plan.links).toEqual([])
+    expect(plan.skips.every((skip) => skip.reason === "duplicate_crm")).toBe(
+      true,
+    )
   })
 })
