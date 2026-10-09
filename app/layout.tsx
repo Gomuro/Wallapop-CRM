@@ -2,6 +2,7 @@ import type { Metadata } from "next"
 import { Plus_Jakarta_Sans } from "next/font/google"
 
 import { AppShell } from "@/components/shell/app-shell"
+import { THEME_INIT_SCRIPT } from "@/lib/theme-script"
 
 import "./globals.css"
 
@@ -20,12 +21,14 @@ export const maxDuration = 30
 
 export default function RootLayout({ children }: LayoutProps<"/">) {
   return (
-    <html
-      lang="es-ES"
-      suppressHydrationWarning
-      className={`${plusJakarta.variable} ${plusJakarta.className} h-full antialiased`}
-    >
-      <body className={`${plusJakarta.className} min-h-full bg-background font-sans`} suppressHydrationWarning>
+    <html lang="es-ES" suppressHydrationWarning>
+      <head>
+        <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
+      </head>
+      <body
+        className={`${plusJakarta.variable} ${plusJakarta.className} min-h-full bg-background font-sans antialiased`}
+        suppressHydrationWarning
+      >
         <AppShell>{children}</AppShell>
       </body>
     </html>

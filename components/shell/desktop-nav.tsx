@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation"
 import { LayoutGridIcon, PlusIcon, UserRoundIcon } from "lucide-react"
 
 import { AuthUserMenu } from "@/components/auth/auth-user-menu"
+import { ThemeToggle } from "@/components/theme/theme-toggle"
 import { buttonVariants } from "@/components/ui/button"
 import { cn } from "@/lib/utils"
 
@@ -60,6 +61,7 @@ export function DesktopNav() {
           <UserRoundIcon />
           Cuenta
         </Link>
+        <ThemeToggle />
         <AuthUserMenu />
       </nav>
     </header>
