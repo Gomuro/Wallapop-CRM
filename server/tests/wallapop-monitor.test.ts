@@ -8,7 +8,12 @@ import { wallapopItemPathKey } from "../../lib/inventory/wallapop-item-url"
 import {
   CATALOG_TITLE_CARDS_EVAL,
   planTitleUrlLinks,
+  rankCatalogCardsForListing,
 } from "../src/lib/wallapop-monitor/link-by-title"
+import {
+  parseLlmPick,
+  planCombinedTitleUrlLinks,
+} from "../src/lib/wallapop-monitor/link-by-title-llm"
 import {
   planMonitorUpdates,
   PUBLISHED_CATALOG_ROWS_EVAL,
@@ -150,6 +155,79 @@ describe("published catalog DOM", () => {
     } finally {
       await browser.close()
     }
+  })
+})
+
+describe("parseLlmPick", () => {
+  it("accepts a high-confidence index", () => {
+    expect(
+      parseLlmPick({
+        match: true,
+        candidateIndex: 2,
+        confidence: "high",
+        reason: "Mismo modelo Keter",
+      }),
+    ).toEqual({
+      match: true,
+      candidateIndex: 2,
+      confidence: "high",
+      reason: "Mismo modelo Keter",
+    })
+  })
+})
+
+describe("planCombinedTitleUrlLinks", () => {
+  it("adds an LLM link when rules miss but Groq is certain", async () => {
+    const href =
+      "https://es.wallapop.com/item/keter-caseta-jardin-2m2-exterior-1308376298"
+    const plan = await planCombinedTitleUrlLinks(
+      [
+        {
+          listingId: "l1",
+          sku: "WP-793104",
+          title: "Keter 6x3 caseta de jardín cobertizo 2m2",
+          externalUrl: null,
+          status: "ACTIVE",
+          priceEur: 199,
+        },
+      ],
+      [
+        {
+          href,
+          title: "Caseta jardin Keter 2m2 exterior",
+          priceText: "199 €",
+        },
+      ],
+      {
+        delayMs: 0,
+        ask: async () => ({
+          match: true,
+          candidateIndex: 0,
+          confidence: "high",
+          reason: "Misma caseta Keter 2m2",
+        }),
+      },
+    )
+    expect(plan.links).toHaveLength(1)
+    expect(plan.links[0]?.source).toBe("llm")
+    expect(plan.links[0]?.href).toBe(href)
+  })
+})
+
+describe("rankCatalogCardsForListing", () => {
+  it("prefers cards that share more tokens with the CRM title", () => {
+    const ranked = rankCatalogCardsForListing(
+      "Keter caseta jardin 2m2",
+      [
+        { href: "https://es.wallapop.com/item/unrelated-chair-1", title: "Silla" },
+        {
+          href: "https://es.wallapop.com/item/keter-caseta-2m2-2",
+          title: "Caseta Keter 2m2",
+        },
+      ],
+      2,
+    )
+    expect(ranked[0]?.title).toContain("Keter")
   })
 })
 

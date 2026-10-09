@@ -3,6 +3,7 @@ import { wallapopItemUrlOrNull } from "../../../../lib/inventory/wallapop-item-u
 export type CatalogTitleCard = {
   href: string
   title: string
+  priceText?: string
 }
 
 export type CrmTitleListing = {
@@ -125,6 +126,39 @@ export function titlesLooselyMatch(crmTitle: string, catalogTitle: string): bool
   if (crm.startsWith(cat)) return cat.length >= MIN_PARTIAL_CHARS
   if (cat.startsWith(crm)) return crm.length >= MIN_PARTIAL_CHARS
   return tokenSetsAlign(crmTitle, catalogTitle)
+}
+
+export function scoreListingCatalogCard(
+  crmTitle: string,
+  card: CatalogTitleCard,
+): number {
+  let score = 0
+  if (titlesLooselyMatch(crmTitle, card.title)) score += 100
+  const slug = slugTitleFromHref(card.href)
+  if (slug && titlesLooselyMatch(crmTitle, slug)) score += 80
+  const crmTokens = new Set(titleTokens(crmTitle))
+  for (const token of titleTokens(card.title)) {
+    if (crmTokens.has(token)) score += 8
+  }
+  if (slug) {
+    for (const token of titleTokens(slug)) {
+      if (crmTokens.has(token)) score += 5
+    }
+  }
+  return score
+}
+
+export function rankCatalogCardsForListing(
+  crmTitle: string,
+  cards: CatalogTitleCard[],
+  limit = 8,
+): CatalogTitleCard[] {
+  return cards
+    .map((card) => ({ card, score: scoreListingCatalogCard(crmTitle, card) }))
+    .filter((row) => row.score > 0)
+    .sort((a, b) => b.score - a.score)
+    .slice(0, limit)
+    .map((row) => row.card)
 }
 
 function cardMatchesListing(listingTitle: string, card: CatalogTitleCard): boolean {
@@ -266,9 +300,17 @@ export const CATALOG_TITLE_CARDS_EVAL = `(() => {
           .trim()
       : ""
     if (aria.length > title.length) title = aria
+    const priceNode = nodes.find((n) => {
+      const cls = classNameOf(n)
+      return /info-price|CatalogItem__price/i.test(cls)
+    })
+    const priceText = priceNode
+      ? String(priceNode.textContent || "").replace(/\\s+/g, " ").trim()
+      : ""
     rows.push({
       href: link && link.href ? String(link.href) : "",
       title,
+      priceText,
     })
   })
   return rows
