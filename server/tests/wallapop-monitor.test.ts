@@ -18,6 +18,10 @@ import {
   planCombinedTitleUrlLinks,
 } from "../src/lib/wallapop-monitor/link-by-title-llm"
 import {
+  planItemPageUrlLinks,
+  rankListingsForItemPage,
+} from "../src/lib/wallapop-monitor/link-by-item-page"
+import {
   planMonitorUpdates,
   PUBLISHED_CATALOG_ROWS_EVAL,
 } from "../src/lib/wallapop-monitor"
@@ -204,6 +208,120 @@ describe("parseLlmPick", () => {
       confidence: "high",
       reason: "Mismo modelo Keter",
     })
+  })
+})
+
+describe("planItemPageUrlLinks", () => {
+  it("links duplicate CRM titles using the item-page description", async () => {
+    const hrefA =
+      "https://es.wallapop.com/item/sarten-tefal-28-roja-1310000001"
+    const hrefB =
+      "https://es.wallapop.com/item/sarten-tefal-24-negra-1310000002"
+    const twins = [
+      {
+        listingId: "l-red",
+        sku: "WP-RED",
+        title: "Sartén Tefal",
+        description: "Sartén Tefal 28 cm antiadherente color rojo",
+        externalUrl: null,
+        status: "ACTIVE",
+        priceEur: 25,
+      },
+      {
+        listingId: "l-black",
+        sku: "WP-BLACK",
+        title: "Sartén Tefal",
+        description: "Sartén Tefal 24 cm antiadherente color negro",
+        externalUrl: null,
+        status: "ACTIVE",
+        priceEur: 22,
+      },
+    ]
+    const ranked = rankListingsForItemPage(
+      {
+        href: hrefA,
+        title: "Sarten Tefal 28 Roja",
+        description: "Color rojo 28 cm antiadherente",
+        priceText: "25 €",
+      },
+      twins,
+      2,
+    )
+    expect(ranked[0]?.sku).toBe("WP-RED")
+
+    const plan = await planItemPageUrlLinks(
+      twins,
+      [
+        {
+          href: hrefA,
+          title: "Sarten Tefal 28 Roja",
+          description: "Color rojo 28 cm",
+          priceText: "25 €",
+        },
+        {
+          href: hrefB,
+          title: "Sarten Tefal 24 Negra",
+          description: "Color negro 24 cm",
+          priceText: "22 €",
+        },
+      ],
+      {
+        delayMs: 0,
+        ask: async (facts) => ({
+          match: true,
+          candidateIndex: 0,
+          confidence: "high",
+          reason: facts.title.includes("Roja") ? "roja 28" : "negra 24",
+        }),
+      },
+    )
+    expect(plan.links).toHaveLength(2)
+    expect(plan.links.map((row) => row.sku).sort()).toEqual([
+      "WP-BLACK",
+      "WP-RED",
+    ])
+  })
+
+  it("does not steal a URL already stored on another listing", async () => {
+    const href = "https://es.wallapop.com/item/casco-ls2-advant-1309517660"
+    const plan = await planItemPageUrlLinks(
+      [
+        {
+          listingId: "l-taken",
+          sku: "WP-TAKEN",
+          title: "Casco LS2 Advant",
+          description: "Casco de moto XL Advant carbono LS2",
+          externalUrl: href,
+          status: "RESERVED",
+          priceEur: 199,
+        },
+        {
+          listingId: "l-open",
+          sku: "WP-OPEN",
+          title: "Casco LS2 Advant",
+          description: "Otro casco LS2",
+          externalUrl: null,
+          status: "ACTIVE",
+          priceEur: 199,
+        },
+      ],
+      [
+        {
+          href,
+          title: "Casco LS2 Advant carbono",
+          description: "Casco de moto XL Advant carbono LS2",
+          priceText: "199 €",
+        },
+      ],
+      {
+        delayMs: 0,
+        ask: async () => {
+          throw new Error("should not call Groq for an already-linked URL")
+        },
+      },
+    )
+    expect(plan.links).toEqual([])
+    expect(plan.alreadyLinked).toBe(1)
   })
 })
 
