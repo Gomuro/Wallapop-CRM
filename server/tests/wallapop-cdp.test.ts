@@ -5,7 +5,11 @@ import {
   consumeKeepChromeAfterAbort,
   isBrowserBusyError,
   isBrowserPublishBusy,
+  isBrowserMonitorBusy,
+  isBrowserSessionBusy,
   isBrowserSoldBusy,
+  isKeepChromeWarm,
+  setKeepChromeWarm,
   isClosedPage,
   isHandleAlive,
   isInFlightPublishAborted,
@@ -237,7 +241,7 @@ describe("worker slots", () => {
     resetWallapopPublishAbortForTests()
   })
 
-  it("allows publish and sold together, not two publishes", async () => {
+  it("allows publish, sold, and monitor together, not two monitors", async () => {
     let releasePublish!: () => void
     const publishGate = new Promise<void>((resolve) => {
       releasePublish = resolve
@@ -250,9 +254,23 @@ describe("worker slots", () => {
       expect(isBrowserSoldBusy()).toBe(true)
       expect(isBrowserPublishBusy()).toBe(true)
     })
+    let releaseMonitor!: () => void
+    const monitorGate = new Promise<void>((resolve) => {
+      releaseMonitor = resolve
+    })
+    const monitorRun = runWithBrowserBusy("monitor", async () => {
+      expect(isBrowserMonitorBusy()).toBe(true)
+      expect(isBrowserPublishBusy()).toBe(true)
+      await monitorGate
+    })
+    await expect(runWithBrowserBusy("monitor", async () => {})).rejects.toSatisfy(
+      isBrowserBusyError,
+    )
     await expect(runWithBrowserBusy("publish", async () => {})).rejects.toSatisfy(
       isBrowserBusyError,
     )
+    releaseMonitor()
+    await monitorRun
     releasePublish()
     await publishRun
     expect(isBrowserPublishBusy()).toBe(false)
@@ -272,5 +290,30 @@ describe("worker slots", () => {
     )
     releaseSold()
     await soldRun
+  })
+
+  it("treats session as a worker slot, not exclusive rehydrate", async () => {
+    let releaseSession!: () => void
+    const sessionGate = new Promise<void>((resolve) => {
+      releaseSession = resolve
+    })
+    const sessionRun = runWithBrowserBusy("session", async () => {
+      expect(isBrowserSessionBusy()).toBe(true)
+      await sessionGate
+    })
+    await runWithBrowserBusy("monitor", async () => {
+      expect(isBrowserMonitorBusy()).toBe(true)
+    })
+    await expect(runWithBrowserBusy("login", async () => {})).rejects.toSatisfy(
+      isBrowserBusyError,
+    )
+    releaseSession()
+    await sessionRun
+  })
+
+  it("keeps chrome warm for the monitor loop", () => {
+    expect(isKeepChromeWarm()).toBe(false)
+    setKeepChromeWarm(true)
+    expect(isKeepChromeWarm()).toBe(true)
   })
 })

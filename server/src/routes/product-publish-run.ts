@@ -49,7 +49,7 @@ export async function claimListingForPublish(
   return result.count > 0
 }
 
-/** Revert POSTING → READY_TO_POST only. Never touches ACTIVE. */
+/** Revert POSTING → READY_TO_POST only. Never touches ACTIVE / RESERVED. */
 export async function revertPublishClaim(
   prisma: PrismaClient,
   productId: string,

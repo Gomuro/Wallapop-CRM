@@ -33,8 +33,12 @@ export {
   getBrowserBusy,
   isAnyWorkerSlotBusy,
   isBrowserBusyError,
+  isBrowserMonitorBusy,
   isBrowserPublishBusy,
+  isBrowserSessionBusy,
   isBrowserSoldBusy,
+  isKeepChromeWarm,
+  setKeepChromeWarm,
   isInFlightPublishAborted,
   isPublishAbortedError,
   PublishAbortedError,
@@ -59,6 +63,7 @@ export {
 
 export {
   closeSoldJobPages,
+  closeWorkerSlotPages,
   ensureWallapopPage,
   ensureWorkerWindow,
 } from "./windows"

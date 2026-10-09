@@ -13,8 +13,9 @@ import {
 } from "./attach"
 import {
   BrowserBusyError,
-  isBrowserPublishBusy,
-  isBrowserSoldBusy,
+  getBrowserBusy,
+  isAnyWorkerSlotBusy,
+  isKeepChromeWarm,
 } from "./busy"
 
 async function sendCdpBrowserClose(
@@ -59,22 +60,22 @@ export async function quitWallapopChrome(): Promise<void> {
  * Blocked while a worker slot holds Chrome (use `quitWallapopChrome` after the lock).
  */
 export async function closeWallapopBrowser(): Promise<void> {
-  if (isBrowserPublishBusy()) {
-    throw new BrowserBusyError("publish", "logout")
-  }
-  if (isBrowserSoldBusy()) {
-    throw new BrowserBusyError("sold", "logout")
+  if (isAnyWorkerSlotBusy()) {
+    throw new BrowserBusyError(getBrowserBusy(), "logout")
   }
   await quitWallapopChrome()
 }
 
-/** After a worker job: quit chrome.exe only if the other slot is idle. */
+/** After a worker job: quit chrome.exe only if no slot is busy and monitor is not keeping it warm. */
 export async function quitChromeIfNoWorkerSlots(): Promise<void> {
-  if (isBrowserPublishBusy() || isBrowserSoldBusy()) {
+  if (isAnyWorkerSlotBusy()) {
     log("info", "wallapop_chrome_kept_other_slot", {
-      publish: isBrowserPublishBusy(),
-      sold: isBrowserSoldBusy(),
+      busy: true,
     })
+    return
+  }
+  if (isKeepChromeWarm()) {
+    log("info", "wallapop_chrome_kept_monitor_loop")
     return
   }
   await quitWallapopChrome()

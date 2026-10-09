@@ -157,7 +157,13 @@ async function rejectPostingStatusChange(
     select: { status: true },
   })
   if (existing?.status !== "POSTING") return false
-  if (body.status === "ACTIVE" || body.status === "DEACTIVATED") return false
+  if (
+    body.status === "ACTIVE" ||
+    body.status === "RESERVED" ||
+    body.status === "DEACTIVATED"
+  ) {
+    return false
+  }
   sendError(
     res,
     409,

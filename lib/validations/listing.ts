@@ -6,6 +6,7 @@ import { wallapopItemUrlOrNull } from "../inventory/wallapop-item-url"
 export const listingStatusSchema = z.enum([
   "READY_TO_POST",
   "ACTIVE",
+  "RESERVED",
   "DEACTIVATED",
 ])
 
@@ -14,6 +15,7 @@ export const listingStatusReadSchema = z.enum([
   "READY_TO_POST",
   "POSTING",
   "ACTIVE",
+  "RESERVED",
   "DEACTIVATED",
   "FAILED",
 ])

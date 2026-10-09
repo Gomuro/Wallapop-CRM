@@ -9,7 +9,10 @@ import {
   type WallapopBrowserHandle,
 } from "./attach"
 import type { BrowserWorkerSlot } from "./busy"
+import { closeWallapopUploadTab } from "./tabs"
 import {
+  clearWorkerPage,
+  peekWorkerPage,
   registerSoldJobPage,
   setWorkerPage,
   takeSoldJobPages,
@@ -79,7 +82,7 @@ export async function ensureWorkerWindow(
   if (slot === "publish") {
     setWallapopHandle({ ...handle, page, ownedPage: true })
     log("info", "wallapop_upload_tab_opened", { ownedPage: true })
-  } else {
+  } else if (slot === "sold") {
     registerSoldJobPage(page)
   }
   return page
@@ -96,4 +99,22 @@ export async function closeSoldJobPages(): Promise<void> {
     if (isClosedPage(page)) continue
     await page.close().catch(() => {})
   }
+}
+
+/** Close the window this slot opened. Does not quit chrome.exe. */
+export async function closeWorkerSlotPages(
+  slot: BrowserWorkerSlot,
+): Promise<void> {
+  if (slot === "sold") {
+    await closeSoldJobPages()
+    return
+  }
+  if (slot === "publish") {
+    await closeWallapopUploadTab()
+    return
+  }
+  const page = peekWorkerPage(slot)
+  clearWorkerPage(slot)
+  if (!page || isClosedPage(page)) return
+  await page.close().catch(() => {})
 }

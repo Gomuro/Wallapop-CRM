@@ -23,6 +23,7 @@ enum ListingStatus {
   READY_TO_POST
   POSTING
   ACTIVE
+  RESERVED
   DEACTIVATED
   FAILED
 }

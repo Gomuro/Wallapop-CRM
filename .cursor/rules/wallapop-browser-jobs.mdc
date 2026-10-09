@@ -1,25 +1,35 @@
 ---
-description: Parallel Wallapop CDP workers (two windows, one Chrome on 9222) — do not invent DOM
+description: One Wallapop account = one Chrome; workers are parallel slots (windows), not extra ports.
 globs: server/src/lib/wallapop-*/**/*.ts
 alwaysApply: true
 ---
 
 # Wallapop CDP workers
 
-One Wallapop **account**, one `chrome.exe`, port **9222**, profile `ChromeCDP-Persistent`. Publish and sold are **separate windows** in that process (not a second port / second user-data-dir). Worker slots may run in parallel; the same slot is serial (queue).
+Воркер — працівник **однієї каси** Wallapop. Не окремий Chrome і не окремий логін.
 
-Do **not** guess sold/unpublish selectors. Live DOM (2026-10-08, item seller): `walla-button[text="Marcar como vendido"]` in `[class*="ItemDetailSellerButtons"]`, then new tab `tsl-sold-modal` `#markAsSoldButton`, then `/app/catalog/sold` first `.CatalogItem__content--sold` href match. Never Destacar / Eliminar / Reservar / Cancelar.
+**Офіс:** один акаунт → один `chrome.exe` → порт **9222** → профіль `ChromeCDP-Persistent`. Скільки справ — стільки слотів: publish, sold, monitor, session, далі чат. Кожен — **своє вікно** в тому ж процесі (`Target.createTarget` + `newWindow: true`). Не другий порт, не другий `user-data-dir`, не `launch`, не вкладка чужого воркера.
+
+**Паралель між воркерами.** Слот не чекає інший слот. Publish не стоїть на sold; sold не чекає publish; monitor не чекає їх. Скільки запущено — стільки працюють одночасно.
+
+**Черга лише всередині слота.** Два Publicar, два Vendido або два monitor — черга. Між воркерами черги немає.
+
+**Не воркер:** login / logout. Закритий кабінет: жоден слот не стартує, поки вони йдуть. Після них слоти знову незалежні.
+
+**Session-valid** — воркер `session`: своє вікно, probe `/wall`, classify, **закрити це вікно**. Не `goto` на чужий `/wall`. 2FA-екран не закривати.
+
+## Кінець роботи
+
+- **Publish / sold:** закрити **своє** вікно/таби. Не `browser.close()`, якщо інший слот ще живий. `chrome.exe` гасити лише коли **всі** воркер-слоти idle **і** monitor-loop не тримає Chrome теплим.
+- **Monitor:** Chrome не гасити між тіками (5 хв). Закрити лише вікно monitor.
+- **Session:** закрити своє вікно; Chrome лишається після ACTIVE.
+- Селектори **не вгадувати**. Sold/unpublish — лише живий DOM. Ніколи Destacar / Eliminar / Reservar / Cancelar, якщо це не задача **цього** воркера.
 
 ## Workers (now)
 
-1. **Monitor** — not built. Chrome stays up.
-2. **Publish** — 9222 / `ChromeCDP-Persistent`. **Look at the SKU first** (title vs Tu Catálogo). Do not post a duplicate; Wallapop Follow-up may delete it after Yuhu. After Publicar: grab first `tsl-catalog-item` `/item/` href immediately (DOM under Yuhu), then dismiss «Ahora no, gracias». Close the publish window. Quit chrome.exe only if the sold slot is idle.
-3. **Sold** (C8) — same Chrome, own window. Needs a saved public `/item/…` URL. Close item + modal tabs after the job. Quit chrome.exe only if the publish slot is idle.
+1. **Session-valid** — boot і перед monitor, якщо RAM не ACTIVE. `ensureWorkerWindow("session")`.
+2. **Monitor** — En venta: `wallapop-badge[badgetype="reserved"]` → listing `RESERVED` (склад лишається ACTIVE). Бейдж зник, лот ще в En venta → listing `ACTIVE`. Потім `/app/catalog/sold` → новий `/item/` → `markProductSoldTx`. Match лише `external_url`. Власне вікно; Chrome stays up.
+3. **Publish** — 9222 / `ChromeCDP-Persistent`. **Look at the SKU first** (title vs Tu Catálogo). Do not post a duplicate; Follow-up may delete after Yuhu. After Publicar: grab first `tsl-catalog-item` `/item/` href immediately (DOM under Yuhu), then dismiss «Ahora no, gracias». Close the publish window.
+4. **Sold** (C8) — same Chrome, own window. Needs a saved public `/item/…` URL. Live DOM (2026-10-08): `walla-button[text="Marcar como vendido"]` in `[class*="ItemDetailSellerButtons"]` → new tab `tsl-sold-modal` `#markAsSoldButton` → `/app/catalog/sold` first `.CatalogItem__content--sold` href match. Close item + modal tabs after the job.
 
 Later: AI chat worker.
-
-## After a job (chosen)
-
-- **Publish / sold:** close that worker’s window/tabs. Do not `browser.close()` while the other slot is busy.
-- **Monitor:** do not quit.
-- **Login / logout / rehydrate:** exclusive; no worker slot starts until they finish.

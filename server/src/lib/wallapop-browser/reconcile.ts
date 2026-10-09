@@ -6,10 +6,11 @@ import type { Page } from "playwright"
 import {
   attachOrLaunch,
   BrowserBusyError,
-  closeWallapopBrowser,
+  closeWorkerSlotPages,
   connectCdpHandle,
   CDP_URL,
   dismissWallapopConsent,
+  ensureWorkerWindow,
   firstVisible,
   getBrowserBusy,
   getWallapopHandle,
@@ -65,7 +66,7 @@ export type ReconcileBrowserState = "REQUIRES_2FA" | "ACTIVE" | "NONE"
 /**
  * After a CDP handle exists: pick MFA/logged-in page and classify.
  * If no Wallapop tab (New Tab etc.), navigate to /wall first so cookies/session can be detected.
- * On NONE closes the browser handle (same as prior reconcile).
+ * Does not quit chrome.exe.
  */
 function findMfaPage(pages: Page[]): Page | null {
   return (
@@ -118,7 +119,6 @@ async function classifyReconcilePage(
     })
     return "ACTIVE"
   }
-  await closeWallapopBrowser()
   return "NONE"
 }
 
@@ -141,7 +141,7 @@ async function reconcileWithAttach(
   spawnIfNeeded: boolean,
 ): Promise<ReconcileBrowserState> {
   const busy = getBrowserBusy()
-  if (busy !== "idle" && busy !== "rehydrate") {
+  if (busy !== "idle") {
     log("info", "wallapop_browser_reconcile_skipped_busy", {
       busy,
       spawnIfNeeded,
@@ -178,11 +178,39 @@ export async function reconcileWallapopBrowserState(): Promise<ReconcileBrowserS
 }
 
 /**
- * Boot rehydrate: attach or spawn Chrome on CDP, then classify session.
- * Do not use on every status poll — would relaunch Chrome when disconnected.
+ * Boot / interval session-valid: own worker window, never hijack `/wall`.
+ * Caller must hold the `session` slot. Closes the window unless 2FA is on it.
+ */
+export async function classifyOwnedSessionWindow(): Promise<ReconcileBrowserState> {
+  const page = await ensureWorkerWindow("session")
+  let keepFor2fa = false
+  try {
+    log("info", "wallapop_session_worker_probe_nav", { to: PROBE_URL })
+    await page.goto(PROBE_URL, {
+      waitUntil: "domcontentloaded",
+      timeout: NAV_TIMEOUT_MS,
+    })
+    await dismissWallapopConsent(page)
+    const classified = await classifyReconcilePage(page)
+    if (classified === "REQUIRES_2FA") {
+      keepFor2fa = true
+      const handle = getWallapopHandle()
+      if (handle) {
+        setWallapopHandle({ ...handle, page, ownedPage: true })
+      }
+    }
+    return classified
+  } finally {
+    if (!keepFor2fa) await closeWorkerSlotPages("session")
+  }
+}
+
+/**
+ * Boot session-valid (spawn Chrome if CDP is down). Prefer classifyOwnedSessionWindow
+ * from the session slot. Kept for callers that already occupy `session`.
  */
 export async function reconcileWallapopBrowserStateSpawning(): Promise<ReconcileBrowserState> {
-  return reconcileWithAttach(true)
+  return classifyOwnedSessionWindow()
 }
 
 async function requireIdleFor2fa(): Promise<void> {

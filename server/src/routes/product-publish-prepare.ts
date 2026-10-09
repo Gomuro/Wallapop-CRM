@@ -46,7 +46,11 @@ export function listingBlocksDryRun(
   listing: { status: string; externalUrl: string | null } | null | undefined,
 ): boolean {
   if (!listing) return false
-  return listing.status === "ACTIVE" || wallapopItemUrlOrNull(listing.externalUrl) != null
+  return (
+    listing.status === "ACTIVE" ||
+    listing.status === "RESERVED" ||
+    wallapopItemUrlOrNull(listing.externalUrl) != null
+  )
 }
 
 export type RunProductPublishOptions = {

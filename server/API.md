@@ -101,7 +101,7 @@ Postman-колекція: `server/postman/`.
 
 | Метод | Шлях | Нотатки |
 |-------|------|---------|
-| GET | `/api/v1/products` | Пагінація `page` (default 1), `pageSize` (default 20, max 100). Фільтри: `status` (`ALL` \| `ACTIVE` \| `SOLD` \| `INACTIVE`), `q` (SKU або title, case-insensitive), опційно `categoryId`. Сортування: `updatedAt` desc. Відповідь: `{ products: [{ id, sku, title, price, currency, status, categoryId, coverUrl, updatedAt, listingStatus, listingActive }], page, pageSize, total, totalPages }`. `listingStatus` — статус listing **default**-акаунта (`READY_TO_POST` \| `POSTING` \| `ACTIVE` \| `DEACTIVATED` \| `FAILED`) або `null`. `listingActive` **true лише** коли `listingStatus === ACTIVE` (не `POSTING`, не `READY_TO_POST`). |
+| GET | `/api/v1/products` | Пагінація `page` (default 1), `pageSize` (default 20, max 100). Фільтри: `status` (`ALL` \| `ACTIVE` \| `SOLD` \| `INACTIVE`), `q` (SKU або title, case-insensitive), опційно `categoryId`. Сортування: `updatedAt` desc. Відповідь: `{ products: [{ id, sku, title, price, currency, status, categoryId, coverUrl, updatedAt, listingStatus, listingActive }], page, pageSize, total, totalPages }`. `listingStatus` — статус listing **default**-акаунта (`READY_TO_POST` \| `POSTING` \| `ACTIVE` \| `RESERVED` \| `DEACTIVATED` \| `FAILED`) або `null`. `listingActive` **true** коли `listingStatus` є `ACTIVE` або `RESERVED` (оголошення ще на Wallapop; не `POSTING`, не `READY_TO_POST`). |
 | POST | `/api/v1/products` | `sku`, `title`, `description`, `price`, `currency` default `EUR`, `categoryId` (листок), `condition` enum, `brand` (обов’язкова), `weightKg?`, `shippingPackageSize?` (`STANDARD` \| `BULKY`), `widthCm?` / `lengthCm?` / `heightCm?`, `typeAttributes?`. Авто listing на default, статус `READY_TO_POST` |
 | GET | `/api/v1/products/:id` | Картка + images + listing |
 | PATCH | `/api/v1/products/:id` | Часткове оновлення складу: `sku`, `title`, `description`, `price`, `currency`, `categoryId`, `condition`, `brand`, `weightKg`, `shippingPackageSize`, `widthCm`, `lengthCm`, `heightCm`, `typeAttributes` (усі опційно). **Strict body:** `status`, `soldAt`, `soldPrice` та невідомі ключі → **400** `VALIDATION_ERROR` (не strip). Статус — лише #57. |
@@ -120,7 +120,7 @@ Postman-колекція: `server/postman/`.
 
 ## Wallapop sold (C8)
 
-Один Chrome **9222** / `ChromeCDP-Persistent`. Sold — **окреме вікно** (не другий порт). Слот `sold` може йти паралельно з `publish`; повторний sold → **409** `BROWSER_BUSY`. Login/logout/rehydrate ексклюзивні.
+Один Chrome **9222** / `ChromeCDP-Persistent`. Sold — **окреме вікно** (не другий порт). Слоти `publish` / `sold` / `monitor` / `session` можуть іти паралельно; повтор того самого слота → **409** `BROWSER_BUSY`. Login/logout ексклюзивні.
 
 Канон: лише `ProductListing.externalUrl` = `https://es.wallapop.com/item/…`. Listing має бути `ACTIVE`. Продукт уже `SOLD` → **409** `ALREADY_SOLD` (браузер ні). Session не `ACTIVE` → **409** `NOT_ACTIVE`.
 
@@ -152,9 +152,9 @@ Dry-run default: `WALLAPOP_SOLD_DRY_RUN !== "false"` (або body `{ "dryRun": t
 
 Після `POST /products` на default вже є рядок `product_listings` з `status: READY_TO_POST`. PUT = **upsert** за `@@unique([productId, accountId])` лише для default.
 
-`POSTING` — внутрішній claim під час live publish (Chrome ще не відкрито / публікація в польоті). GET / вкладений `product.listing` **можуть** повернути `POSTING` або `FAILED` (watchdog вичерпав ретраї). PUT **не** приймає `POSTING` / `FAILED` у body → **400** `VALIDATION_ERROR`. З `FAILED` оператор може PUT `READY_TO_POST` (знову в чергу) або `ACTIVE` (товар уже в Wallapop).
+`POSTING` — внутрішній claim під час live publish (Chrome ще не відкрито / публікація в польоті). GET / вкладений `product.listing` **можуть** повернути `POSTING` або `FAILED` (watchdog вичерпав ретраї). PUT **не** приймає `POSTING` / `FAILED` у body → **400** `VALIDATION_ERROR`. З `FAILED` оператор може PUT `READY_TO_POST` (знову в чергу) або `ACTIVE` / `RESERVED` (товар уже в Wallapop). `RESERVED` — hold на живому оголошенні; склад лишається `ACTIVE`. Не плутати з vendido (`Product.SOLD` + listing `DEACTIVATED`).
 
-Якщо поточний статус **вже** `POSTING`: `status: READY_TO_POST` (і будь-який статус, що знімає claim, крім recovery) → **409** `PUBLISH_IN_PROGRESS`. Дозволено `status: ACTIVE` (оператор: уже в Wallapop) і `status: DEACTIVATED`. Якщо `status` немає — оновлення URL/shipping **не** знімає claim.
+Якщо поточний статус **вже** `POSTING`: `status: READY_TO_POST` (і будь-який статус, що знімає claim, крім recovery) → **409** `PUBLISH_IN_PROGRESS`. Дозволено `status: ACTIVE` / `RESERVED` (оператор: уже в Wallapop) і `status: DEACTIVATED`. Якщо `status` немає — оновлення URL/shipping **не** знімає claim.
 
 ### `GET /api/v1/products/:id/listing`
 
@@ -190,7 +190,7 @@ Body (JSON, camelCase): усі поля опційні, **хоча б одне**
 | Поле | Тип |
 |------|-----|
 | `externalUrl` | публічний URL `/item/…` або `null` (очистити). Головна Wallapop, `/upload…` і будь-який інший рядок **стають `null`** |
-| `status` | `READY_TO_POST` \| `ACTIVE` \| `DEACTIVATED` (не `POSTING`) |
+| `status` | `READY_TO_POST` \| `ACTIVE` \| `RESERVED` \| `DEACTIVATED` (не `POSTING`) |
 | `shippingEnabled` | `boolean` |
 | `shippingUpToKg` | позитивне ціле або `null` |
 
@@ -202,7 +202,7 @@ Body (JSON, camelCase): усі поля опційні, **хоча б одне**
 |------|------|------|
 | 400 | `VALIDATION_ERROR` | Zod |
 | 404 | `NOT_FOUND` | Продукт не знайдено або немає default account |
-| 409 | `PUBLISH_IN_PROGRESS` | Listing зараз `POSTING`, а body `status` знімає claim (`READY_TO_POST`). `ACTIVE` / `DEACTIVATED` / без `status` — ок |
+| 409 | `PUBLISH_IN_PROGRESS` | Listing зараз `POSTING`, а body `status` знімає claim (`READY_TO_POST`). `ACTIVE` / `RESERVED` / `DEACTIVATED` / без `status` — ок |
 | 500 | `INTERNAL` | БД не налаштована |
 
 ## Accounts (#64)
@@ -213,7 +213,7 @@ Body (JSON, camelCase): усі поля опційні, **хоча б одне**
 | PATCH | `/api/v1/accounts/default/autopost` | Body `{ value: int, unit: "seconds" \| "minutes" \| "hours" \| "days" }`. Конвертує в ms на сервері (1 хв … 7 діб). Пише `accounts.autopost_interval_ms`. Відповідь як GET. 400 `VALIDATION_ERROR`, 404 без default |
 | POST | `/api/v1/accounts/default/autopost/start` | `autopostEnabled: true`. Session має бути `ACTIVE`, інакше **409** `NOT_ACTIVE`. Відповідь як GET |
 | POST | `/api/v1/accounts/default/autopost/stop` | `autopostEnabled: false`. Якщо Chrome зараз у тіку publish — **abort** in-flight CDP, закриває owned upload-таб (`wallapop_publish_abort_requested` / `wallapop_publish_abort` `reason: stop`). Chrome / `/wall` **не** гасяться (сесія для наступного Start). Publicar після Stop під час заповнення форми не клікається. Відповідь як GET |
-| GET | `/api/v1/accounts/status` | In-memory сесія браузера: `{ status, requires2FA, email, error? }`. `status`: `DISCONNECTED` \| `AUTHENTICATING` \| `ACTIVE`. Boot-rehydrate **може spawn** Chrome; цей GET лише **attach**. Якщо немає Wallapop-табу — probe **goto** `/wall`, далі MFA → `AUTHENTICATING` / logged-in → `ACTIVE` |
+| GET | `/api/v1/accounts/status` | In-memory сесія браузера: `{ status, requires2FA, email, error? }`. `status`: `DISCONNECTED` \| `AUTHENTICATING` \| `ACTIVE`. Boot session-valid — воркер `session` (своє вікно, не hijack `/wall`). Цей GET лише **attach** існуючих вкладок, без spawn. |
 | POST | `/api/v1/accounts/connect` | Body `{ email, password, proxy? }` — **password використовується** для Keycloak fill (у БД **не** зберігається). Відкриває/чіпляє Chrome → onboarding «Iniciar sesión con email» → fill `#username`/`#password` → `#kc-login`. Вже залогінений профіль → `ACTIVE` без форми. Потрібен 2FA → `requires2FA: true`. Fail (у т.ч. reCAPTCHA) → **400** `CONNECT_FAILED`. Якщо email Wallapop **інший**, ніж `accounts.wallapop_email` — listings default-акаунта → `READY_TO_POST`, URL/lastPostedAt null, autopost Stop; відповідь `listingsReset: true` |
 | POST | `/api/v1/accounts/connect/2fa` | Body `{ code }` (4–8 alphanumeric). Вводить OTP у відкритий контекст. Якщо RAM злетіла після рестарту, але MFA-екран у Chrome лишився — **re-attach CDP** і прийняти код (не 409). Без MFA/сесії → **409** `NOT_AUTHENTICATING`. Помилка коду → **400** `CONNECT_FAILED` |
 | POST | `/api/v1/accounts/disconnect` | Повний **logout Wallapop** у Chrome-профілі (`clearCookies` + `es.wallapop.com/logout`) + CRM `DISCONNECTED`; Prisma default → `INACTIVE`. Профіль на диску / процес Chrome не видаляються. Якщо CDP недоступний — CRM все одно від’єднується |
@@ -325,7 +325,7 @@ URL: `…/realms/wallapop-internal/login-actions/authenticate?execution=…`
 
 #### Cookies / CMP
 
-Wallapop часто показує **consentmanager** `#cmpbox` (GDPR welcome) з кнопками **Accept all** / **Reject all** — це `<a class="cmpboxbtnyes">`, не `<button>`. **`dismissWallapopConsent`** (селектори `WALLAPOP_CMP_ACCEPT_SELECTORS` у `wallapop-cdp.ts`) викликається на Connect/login, після probe `/wall` при rehydrate, і на старті publish/dry-run.
+Wallapop часто показує **consentmanager** `#cmpbox` (GDPR welcome) з кнопками **Accept all** / **Reject all** — це `<a class="cmpboxbtnyes">`, не `<button>`. **`dismissWallapopConsent`** (селектори `WALLAPOP_CMP_ACCEPT_SELECTORS` у `wallapop-cdp.ts`) викликається на Connect/login, у вікні session-valid, monitor-каталозі і на старті publish/dry-run.
 
 | `WALLAPOP_CMP_ACCEPT_SELECTORS` / `SELECTORS.cookieAccept` (пріоритет) |
 |--------------------------------------|
@@ -356,7 +356,7 @@ Google / Apple / Facebook SSO на onboarding — окремі `walla-button`; e
 
 ### Locked decisions
 
-1. **Gate:** publish лише якщо in-memory Wallapop session `status === "ACTIVE"`. Інакше **409** `NOT_ACTIVE` (повідомлення ES). Після `listen` API fire-and-forget `rehydrateWallapopSessionOnBoot()` — **attach або spawn** Chrome на CDP (`WALLAPOP_CDP_PORT` / профіль Persistent); якщо немає Wallapop-табу — **goto** `https://es.wallapop.com/wall`, потім classify (ACTIVE / 2FA / DISCONNECTED). Звичайний `GET /accounts/status` reconcile — **лише attach** (без spawn), але той самий probe `/wall` якщо вкладка не Wallapop. **Publish / Probar:** `ensureWallapopPage()` — **attach або spawn** (як login), потім **завжди нова вкладка** upload (`ownedPage: true`); існуючий `/wall` не reuse і не `location.assign`. Post-`listen` хуки: [`runStartupHooks()`](./src/startup.ts) (rehydrate з тим самим логом + `startWallapopAutopostLoop()`). [`server/src/index.ts`](./src/index.ts) — лише boot + listen + `runStartupHooks()`.
+1. **Gate:** publish лише якщо in-memory Wallapop session `status === "ACTIVE"`. Інакше **409** `NOT_ACTIVE` (повідомлення ES). Після `listen` — `startWallapopMonitorLoop()`: воркер `session` (`ensureWorkerWindow`, probe `/wall`, закрити вікно) → якщо ACTIVE, воркер `monitor` (En venta reserved-бейдж + Vendidos → CRM) → далі кожні 5 хв. Chrome між monitor-тіками не гаситься. `GET /accounts/status` — **лише attach** (без spawn). **Publish / Probar:** `ensureWallapopPage()` — нова вкладка upload. Post-`listen` хуки: [`runStartupHooks()`](./src/startup.ts) (monitor loop + `startWallapopAutopostLoop()`). [`server/src/index.ts`](./src/index.ts) — лише boot + listen + `runStartupHooks()`.
 2. **Navigation:** у publish-flow **заборонено** `page.goto` на вже відкритому Wallapop-табі. Дозволено: `location.assign`, UI-кліки, нова вкладка через CDP при recover.
 3. **Dry-run default:** стоп **перед** кліком `Publicar`, якщо `WALLAPOP_PUBLISH_DRY_RUN` не дорівнює `false` (unset / `true` = dry-run).
 4. **MVP scope:** один CDP-акаунт; лише consumer-goods («Algo que ya no necesito»).
@@ -384,11 +384,11 @@ Chrome / вкладки Wallapop відкриваються коли потрі�
 
 | Що | Зараз | План |
 |----|--------|------|
-| Boot rehydrate | `attachOrLaunch` + probe `/wall` | без змін (Chrome після boot ще живе, поки не publish) |
+| Boot session-valid | воркер `session`: своє вікно + `/wall`, потім закрити вікно | Chrome після ACTIVE лишається для monitor |
 | Login / 2FA | `attachOrLaunch` | після logout / FAILED — `closeWallapopBrowser` = quit Chrome |
 | `GET /accounts/status` reconcile | attach-only; при NONE — quit | не spawn зі status |
 | Publish / **Probar publicación** | live: після дії **quit chrome.exe**. Dry-run (Probar): лише закрити upload-таб, Chrome лишається подивитись форму | — |
-| `closeWallapopBrowser()` / `quitWallapopChrome()` | disconnect + **quit chrome.exe**; профіль на диску. Logout кидає `BROWSER_BUSY`, якщо слот publish або sold зайнятий. | — |
+| `closeWallapopBrowser()` / `quitWallapopChrome()` | disconnect + **quit chrome.exe**; профіль на диску. Logout кидає `BROWSER_BUSY`, якщо будь-який воркер-слот зайнятий. `quitChromeIfNoWorkerSlots` не гасить Chrome, поки monitor-loop тримає його теплим. | — |
 
 **Probar:** dry-run зупиняється **перед** `Publicar` (форма заповнена в Chrome, клік Publicar не робиться). Повідомлення UI типу «Rellena el formulario…» — очікувана підказка для live publish; при успішному dry-run API повертає `step: "before_publicar"`.
 
@@ -412,18 +412,18 @@ Chrome / вкладки Wallapop відкриваються коли потрі�
 
 **200** live (`WALLAPOP_PUBLISH_DRY_RUN=false`): `{ ok, dryRun: false, listing, error: null, step: "published" }` — listing `ACTIVE`. `externalUrl` лише унікальний `/item/…` (D11), інакше `null`.
 
-Перед Chrome live publish атомарно claim-ить listing: `READY_TO_POST` → `POSTING` де `productId+accountId` і **немає** публічного URL `/item/…` (upload/home URL не рахується; claim також обнуляє junk URL і інкрементить `postingAttempts`). 0 рядків → **409** `ALREADY_POSTED` (вже `ACTIVE` / `POSTING` / `DEACTIVATED` / `FAILED` / є `/item/…`). Після live-успіху браузера (`dryRun: false`) пише `ACTIVE` **лише якщо** listing ще `POSTING` (не форсить `ACTIVE` поверх `DEACTIVATED` / sold) і обнуляє `postingAttempts`. Якщо браузер уже опублікував, а DB-запис упав — статус лишається `POSTING`, **500** `PUBLISH_FAILED`, revert **немає**.
+Перед Chrome live publish атомарно claim-ить listing: `READY_TO_POST` → `POSTING` де `productId+accountId` і **немає** публічного URL `/item/…` (upload/home URL не рахується; claim також обнуляє junk URL і інкрементить `postingAttempts`). 0 рядків → **409** `ALREADY_POSTED` (вже `ACTIVE` / `RESERVED` / `POSTING` / `DEACTIVATED` / `FAILED` / є `/item/…`). Після live-успіху браузера (`dryRun: false`) пише `ACTIVE` **лише якщо** listing ще `POSTING` (не форсить `ACTIVE` поверх `DEACTIVATED` / sold) і обнуляє `postingAttempts`. Якщо браузер уже опублікував, а DB-запис упав — статус лишається `POSTING`, **500** `PUBLISH_FAILED`, revert **немає**.
 
 **D9 — пост висить:** після кліку Publicar Wallapop кидає на `https://es.wallapop.com/app/catalog/published` (Tu Catálogo), **не** на `/item/…`. Поверх каталогу — **`tsl-bump-suggestion-modal`** / `walla-dialog.BumpSuggestionModal`: заголовок **«¡Yuhu! Producto subido»**, кнопки **«Ahora no, gracias»** (secondary) і **«Destacar producto»** (primary), хрестик `aria-label="Close"`. Це успіх публікації. **D11 швидко:** `evaluate` перший `tsl-catalog-item a[href*="/item/"]` (~98%; Follow-up може зняти рядок — не чекати `visible`, рядок під Yuhu). Назва на Wallapop часто **не** збігається з CRM (`aria-label` / `info-title`, напр. «Mesa Auxiliar Cama Teqler Regulable»). Модалку можна закривати після зчитування `href`. У рядку каталогу: `button.btn-sold`, `button.btn-reserve`, `button.btn-edit`. `ACTIVE` лише якщо вкладка жива і URL — цей каталог (або рідкісний `/item/…`) **і** немає банера «Revisa los campos / Revisa la información». Лишились на `/upload/…` або банер → fail, listing **ревертиться** з `POSTING`. `target closed` / інший URL (`/wall` тощо) → fail, **не** `ACTIVE`, claim лишається `POSTING` (лог `wallapop_publish_verify` з `reason`: `published_catalog` \| `item_url` \| `still_on_upload` \| `review_banner` \| `target_closed` \| `unexpected_url`). Без `href` — `ACTIVE` і `externalUrl: null`. Ніколи не писати `/upload/` чи `/published/` у `externalUrl`.
 
-Revert `POSTING` → `READY_TO_POST` лише якщо був claim і Publicar **не** натиснули (BrowserBusy / фейл до Publicar / Stop / банер / upload). Watchdog (boot + кожен autopost тік): `POSTING` старший за `WALLAPOP_POSTING_STALE_MS` і `getBrowserBusy() !== "publish"` → знову `READY_TO_POST` з логом причини (`chrome_dead` / `timeout` / `target_closed`); після `WALLAPOP_POSTING_MAX_ATTEMPTS` claim-ів без `ACTIVE` → `FAILED`. Live publish під lock `publish` watchdog не чіпає. Dry-run **не** claim-ить; **409** `ALREADY_POSTED` якщо listing уже `ACTIVE` або є публічний `/item/…` (`POSTING` для dry-run дозволений, read-only).
+Revert `POSTING` → `READY_TO_POST` лише якщо був claim і Publicar **не** натиснули (BrowserBusy / фейл до Publicar / Stop / банер / upload). Watchdog (boot + кожен autopost тік): `POSTING` старший за `WALLAPOP_POSTING_STALE_MS` і `getBrowserBusy() !== "publish"` → знову `READY_TO_POST` з логом причини (`chrome_dead` / `timeout` / `target_closed`); після `WALLAPOP_POSTING_MAX_ATTEMPTS` claim-ів без `ACTIVE` → `FAILED`. Live publish під lock `publish` watchdog не чіпає. Dry-run **не** claim-ить; **409** `ALREADY_POSTED` якщо listing уже `ACTIVE` / `RESERVED` або є публічний `/item/…` (`POSTING` для dry-run дозволений, read-only).
 
 | HTTP | code | Коли |
 |------|------|------|
 | 401 | `UNAUTHORIZED` | Немає cookie |
 | 404 | `NOT_FOUND` | Продукт / default account |
 | 409 | `NOT_ACTIVE` | Session не ACTIVE |
-| 409 | `BROWSER_BUSY` | Chrome зайнятий іншою дією (login / logout / publish / sold / rehydrate). Слоти publish+sold можуть бути разом; два publish або два sold — ні |
+| 409 | `BROWSER_BUSY` | Chrome зайнятий іншою дією (login / logout / той самий worker slot). Слоти publish+sold+monitor+session можуть бути разом; два однакових слоти — ні |
 | 409 | `ALREADY_POSTED` | Listing уже опублікований / claimed / має публічний `/item/…` |
 | 409 | `NOT_PUBLISHABLE` | Складський статус продукту `SOLD` або `INACTIVE` |
 | 400 | `SHIPPING_NOT_READY` | Немає peso (live publish, до claim). Medidas не обов’язкові. |
@@ -432,7 +432,7 @@ Revert `POSTING` → `READY_TO_POST` лише якщо був claim і Publicar 
 
 ### Autopost queue
 
-In-process цикл по `product_listings` (без Redis / нової таблиці). Таймери стартують на буті завжди. Тік **не** поститить, доки UI Start не поставить `accounts.autopost_enabled` **і** `WALLAPOP_PUBLISH_DRY_RUN=false`. `{ dryRun: false }` у воркері **не** обходить env. Якщо live: session `ACTIVE` і Chrome idle (`getBrowserBusy() === "idle"`) → FIFO eligible listings на **default** акаунті (`status: READY_TO_POST`, без публічного `/item/…`, продукт `ACTIVE` з ≥1 image, `orderBy: createdAt asc`, batch 30). Listings без peso **пропускаються** (`wallapop_autopost_skip_shipping`, `recentSkips` у GET default) і тік бере **наступний** ready. Один publish на тік. Не вибирає `POSTING` / `ACTIVE` / `DEACTIVATED` / `FAILED`. Тік **спочатку** ганяє posting watchdog (навіть без Start / без live), щоб після вбитого Chrome черга знову взяла товар або лишила `FAILED`. Модуль watchdog: [`server/src/lib/wallapop-posting-watchdog.ts`](./src/lib/wallapop-posting-watchdog.ts). Інтервал: `account.autopostIntervalMs` → env `WALLAPOP_AUTOPOST_INTERVAL_MS` → default 15 хв; + ±20% jitter. PATCH інтервалу і Start **перезапускають** поточний `setTimeout` (`rescheduleAutopostLoop`), щоб countdown не лишався від старого (довшого) інтервалу. Після кожного тіка loop знову читає інтервал. Інший email Wallapop на connect скидає listings цього default-акаунта. Модуль: [`server/src/lib/wallapop-autopost.ts`](./src/lib/wallapop-autopost.ts). Старт: [`runStartupHooks()`](./src/startup.ts).
+In-process цикл по `product_listings` (без Redis / нової таблиці). Таймери стартують на буті завжди. Тік **не** поститить, доки UI Start не поставить `accounts.autopost_enabled` **і** `WALLAPOP_PUBLISH_DRY_RUN=false`. `{ dryRun: false }` у воркері **не** обходить env. Якщо live: session `ACTIVE` і Chrome idle (`getBrowserBusy() === "idle"`) → FIFO eligible listings на **default** акаунті (`status: READY_TO_POST`, без публічного `/item/…`, продукт `ACTIVE` з ≥1 image, `orderBy: createdAt asc`, batch 30). Listings без peso **пропускаються** (`wallapop_autopost_skip_shipping`, `recentSkips` у GET default) і тік бере **наступний** ready. Один publish на тік. Не вибирає `POSTING` / `ACTIVE` / `RESERVED` / `DEACTIVATED` / `FAILED`. Тік **спочатку** ганяє posting watchdog (навіть без Start / без live), щоб після вбитого Chrome черга знову взяла товар або лишила `FAILED`. Модуль watchdog: [`server/src/lib/wallapop-posting-watchdog.ts`](./src/lib/wallapop-posting-watchdog.ts). Інтервал: `account.autopostIntervalMs` → env `WALLAPOP_AUTOPOST_INTERVAL_MS` → default 15 хв; + ±20% jitter. PATCH інтервалу і Start **перезапускають** поточний `setTimeout` (`rescheduleAutopostLoop`), щоб countdown не лишався від старого (довшого) інтервалу. Після кожного тіка loop знову читає інтервал. Інший email Wallapop на connect скидає listings цього default-акаунта. Модуль: [`server/src/lib/wallapop-autopost.ts`](./src/lib/wallapop-autopost.ts). Старт: [`runStartupHooks()`](./src/startup.ts).
 
 ### Manual verify (dry-run)
 

@@ -10,6 +10,7 @@ import {
   conditionFromFormValue,
   conditionLabel,
 } from "@/lib/inventory/conditions"
+import { isLiveOnWallapopStatus } from "@/lib/inventory/listing-active"
 import { isShippingPublishReady } from "@/lib/inventory/shipping-for-publish"
 import type {
   InventoryListing,
@@ -25,6 +26,7 @@ import type {
 const PRODUCT_STATUSES = new Set<ProductStatus>(["ACTIVE", "SOLD", "INACTIVE"])
 const LISTING_STATUSES = new Set<ListingStatusRead>([
   "ACTIVE",
+  "RESERVED",
   "DEACTIVATED",
   "READY_TO_POST",
   "POSTING",
@@ -139,7 +141,7 @@ function listItemListingActive(
   listing: InventoryListing | null,
 ): boolean {
   if (listing?.status === "POSTING") return false
-  if (listing) return listing.status === "ACTIVE"
+  if (listing) return isLiveOnWallapopStatus(listing.status)
   return Boolean(row.listingActive)
 }
 
@@ -243,7 +245,7 @@ export function toInventoryProduct({
       product.typeAttributes && typeof product.typeAttributes === "object"
         ? product.typeAttributes
         : {},
-    listingActive: listing?.status === "ACTIVE",
+    listingActive: isLiveOnWallapopStatus(listing?.status),
     shippingPublishReady: isShippingPublishReady({
       weightKg: asNullableNumber(product?.weightKg),
       shippingEnabled: listing?.shippingEnabled,

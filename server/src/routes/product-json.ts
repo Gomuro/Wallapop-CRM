@@ -220,7 +220,7 @@ function toProductListItemListing(row: ProductListItemRow) {
   const listingStatus = row.listings[0]?.status ?? null
   return {
     listingStatus,
-    listingActive: listingStatus === "ACTIVE",
+    listingActive: listingStatus === "ACTIVE" || listingStatus === "RESERVED",
     lastPostedAt: row.listings[0]?.lastPostedAt?.toISOString() ?? null,
     shippingPublishReady: isShippingPublishReady({
       weightKg: decimalJson(row.weightKg),

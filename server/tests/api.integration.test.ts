@@ -463,6 +463,9 @@ describe("API v1 integration (Express + Postgres)", () => {
         listingBlocksDryRun({ status: "ACTIVE", externalUrl: null }),
       ).toBe(true)
       expect(
+        listingBlocksDryRun({ status: "RESERVED", externalUrl: null }),
+      ).toBe(true)
+      expect(
         listingBlocksDryRun({
           status: "READY_TO_POST",
           externalUrl: "https://es.wallapop.com/item/x",
@@ -734,11 +737,114 @@ describe("API v1 integration (Express + Postgres)", () => {
       expect(res.body.listing?.status).toBe("DEACTIVATED")
     })
 
+    it("PUT RESERVED while POSTING is allowed", async () => {
+      const { id } = await createAndClaim()
+      const res = await agent
+        .put(`/api/v1/products/${id}/listing`)
+        .send({ status: "RESERVED" })
+      expect(res.status).toBe(200)
+      expect(res.body.listing?.status).toBe("RESERVED")
+    })
+
     afterAll(async () => {
       if (!agent) return
       for (const id of createdIds) {
         await agent.delete(`/api/v1/products/${id}`)
       }
+    })
+  })
+
+  describe("listing RESERVED", () => {
+    let reservedProductId: string
+    let reservedSku: string
+
+    beforeAll(async () => {
+      const categoryId = await findLeafCategoryId(agent)
+      reservedSku = `API-RESERVED-${Date.now()}`
+      const created = await agent.post("/api/v1/products").send({
+        sku: reservedSku,
+        title: "API reserved listing",
+        description: "Vitest RESERVED listing status",
+        price: 8.5,
+        currency: "EUR",
+        categoryId,
+        condition: "GOOD",
+        brand: "Acme",
+        weightKg: 1.2,
+      })
+      expect(created.status).toBe(201)
+      reservedProductId = created.body.product?.id as string
+      expect(reservedProductId).toBeTruthy()
+
+      const put = await agent
+        .put(`/api/v1/products/${reservedProductId}/listing`)
+        .send({
+          status: "RESERVED",
+          externalUrl: "https://es.wallapop.com/item/api-reserved",
+        })
+      expect(put.status).toBe(200)
+      expect(put.body.listing?.status).toBe("RESERVED")
+    })
+
+    afterAll(async () => {
+      if (reservedProductId && agent) {
+        await agent.delete(`/api/v1/products/${reservedProductId}`)
+      }
+    })
+
+    it("lists listingActive true and does not publish or claim", async () => {
+      const list = await agent.get(
+        `/api/v1/products?page=1&pageSize=50&q=${encodeURIComponent(reservedSku)}`,
+      )
+      expect(list.status).toBe(200)
+      const item = (
+        list.body.products as Array<{
+          sku?: string
+          status?: string
+          listingStatus?: string | null
+          listingActive?: boolean
+        }>
+      ).find((p) => p.sku === reservedSku)
+      expect(item?.status).toBe("ACTIVE")
+      expect(item?.listingStatus).toBe("RESERVED")
+      expect(item?.listingActive).toBe(true)
+
+      const publish = await agent
+        .post(`/api/v1/products/${reservedProductId}/publish`)
+        .send({ dryRun: true })
+      expect(publish.status).toBe(409)
+      expect(errorCode(publish.body)).toBe("ALREADY_POSTED")
+
+      const prisma = getPrisma()
+      expect(prisma).toBeTruthy()
+      const accountId = await findDefaultAccountId(prisma!)
+      expect(accountId).toBeTruthy()
+      const claimed = await claimListingForPublish(
+        prisma!,
+        reservedProductId,
+        accountId!,
+      )
+      expect(claimed).toBe(false)
+    })
+
+    it("POST sold deactivates a RESERVED listing", async () => {
+      const res = await agent.post(`/api/v1/products/${reservedProductId}/sold`)
+      expect(res.status).toBe(200)
+      expect(res.body.product?.status).toBe("SOLD")
+      expect(res.body.product?.listing?.status).toBe("DEACTIVATED")
+
+      const list = await agent.get(
+        `/api/v1/products?page=1&pageSize=50&q=${encodeURIComponent(reservedSku)}`,
+      )
+      const item = (
+        list.body.products as Array<{
+          sku?: string
+          listingStatus?: string | null
+          listingActive?: boolean
+        }>
+      ).find((p) => p.sku === reservedSku)
+      expect(item?.listingStatus).toBe("DEACTIVATED")
+      expect(item?.listingActive).toBe(false)
     })
   })
 

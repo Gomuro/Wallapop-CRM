@@ -1,9 +1,16 @@
 import { log } from "../log"
 import { closeWallapopUploadTab } from "./tabs"
 
-export type BrowserWorkerSlot = "publish" | "sold"
-export type BrowserExclusiveOp = "login" | "logout" | "rehydrate"
+export type BrowserWorkerSlot = "publish" | "sold" | "monitor" | "session"
+export type BrowserExclusiveOp = "login" | "logout"
 export type BrowserBusy = "idle" | BrowserWorkerSlot | BrowserExclusiveOp
+
+const WORKER_SLOT_ORDER = [
+  "publish",
+  "sold",
+  "monitor",
+  "session",
+] as const satisfies readonly BrowserWorkerSlot[]
 
 const workerSlots = new Set<BrowserWorkerSlot>()
 let exclusiveBusy: BrowserExclusiveOp | null = null
@@ -11,6 +18,8 @@ let exclusiveBusy: BrowserExclusiveOp | null = null
 let publishAbort: AbortController | null = null
 /** Set by Stop: skip quitWallapopChrome so the session stays warm for next Start. */
 let keepChromeAfterAbort = false
+/** Monitor loop: keep chrome.exe between ticks (slot is idle for 5 min). */
+let keepChromeWarm = false
 
 export class BrowserBusyError extends Error {
   readonly code = "BROWSER_BUSY" as const
@@ -51,18 +60,20 @@ export function throwIfPublishAborted(): void {
 }
 
 function isWorkerSlot(op: Exclude<BrowserBusy, "idle">): op is BrowserWorkerSlot {
-  return op === "publish" || op === "sold"
+  return (WORKER_SLOT_ORDER as readonly string[]).includes(op)
+}
+
+function firstBusyWorkerSlot(): BrowserWorkerSlot | null {
+  return WORKER_SLOT_ORDER.find((slot) => workerSlots.has(slot)) ?? null
 }
 
 /**
- * Prefer publish when both worker slots are occupied so the posting
+ * Prefer publish when worker slots overlap so the posting
  * watchdog still treats an in-flight Publicar as holding Chrome.
  */
 export function getBrowserBusy(): BrowserBusy {
   if (exclusiveBusy) return exclusiveBusy
-  if (workerSlots.has("publish")) return "publish"
-  if (workerSlots.has("sold")) return "sold"
-  return "idle"
+  return firstBusyWorkerSlot() ?? "idle"
 }
 
 export function isBrowserPublishBusy(): boolean {
@@ -73,15 +84,29 @@ export function isBrowserSoldBusy(): boolean {
   return workerSlots.has("sold")
 }
 
+export function isBrowserMonitorBusy(): boolean {
+  return workerSlots.has("monitor")
+}
+
+export function isBrowserSessionBusy(): boolean {
+  return workerSlots.has("session")
+}
+
 export function isAnyWorkerSlotBusy(): boolean {
   return workerSlots.size > 0
 }
 
+export function setKeepChromeWarm(on: boolean): void {
+  keepChromeWarm = on
+}
+
+export function isKeepChromeWarm(): boolean {
+  return keepChromeWarm
+}
+
 function occupantForExclusive(): BrowserBusy {
   if (exclusiveBusy) return exclusiveBusy
-  if (workerSlots.has("publish")) return "publish"
-  if (workerSlots.has("sold")) return "sold"
-  return "idle"
+  return firstBusyWorkerSlot() ?? "idle"
 }
 
 function assertCanStart(op: Exclude<BrowserBusy, "idle">): void {
@@ -119,13 +144,14 @@ export function consumeKeepChromeAfterAbort(): boolean {
 export function resetWallapopPublishAbortForTests(): void {
   publishAbort = null
   keepChromeAfterAbort = false
+  keepChromeWarm = false
   exclusiveBusy = null
   workerSlots.clear()
 }
 
 /**
- * Reject if this op cannot start. Worker slots publish+sold may overlap;
- * login/logout/rehydrate stay exclusive against everything.
+ * Reject if this op cannot start. Worker slots may overlap;
+ * login/logout stay exclusive against everything.
  */
 export function assertBrowserIdle(forOp: Exclude<BrowserBusy, "idle">): void {
   assertCanStart(forOp)
@@ -137,8 +163,8 @@ function occupy(op: Exclude<BrowserBusy, "idle">): void {
     workerSlots.add("publish")
     return
   }
-  if (op === "sold") {
-    workerSlots.add("sold")
+  if (isWorkerSlot(op)) {
+    workerSlots.add(op)
     return
   }
   exclusiveBusy = op
@@ -150,8 +176,8 @@ function release(op: Exclude<BrowserBusy, "idle">): void {
     workerSlots.delete("publish")
     return
   }
-  if (op === "sold") {
-    workerSlots.delete("sold")
+  if (isWorkerSlot(op)) {
+    workerSlots.delete(op)
     return
   }
   exclusiveBusy = null

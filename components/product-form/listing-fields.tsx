@@ -22,6 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { listingStatusLabel, formatListingPostedAt } from "@/lib/inventory/format"
+import { isLiveOnWallapopStatus } from "@/lib/inventory/listing-active"
 import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
 import type { InventoryListing } from "@/lib/inventory/types"
 import { wallapopItemUrlOrNull } from "@/lib/inventory/wallapop-item-url"
@@ -32,13 +33,20 @@ import { cn } from "@/lib/utils"
 const LISTING_STATUS_OPTIONS: ListingStatus[] = [
   "READY_TO_POST",
   "ACTIVE",
+  "RESERVED",
   "DEACTIVATED",
 ]
 
 function writableListingStatus(
   status: InventoryListing["status"] | undefined,
 ): ListingStatus {
-  if (status === "ACTIVE" || status === "DEACTIVATED") return status
+  if (
+    status === "ACTIVE" ||
+    status === "RESERVED" ||
+    status === "DEACTIVATED"
+  ) {
+    return status
+  }
   return "READY_TO_POST"
 }
 
@@ -366,7 +374,10 @@ export function ListingFields({
           <p className={typeMeta}>Se guarda aparte del producto.</p>
         </div>
         <ListingStatusBadge
-          product={{ listing, listingActive: listing.status === "ACTIVE" }}
+          product={{
+            listing,
+            listingActive: isLiveOnWallapopStatus(listing.status),
+          }}
           className="shrink-0"
         />
       </CardHeader>

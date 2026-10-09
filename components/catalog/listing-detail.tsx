@@ -4,6 +4,7 @@ import { ExternalLinkIcon } from "lucide-react"
 import { ClearListingLinkButton } from "@/components/catalog/clear-listing-link-button"
 import { ListingStatusBadge } from "@/components/catalog/listing-status-badge"
 import { formatListingPostedAt } from "@/lib/inventory/format"
+import { isLiveOnWallapopStatus } from "@/lib/inventory/listing-active"
 import { SHIPPING_NOT_READY_MESSAGE } from "@/lib/inventory/shipping-for-publish"
 import type { InventoryListing } from "@/lib/inventory/types"
 import { wallapopItemUrlOrNull } from "@/lib/inventory/wallapop-item-url"
@@ -38,7 +39,8 @@ export function ListingDetailSection({
   const itemUrl = wallapopItemUrlOrNull(listing?.externalUrl)
   const junkUrl = Boolean(listing?.externalUrl) && !itemUrl
   const ready = listing?.status === "READY_TO_POST"
-  const posted = listing?.status === "ACTIVE" && Boolean(itemUrl)
+  const posted = isLiveOnWallapopStatus(listing?.status) && Boolean(itemUrl)
+  const reserved = listing?.status === "RESERVED"
   const deactivated = listing?.status === "DEACTIVATED"
 
   return (
@@ -59,7 +61,9 @@ export function ListingDetailSection({
           </div>
           <div className="divide-y divide-border px-3">
             <MetaRow label="Estado">
-              {posted
+              {reserved
+                ? "Reservado"
+                : posted
                 ? "Publicado"
                 : deactivated
                   ? "Vendido en Wallapop"

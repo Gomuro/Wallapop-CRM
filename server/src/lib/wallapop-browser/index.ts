@@ -20,6 +20,7 @@ export {
   type BrowserLoginOutcome,
 } from "./login"
 export {
+  classifyOwnedSessionWindow,
   reconcileWallapopBrowserState,
   reconcileWallapopBrowserStateSpawning,
   submitWallapop2faInBrowser,

@@ -1,15 +1,20 @@
 import type { WallapopConnectionStatus } from "../../../lib/validations/account"
 
 import {
+  classifyOwnedSessionWindow,
   closeWallapopBrowser,
   loginWallapopInBrowser,
   logoutWallapopInBrowser,
   reconcileWallapopBrowserState,
-  reconcileWallapopBrowserStateSpawning,
   submitWallapop2faInBrowser,
   type ReconcileBrowserState,
 } from "./wallapop-browser"
-import { isBrowserBusyError, runWithBrowserBusy } from "./wallapop-cdp"
+import {
+  isBrowserBusyError,
+  quitChromeIfNoWorkerSlots,
+  runWithBrowserBusy,
+  setKeepChromeWarm,
+} from "./wallapop-cdp"
 import { getPrisma } from "./db"
 import { log } from "./log"
 import { syncWallapopIdentityOnActive } from "./wallapop-account-identity"
@@ -116,13 +121,19 @@ export async function getWallapopSessionSnapshot(): Promise<WallapopSessionSnaps
 }
 
 /**
- * API boot: attach or spawn Chrome CDP, then classify session into RAM.
- * Fire-and-forget from listen — does not block boot.
+ * Session-valid worker: own window on CDP (spawn Chrome if needed), classify, close window.
+ * Chrome stays warm after ACTIVE so monitor can tick. NONE quits chrome if no other slots.
  */
 export async function rehydrateWallapopSessionOnBoot(): Promise<WallapopSessionSnapshot> {
   try {
-    await runWithBrowserBusy("rehydrate", async () => {
-      await applyReconcileResult(await reconcileWallapopBrowserStateSpawning())
+    await runWithBrowserBusy("session", async () => {
+      const reconciled = await classifyOwnedSessionWindow()
+      await applyReconcileResult(reconciled)
+      if (reconciled === "ACTIVE") {
+        setKeepChromeWarm(true)
+      } else if (reconciled === "NONE") {
+        setKeepChromeWarm(false)
+      }
     })
   } catch (error) {
     if (isBrowserBusyError(error)) {
@@ -132,6 +143,9 @@ export async function rehydrateWallapopSessionOnBoot(): Promise<WallapopSessionS
     } else {
       throw error
     }
+  }
+  if (state.status !== "ACTIVE" && !state.requires2FA) {
+    await quitChromeIfNoWorkerSlots()
   }
   return snapshot()
 }
@@ -162,6 +176,7 @@ async function finishConnectSuccess(
   state.status = "ACTIVE"
   state.requires2FA = false
   state.error = null
+  setKeepChromeWarm(true)
   await syncDefaultAccountStatus("ACTIVE")
   const listingsReset = await bindWallapopIdentity()
   return { ok: true, session: { ...snapshot(), listingsReset } }
@@ -239,6 +254,7 @@ async function finish2faSuccess(): Promise<Submit2faResult> {
   state.status = "ACTIVE"
   state.requires2FA = false
   state.error = null
+  setKeepChromeWarm(true)
   await syncDefaultAccountStatus("ACTIVE")
   const listingsReset = await bindWallapopIdentity()
   return { ok: true, session: { ...snapshot(), listingsReset } }
@@ -285,6 +301,7 @@ export async function submitWallapopSession2fa(
 
 export async function disconnectWallapopSession(): Promise<WallapopSessionSnapshot> {
   connectGeneration += 1
+  setKeepChromeWarm(false)
   try {
     await logoutWallapopInBrowser()
   } catch (error) {
