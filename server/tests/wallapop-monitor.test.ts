@@ -253,6 +253,37 @@ describe("planTitleUrlLinks", () => {
     expect(plan.skips[0]?.reason).toBe("no_match")
   })
 
+  it("ignores Listo para publicar even when the catalog title matches", () => {
+    const plan = planTitleUrlLinks(
+      [
+        {
+          listingId: "l-queue",
+          sku: "WP-QUEUE",
+          title: "Armario Escobero Exterior Plastico",
+          externalUrl: null,
+          status: "READY_TO_POST",
+        },
+        {
+          listingId: "l-live",
+          sku: "WP-LIVE",
+          title: "Armario Escobero Exterior Plastico",
+          externalUrl: null,
+          status: "ACTIVE",
+        },
+      ],
+      [{ href: ARMARIO, title: "Armario Escobero Exterior Plastico" }],
+    )
+    expect(plan.links).toEqual([
+      {
+        listingId: "l-live",
+        sku: "WP-LIVE",
+        title: "Armario Escobero Exterior Plastico",
+        href: ARMARIO,
+      },
+    ])
+    expect(plan.skips.some((skip) => skip.sku === "WP-QUEUE")).toBe(false)
+  })
+
   it("does not link duplicate titles", () => {
     const plan = planTitleUrlLinks(
       [

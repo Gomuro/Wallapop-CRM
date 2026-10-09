@@ -10,6 +10,18 @@ export type CrmTitleListing = {
   sku: string
   title: string
   externalUrl: string | null
+  /** Omit in tests = treat as already on Wallapop. */
+  status?: string | null
+}
+
+/** En venta, reserved, or Vendidos — not Listo para publicar / POSTING / FAILED. */
+export function listingMayBeOnWallapop(
+  status: string | null | undefined,
+): boolean {
+  if (status == null) return true
+  return (
+    status === "ACTIVE" || status === "RESERVED" || status === "DEACTIVATED"
+  )
 }
 
 export type TitleUrlLink = {
@@ -146,7 +158,9 @@ export function planTitleUrlLinks(
   cards: CatalogTitleCard[],
 ): TitleUrlPlan {
   const candidates = listings.filter(
-    (row) => wallapopItemUrlOrNull(row.externalUrl) == null,
+    (row) =>
+      listingMayBeOnWallapop(row.status) &&
+      wallapopItemUrlOrNull(row.externalUrl) == null,
   )
   const byCrm = groupByTitle(candidates, (row) => row.title)
   const uniqueCards: CatalogTitleCard[] = []

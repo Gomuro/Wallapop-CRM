@@ -17,6 +17,7 @@ import {
 } from "../src/lib/wallapop-monitor/catalog"
 import {
   CATALOG_TITLE_CARDS_EVAL,
+  listingMayBeOnWallapop,
   planTitleUrlLinks,
   type CatalogTitleCard,
   type CrmTitleListing,
@@ -62,6 +63,7 @@ async function loadCrmListings(): Promise<CrmTitleListing[]> {
     where: { accountId },
     select: {
       id: true,
+      status: true,
       externalUrl: true,
       product: { select: { sku: true, title: true } },
     },
@@ -71,6 +73,7 @@ async function loadCrmListings(): Promise<CrmTitleListing[]> {
     sku: row.product.sku,
     title: row.product.title,
     externalUrl: row.externalUrl,
+    status: row.status,
   }))
 }
 
@@ -102,6 +105,9 @@ async function main() {
         apply,
         catalogCards: cards.length,
         crmListings: listings.length,
+        crmOnWallapop: listings.filter((row) =>
+          listingMayBeOnWallapop(row.status),
+        ).length,
         links: plan.links.length,
         skips: plan.skips.length,
         skipReasons: plan.skips.reduce<Record<string, number>>((acc, skip) => {
