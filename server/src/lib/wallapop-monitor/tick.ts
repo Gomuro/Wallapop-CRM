@@ -9,7 +9,6 @@ import {
   ensureWorkerWindow,
   isBrowserBusyError,
   isLoginOr2faUrl,
-  navigateViaAssign,
   runWithBrowserBusy,
 } from "../wallapop-cdp"
 import { gotoVendidosCatalog } from "../wallapop-sold/nav"
@@ -42,12 +41,37 @@ async function loadLiveListings(): Promise<MonitorCrmListing[]> {
   })
 }
 
+async function waitForCatalogItems(page: Page): Promise<number> {
+  try {
+    await page
+      .locator("tsl-catalog-item")
+      .first()
+      .waitFor({ state: "attached", timeout: 25_000 })
+  } catch {
+    // fall through — log below with count 0
+  }
+  return (await page.evaluate(
+    `document.querySelectorAll("tsl-catalog-item").length`,
+  )) as number
+}
+
 async function scrapeCatalogs(page: Page) {
-  await navigateViaAssign(page, CATALOG_PUBLISHED_URL)
+  await page.goto(CATALOG_PUBLISHED_URL, {
+    waitUntil: "domcontentloaded",
+    timeout: 45_000,
+  })
+  await page.waitForTimeout(2_000)
   await dismissWallapopConsent(page)
   if (isLoginOr2faUrl(page.url())) {
     log("info", "wallapop_monitor_skip_login", { url: page.url() })
     return null
+  }
+  const visiblePublished = await waitForCatalogItems(page)
+  if (visiblePublished === 0) {
+    log("warn", "wallapop_monitor_catalog_empty", {
+      phase: "published",
+      url: page.url(),
+    })
   }
   const publishedCount = await scrollCatalogUntilStable(page)
   const published = await scrapePublishedCatalogRows(page)
@@ -58,6 +82,14 @@ async function scrapeCatalogs(page: Page) {
   })
 
   await gotoVendidosCatalog(page)
+  await page.waitForTimeout(2_000)
+  const visibleSold = await waitForCatalogItems(page)
+  if (visibleSold === 0) {
+    log("warn", "wallapop_monitor_catalog_empty", {
+      phase: "sold",
+      url: page.url(),
+    })
+  }
   const soldCount = await scrollCatalogUntilStable(page)
   const sold = await scrapeVendidosCatalogRows(page)
   log("info", "wallapop_monitor_sold_scanned", {
