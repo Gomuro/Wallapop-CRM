@@ -195,6 +195,43 @@ describe("planTitleUrlLinks", () => {
     expect(plan.links.some((link) => link.listingId === "l3")).toBe(false)
   })
 
+  it("links a truncated catalog title to the full CRM title", () => {
+    const plan = planTitleUrlLinks(
+      [
+        {
+          listingId: "l-tapa",
+          sku: "WP-1",
+          title: "Tapa Asiento WC Cuadrado Blanco/Morado",
+          externalUrl: null,
+        },
+      ],
+      [
+        {
+          href: "https://es.wallapop.com/item/tapa-asiento-wc-cuadrado-blanco-morado-1311046565",
+          title: "Tapa Asiento WC Cuadrado B...",
+        },
+      ],
+    )
+    expect(plan.links).toHaveLength(1)
+    expect(plan.links[0]?.listingId).toBe("l-tapa")
+  })
+
+  it("does not prefix-match a short catalog label", () => {
+    const plan = planTitleUrlLinks(
+      [
+        {
+          listingId: "l-silla",
+          sku: "WP-2",
+          title: "Silla de Paseo hauck Citi Neo II",
+          externalUrl: null,
+        },
+      ],
+      [{ href: SILLA, title: "Silla..." }],
+    )
+    expect(plan.links).toEqual([])
+    expect(plan.skips[0]?.reason).toBe("no_match")
+  })
+
   it("does not link duplicate titles", () => {
     const plan = planTitleUrlLinks(
       [

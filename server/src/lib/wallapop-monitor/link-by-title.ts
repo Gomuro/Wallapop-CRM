@@ -30,8 +30,33 @@ export type TitleUrlPlan = {
   skips: TitleUrlSkip[]
 }
 
+/** Catalog list ellipsizes titles; require this many chars before a prefix match. */
+const MIN_PARTIAL_CHARS = 12
+
 export function normalizeCatalogTitle(value: string): string {
   return value.normalize("NFC").replace(/\s+/g, " ").trim()
+}
+
+export function foldTitleKey(value: string): string {
+  return normalizeCatalogTitle(value)
+    .normalize("NFD")
+    .replace(/\p{M}/gu, "")
+    .toLowerCase()
+}
+
+function catalogPrefix(title: string): string {
+  return foldTitleKey(title).replace(/[.…]+$/u, "").trim()
+}
+
+/** CRM full title vs catalog card (often "Tapa Asiento WC Cuadrado B..."). */
+export function titlesLooselyMatch(crmTitle: string, catalogTitle: string): boolean {
+  const crm = foldTitleKey(crmTitle)
+  const cat = catalogPrefix(catalogTitle)
+  if (!crm || !cat) return false
+  if (crm === cat) return true
+  if (crm.startsWith(cat)) return cat.length >= MIN_PARTIAL_CHARS
+  if (cat.startsWith(crm)) return crm.length >= MIN_PARTIAL_CHARS
+  return false
 }
 
 function groupByTitle<T>(
@@ -40,7 +65,7 @@ function groupByTitle<T>(
 ): Map<string, T[]> {
   const map = new Map<string, T[]>()
   for (const row of rows) {
-    const key = normalizeCatalogTitle(titleOf(row))
+    const key = foldTitleKey(titleOf(row))
     if (!key) continue
     const list = map.get(key)
     if (list) list.push(row)
@@ -50,7 +75,8 @@ function groupByTitle<T>(
 }
 
 /**
- * Exact title match only. Unique CRM title ↔ unique catalog card.
+ * Unique CRM listing ↔ unique catalog card.
+ * Truncated card titles match as a prefix of the CRM title.
  * Does not set reserved/sold — only the public /item/ URL.
  */
 export function planTitleUrlLinks(
@@ -65,34 +91,34 @@ export function planTitleUrlLinks(
   const seenHref = new Set<string>()
   for (const card of cards) {
     const href = wallapopItemUrlOrNull(card.href)
-    const title = normalizeCatalogTitle(card.title)
-    if (!href || !title) continue
+    if (!href || !catalogPrefix(card.title)) continue
     if (seenHref.has(href)) continue
     seenHref.add(href)
     uniqueCards.push({ href, title: card.title })
   }
-  const byCatalog = groupByTitle(uniqueCards, (row) => row.title)
 
   const links: TitleUrlLink[] = []
   const skips: TitleUrlSkip[] = []
+  const claimed = new Map<string, CrmTitleListing[]>()
 
   for (const row of candidates) {
-    const key = normalizeCatalogTitle(row.title)
+    const key = foldTitleKey(row.title)
     if (!key) {
       skips.push({ reason: "empty_title", title: row.title, sku: row.sku })
       continue
     }
-    const crmHits = byCrm.get(key) ?? []
-    if (crmHits.length !== 1) {
+    if ((byCrm.get(key) ?? []).length !== 1) {
       skips.push({ reason: "duplicate_crm", title: row.title, sku: row.sku })
       continue
     }
-    const catalogHits = byCatalog.get(key) ?? []
-    if (catalogHits.length === 0) {
+    const hits = uniqueCards.filter((card) =>
+      titlesLooselyMatch(row.title, card.title),
+    )
+    if (hits.length === 0) {
       skips.push({ reason: "no_match", title: row.title, sku: row.sku })
       continue
     }
-    if (catalogHits.length !== 1) {
+    if (hits.length !== 1) {
       skips.push({
         reason: "duplicate_catalog",
         title: row.title,
@@ -100,11 +126,29 @@ export function planTitleUrlLinks(
       })
       continue
     }
+    const href = hits[0].href
+    const owners = claimed.get(href) ?? []
+    owners.push(row)
+    claimed.set(href, owners)
+  }
+
+  for (const [href, owners] of claimed) {
+    if (owners.length !== 1) {
+      for (const row of owners) {
+        skips.push({
+          reason: "duplicate_catalog",
+          title: row.title,
+          sku: row.sku,
+        })
+      }
+      continue
+    }
+    const row = owners[0]
     links.push({
       listingId: row.listingId,
       sku: row.sku,
       title: row.title,
-      href: catalogHits[0].href,
+      href,
     })
   }
 
@@ -141,11 +185,12 @@ export const CATALOG_TITLE_CARDS_EVAL = `(() => {
     let title = titleNode
       ? String(titleNode.textContent || "").replace(/\\s+/g, " ").trim()
       : ""
-    if (!title && link) {
-      title = String(link.getAttribute("aria-label") || "")
-        .replace(/\\s+/g, " ")
-        .trim()
-    }
+    const aria = link
+      ? String(link.getAttribute("aria-label") || "")
+          .replace(/\\s+/g, " ")
+          .trim()
+      : ""
+    if (aria.length > title.length) title = aria
     rows.push({
       href: link && link.href ? String(link.href) : "",
       title,
