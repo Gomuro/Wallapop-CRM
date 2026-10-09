@@ -28,7 +28,6 @@
 | `CORS_ORIGIN` | Origin Next (локально `http://localhost:3000`, проді — Vercel). Кілька через кому |
 | `API_ORIGIN` | Опційно для `npm run server:smoke`, якщо не `http://127.0.0.1:$PORT` |
 | `WALLAPOP_PUBLISH_DRY_RUN` | Publish: не `false` = стоп перед Publicar. Див. [Publish](#publish-phase-1) |
-| `WALLAPOP_INSPECT_HOLD_MS` | Dev: пауза на `inspectHold(page, label)` (publish уже: `after_extra_fields`, `before_publicar`). Unset/`0` = вимкнено. `WALLAPOP_INSPECT_HOLD_AT` — коми labels, порожнє = усі виклики |
 | `WALLAPOP_SOLD_DRY_RUN` | C8 sold: не `false` = стоп перед confirm `#markAsSoldButton`. Не reuse publish-env. Див. [Wallapop sold](#wallapop-sold-c8) |
 | `WALLAPOP_AUTOPOST` | Deprecated / ignored. Черга вмикається з UI `POST /accounts/default/autopost/start` (`accounts.autopost_enabled`) |
 | `WALLAPOP_AUTOPOST_INTERVAL_MS` | Fallback інтервалу, якщо `accounts.autopost_interval_ms` null. Default `900000` = 15 хв + ±20% jitter. UI `PATCH /accounts/default/autopost` перемагає env |

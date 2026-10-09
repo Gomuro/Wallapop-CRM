@@ -1,7 +1,6 @@
 import type { Page } from "playwright";
 
 import {
-  inspectHold,
   isInFlightPublishAborted,
   isPublishAbortedError,
   PublishAbortedError,
@@ -171,6 +170,5 @@ export async function finishPublishOrDryRun(
       externalUrl: null,
     };
   }
-  await inspectHold(page, "before_publicar");
   return publishLive(page, input);
 }

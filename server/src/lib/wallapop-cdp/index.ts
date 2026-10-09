@@ -65,8 +65,6 @@ export {
 
 export { getWorkerPage, peekWorkerPage, registerSoldJobPage } from "./worker-pages"
 
-export { inspectHold, inspectHoldMs } from "./inspect-hold"
-
 export async function firstVisible(
   page: Page,
   selectors: readonly string[],

@@ -1,6 +1,5 @@
 import type { Page } from "playwright";
 
-import { inspectHold } from "../wallapop-cdp";
 import { log } from "../log";
 import { ensureCategorySelected } from "./category";
 import { logPublishStep } from "./debug";
@@ -47,7 +46,6 @@ async function fillCoreFormFields(
     input.uploadFields ?? [],
     input.typeAttributes,
   );
-  await inspectHold(page, "after_extra_fields");
   return descriptionText;
 }
 
