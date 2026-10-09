@@ -9,11 +9,12 @@ import {
   ensureEstado,
   fillPrice,
   fillPublishDescription,
+  fillPublishTitle,
   readPriceAmount,
 } from "./fields";
 import { ensureExtraUploadFields } from "./extra-fields";
 import { ensureMarcaIfShown } from "./marca";
-import { clickMainText, fillIfEmpty } from "./nav";
+import { clickMainText } from "./nav";
 import {
   ensurePackageSizeIfShown,
   ensureStandardWeightBand,
@@ -22,7 +23,6 @@ import {
   roleRadioIsChecked,
 } from "./shipping";
 import {
-  PUBLISH_SELECTORS,
   estadoLabel,
   type PublishWallapopInput,
   type SetPublishStep,
@@ -34,7 +34,7 @@ async function fillCoreFormFields(
   summaryText: string,
 ): Promise<string> {
   const descriptionText = input.description?.trim() || summaryText;
-  await fillIfEmpty(page, PUBLISH_SELECTORS.title, summaryText);
+  await fillPublishTitle(page, summaryText);
   await fillPublishDescription(page, descriptionText);
   logPublishStep("form", page, { phase: "after_title_description" });
   await ensureEstado(page, estadoLabel(input.condition));

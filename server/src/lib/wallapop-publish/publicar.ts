@@ -7,7 +7,10 @@ import {
   throwIfPublishAborted,
 } from "../wallapop-cdp";
 import { log } from "../log";
-import { ensureCrmDescriptionOnForm } from "./fields";
+import {
+  ensureCrmDescriptionOnForm,
+  ensureCrmTitleOnForm,
+} from "./fields";
 import { assertShippingReadyForPublish } from "./shipping";
 import {
   FINAL_RE,
@@ -145,6 +148,7 @@ async function publishLive(
 export type FinishPublishArgs = {
   page: Page;
   input: PublishWallapopInput;
+  titleText: string;
   descriptionText: string;
   weightBandLabel: string | null;
   mark: SetPublishStep;
@@ -153,9 +157,11 @@ export type FinishPublishArgs = {
 export async function finishPublishOrDryRun(
   args: FinishPublishArgs,
 ): Promise<PublishWallapopResult> {
-  const { page, input, descriptionText, weightBandLabel, mark } = args;
+  const { page, input, titleText, descriptionText, weightBandLabel, mark } =
+    args;
   mark("before_publicar");
   await assertShippingReadyForPublish(page, weightBandLabel);
+  await ensureCrmTitleOnForm(page, titleText, "before_publicar");
   await ensureCrmDescriptionOnForm(page, descriptionText, "before_publicar");
   log("info", "wallapop_publish_before_publicar", {
     dryRun: input.dryRun,

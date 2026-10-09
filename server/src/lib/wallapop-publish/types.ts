@@ -143,6 +143,15 @@ export function normalizePublishTitle(title: string): string {
   return title.trim().replace(/\s+/g, " ");
 }
 
+export function crmTitleMatchesForm(
+  actual: string,
+  expected: string,
+): boolean {
+  const want = normalizePublishTitle(expected);
+  if (!want) return true;
+  return normalizePublishTitle(actual) === want;
+}
+
 export function truncateSummary(title: string): string {
   const trimmed = normalizePublishTitle(title);
   if (trimmed.length <= SUMMARY_MAX) return trimmed;

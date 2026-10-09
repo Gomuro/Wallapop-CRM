@@ -211,6 +211,7 @@ export async function runPublishAfterAttach(
   return finishPublishOrDryRun({
     page,
     input,
+    titleText: summaryText,
     descriptionText: filled.descriptionText,
     weightBandLabel: filled.weightBandLabel,
     mark,

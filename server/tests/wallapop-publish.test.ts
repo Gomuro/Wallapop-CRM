@@ -20,6 +20,7 @@ import {
   readBrandValue,
   isWallapopPublishedCatalogUrl,
   listingUrlFromPageUrl,
+  crmTitleMatchesForm,
   normalizePublishTitle,
   parseCatalogPriceEur,
   pickUniqueCatalogItemUrl,
@@ -30,6 +31,26 @@ import {
   type PublishedCatalogItem,
 } from "../src/lib/wallapop-publish"
 import { shouldRevertPublishClaim } from "../src/routes/product-publish"
+
+describe("crmTitleMatchesForm", () => {
+  it("treats whitespace as the same title", () => {
+    expect(
+      crmTitleMatchesForm(
+        "  Lámpara led inteligente Meross ",
+        "Lámpara led inteligente Meross",
+      ),
+    ).toBe(true)
+  })
+
+  it("rejects Wallapop AI title rewrites", () => {
+    expect(
+      crmTitleMatchesForm(
+        "Lámpara LED Meross Inteligente",
+        "Lámpara led inteligente Meross",
+      ),
+    ).toBe(false)
+  })
+})
 
 describe("readUrlAfterPublicarClick", () => {
   it("returns the listing URL when the page stays open", async () => {

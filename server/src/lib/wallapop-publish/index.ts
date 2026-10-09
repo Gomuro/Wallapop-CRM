@@ -35,7 +35,11 @@ export type {
   PublishWallapopResult,
   ShippingPackageType,
 } from "./types";
-export { WallapopPublishError, normalizePublishTitle } from "./types";
+export {
+  WallapopPublishError,
+  crmTitleMatchesForm,
+  normalizePublishTitle,
+} from "./types";
 export {
   catalogTitleMatchesWanted,
   firstCatalogItemUrl,

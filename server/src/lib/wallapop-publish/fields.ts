@@ -11,8 +11,19 @@ import {
 import {
   PUBLISH_SELECTORS,
   WallapopPublishError,
+  crmTitleMatchesForm,
   type PublishStep,
 } from "./types";
+
+export async function readPublishTitle(page: Page): Promise<string> {
+  for (const sel of PUBLISH_SELECTORS.title) {
+    const el = page.locator(sel).first();
+    if (!(await el.count())) continue;
+    const value = await el.inputValue().catch(() => "");
+    if (typeof value === "string") return value;
+  }
+  return "";
+}
 
 export async function readPublishDescription(page: Page): Promise<string> {
   for (const sel of PUBLISH_SELECTORS.description) {
@@ -48,6 +59,46 @@ async function fillDescriptionNative(
   return (await page.evaluate(
     `${FILL_DESCRIPTION_NATIVE_JS}(${JSON.stringify(sel)}, ${JSON.stringify(value)})`,
   )) as boolean;
+}
+
+export async function fillPublishTitle(
+  page: Page,
+  value: string,
+): Promise<boolean> {
+  for (const sel of PUBLISH_SELECTORS.title) {
+    const el = page.locator(sel).first();
+    if (!(await el.count())) continue;
+    if (!(await el.isVisible().catch(() => false))) continue;
+    await el.scrollIntoViewIfNeeded().catch(() => {});
+    await el.click({ force: true }).catch(() => {});
+    await el.fill(value, { force: true }).catch(() => {});
+    if (crmTitleMatchesForm(await el.inputValue().catch(() => ""), value)) {
+      return true;
+    }
+    if (await fillDescriptionNative(page, sel, value)) return true;
+  }
+  return false;
+}
+
+export async function ensureCrmTitleOnForm(
+  page: Page,
+  expected: string,
+  step: PublishStep,
+): Promise<void> {
+  const want = expected.trim();
+  if (!want) return;
+  if (crmTitleMatchesForm(await readPublishTitle(page), want)) {
+    return;
+  }
+  log("info", "wallapop_publish_title_rewrite", { step });
+  const filled = await fillPublishTitle(page, want);
+  if (filled && crmTitleMatchesForm(await readPublishTitle(page), want)) {
+    return;
+  }
+  throw new WallapopPublishError(
+    step,
+    "El título en Wallapop no coincide con el del CRM (posible reescritura de IA).",
+  );
 }
 
 export async function fillPublishDescription(
