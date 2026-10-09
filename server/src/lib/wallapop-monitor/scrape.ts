@@ -10,8 +10,21 @@ import type { SoldCatalogRow } from "./diff"
 
 const MAX_SCROLLS = 40
 const SCROLL_SETTLE_MS = 500
+const FIRST_ITEM_MS = 20_000
+
+export async function waitForCatalogItems(page: Page): Promise<number> {
+  await page
+    .locator("tsl-catalog-item")
+    .first()
+    .waitFor({ state: "attached", timeout: FIRST_ITEM_MS })
+    .catch(() => {})
+  return (await page.evaluate(
+    `document.querySelectorAll("tsl-catalog-item").length`,
+  )) as number
+}
 
 export async function scrollCatalogUntilStable(page: Page): Promise<number> {
+  await waitForCatalogItems(page)
   let prev = -1
   let stable = 0
   let count = 0
