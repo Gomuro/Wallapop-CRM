@@ -216,6 +216,27 @@ describe("planTitleUrlLinks", () => {
     expect(plan.links[0]?.listingId).toBe("l-tapa")
   })
 
+  it("links when Wallapop reorders words and ellipsizes the card", () => {
+    const plan = planTitleUrlLinks(
+      [
+        {
+          listingId: "l-meross",
+          sku: "WP-634117",
+          title: "Lámpara led inteligente Meross",
+          externalUrl: null,
+        },
+      ],
+      [
+        {
+          href: "https://es.wallapop.com/item/lampara-led-meross-inteligente-130634117",
+          title: "Lámpara LED Meross Intellige...",
+        },
+      ],
+    )
+    expect(plan.links).toHaveLength(1)
+    expect(plan.links[0]?.listingId).toBe("l-meross")
+  })
+
   it("does not prefix-match a short catalog label", () => {
     const plan = planTitleUrlLinks(
       [

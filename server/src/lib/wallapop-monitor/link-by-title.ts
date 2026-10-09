@@ -33,6 +33,28 @@ export type TitleUrlPlan = {
 /** Catalog list ellipsizes titles; require this many chars before a prefix match. */
 const MIN_PARTIAL_CHARS = 12
 
+const TITLE_STOPWORDS = new Set([
+  "de",
+  "del",
+  "la",
+  "el",
+  "los",
+  "las",
+  "un",
+  "una",
+  "y",
+  "en",
+  "con",
+  "para",
+  "por",
+  "a",
+  "al",
+  "the",
+  "of",
+  "cm",
+  "mm",
+])
+
 export function normalizeCatalogTitle(value: string): string {
   return value.normalize("NFC").replace(/\s+/g, " ").trim()
 }
@@ -48,7 +70,41 @@ function catalogPrefix(title: string): string {
   return foldTitleKey(title).replace(/[.…]+$/u, "").trim()
 }
 
-/** CRM full title vs catalog card (often "Tapa Asiento WC Cuadrado B..."). */
+/** Wallapop slug: /item/lampara-led-meross-inteligente-130634117 */
+export function slugTitleFromHref(href: string): string {
+  const url = wallapopItemUrlOrNull(href)
+  if (!url) return ""
+  try {
+    const slug = new URL(url).pathname.split("/").filter(Boolean).at(-1) ?? ""
+    return slug.replace(/-\d+$/, "").replace(/-/g, " ")
+  } catch {
+    return ""
+  }
+}
+
+function titleTokens(value: string): string[] {
+  return catalogPrefix(value)
+    .split(/[^a-z0-9]+/)
+    .filter((token) => token.length >= 3 && !TITLE_STOPWORDS.has(token))
+}
+
+function tokensPair(left: string, right: string): boolean {
+  return left === right || left.startsWith(right) || right.startsWith(left)
+}
+
+function tokenSetsAlign(crmTitle: string, otherTitle: string): boolean {
+  const crm = titleTokens(crmTitle)
+  const other = titleTokens(otherTitle)
+  if (crm.length === 0 || other.length === 0) return false
+  const [shorter, longer] = crm.length <= other.length ? [crm, other] : [other, crm]
+  if (!shorter.every((token) => longer.some((candidate) => tokensPair(token, candidate)))) {
+    return false
+  }
+  const matchedLen = shorter.reduce((sum, token) => sum + token.length, 0)
+  return shorter.length >= 3 || (shorter.length >= 2 && matchedLen >= 12)
+}
+
+/** CRM title vs catalog label (order may differ; card is often ellipsized). */
 export function titlesLooselyMatch(crmTitle: string, catalogTitle: string): boolean {
   const crm = foldTitleKey(crmTitle)
   const cat = catalogPrefix(catalogTitle)
@@ -56,7 +112,13 @@ export function titlesLooselyMatch(crmTitle: string, catalogTitle: string): bool
   if (crm === cat) return true
   if (crm.startsWith(cat)) return cat.length >= MIN_PARTIAL_CHARS
   if (cat.startsWith(crm)) return crm.length >= MIN_PARTIAL_CHARS
-  return false
+  return tokenSetsAlign(crmTitle, catalogTitle)
+}
+
+function cardMatchesListing(listingTitle: string, card: CatalogTitleCard): boolean {
+  if (titlesLooselyMatch(listingTitle, card.title)) return true
+  const slug = slugTitleFromHref(card.href)
+  return slug.length > 0 && titlesLooselyMatch(listingTitle, slug)
 }
 
 function groupByTitle<T>(
@@ -91,7 +153,8 @@ export function planTitleUrlLinks(
   const seenHref = new Set<string>()
   for (const card of cards) {
     const href = wallapopItemUrlOrNull(card.href)
-    if (!href || !catalogPrefix(card.title)) continue
+    if (!href) continue
+    if (!catalogPrefix(card.title) && !slugTitleFromHref(href)) continue
     if (seenHref.has(href)) continue
     seenHref.add(href)
     uniqueCards.push({ href, title: card.title })
@@ -111,9 +174,7 @@ export function planTitleUrlLinks(
       skips.push({ reason: "duplicate_crm", title: row.title, sku: row.sku })
       continue
     }
-    const hits = uniqueCards.filter((card) =>
-      titlesLooselyMatch(row.title, card.title),
-    )
+    const hits = uniqueCards.filter((card) => cardMatchesListing(row.title, card))
     if (hits.length === 0) {
       skips.push({ reason: "no_match", title: row.title, sku: row.sku })
       continue
