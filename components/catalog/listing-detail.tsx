@@ -39,6 +39,7 @@ export function ListingDetailSection({
   const junkUrl = Boolean(listing?.externalUrl) && !itemUrl
   const ready = listing?.status === "READY_TO_POST"
   const posted = listing?.status === "ACTIVE" && Boolean(itemUrl)
+  const deactivated = listing?.status === "DEACTIVATED"
 
   return (
     <section>
@@ -60,16 +61,18 @@ export function ListingDetailSection({
             <MetaRow label="Estado">
               {posted
                 ? "Publicado"
-                : ready
-                  ? "En cola de publicación"
-                  : listing.status === "POSTING"
-                    ? "Publicando…"
-                    : listing.status === "FAILED"
-                      ? "Error al publicar"
-                      : "Sin publicar"}
+                : deactivated
+                  ? "Vendido en Wallapop"
+                  : ready
+                    ? "En cola de publicación"
+                    : listing.status === "POSTING"
+                      ? "Publicando…"
+                      : listing.status === "FAILED"
+                        ? "Error al publicar"
+                        : "Sin publicar"}
             </MetaRow>
             <MetaRow label="Enlace">
-              {posted && itemUrl ? (
+              {itemUrl ? (
                 <a
                   href={itemUrl}
                   target="_blank"
@@ -89,7 +92,7 @@ export function ListingDetailSection({
                 </span>
               )}
             </MetaRow>
-            {posted && listing.lastPostedAt ? (
+            {(posted || deactivated) && listing.lastPostedAt ? (
               <MetaRow label="Publicado">
                 {formatListingPostedAt(listing.lastPostedAt)}
               </MetaRow>

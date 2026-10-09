@@ -7,7 +7,7 @@ import { API_TIMEOUT_MS } from "@/lib/api/http"
 
 export const dynamic = "force-dynamic"
 export const runtime = "nodejs"
-export const maxDuration = 30
+export const maxDuration = 120
 
 const DROP_REQ = new Set([
   "connection",
@@ -64,6 +64,17 @@ export function requestHeadersFrom(
   return headers
 }
 
+function proxyTimeoutMs(pathname: string): number {
+  if (
+    pathname.includes("/wallapop-sold") ||
+    pathname.includes("/publish") ||
+    pathname.includes("/connect")
+  ) {
+    return 120_000
+  }
+  return API_TIMEOUT_MS
+}
+
 function upstreamRequestOptions(
   dest: URL,
   method: string,
@@ -76,7 +87,7 @@ function upstreamRequestOptions(
     path: `${dest.pathname}${dest.search}`,
     method,
     headers,
-    timeout: API_TIMEOUT_MS,
+    timeout: proxyTimeoutMs(dest.pathname),
   }
 }
 

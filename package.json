@@ -21,6 +21,7 @@
     "db:categories:fetch": "npx tsx server/prisma/fetch-wallapop-categories.ts",
     "db:brands:fetch": "npx tsx server/prisma/fetch-wallapop-brands.ts",
     "db:upload-fields:fetch": "npx tsx server/prisma/fetch-wallapop-upload-fields.ts",
+    "db:attrs:fill": "npx tsx server/prisma/fill-color-material.ts",
     "server:dev": "tsx server/src/index.ts",
     "server:start": "tsx server/src/index.ts",
     "server:smoke": "tsx server/scripts/smoke.ts",
