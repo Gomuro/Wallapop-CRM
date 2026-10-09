@@ -4,7 +4,10 @@ import path from "node:path"
 import { chromium } from "playwright"
 import { describe, expect, it } from "vitest"
 
-import { wallapopItemPathKey } from "../../lib/inventory/wallapop-item-url"
+import {
+  wallapopItemPathKey,
+  wallapopItemSlugHrefOrNull,
+} from "../../lib/inventory/wallapop-item-url"
 import {
   CATALOG_TITLE_CARDS_EVAL,
   planTitleUrlLinks,
@@ -155,6 +158,21 @@ describe("published catalog DOM", () => {
     } finally {
       await browser.close()
     }
+  })
+})
+
+describe("wallapopItemSlugHrefOrNull", () => {
+  it("rejects site root and bare /item/", () => {
+    expect(wallapopItemSlugHrefOrNull("https://es.wallapop.com/")).toBeNull()
+    expect(wallapopItemSlugHrefOrNull("https://es.wallapop.com/item/")).toBeNull()
+  })
+
+  it("accepts a normal listing slug", () => {
+    expect(
+      wallapopItemSlugHrefOrNull(
+        "https://es.wallapop.com/item/caseta-jardin-metal-8x4-gris-1308045379",
+      ),
+    ).toContain("/item/caseta-jardin-metal-8x4-gris-1308045379")
   })
 })
 

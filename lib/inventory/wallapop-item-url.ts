@@ -21,6 +21,21 @@ export function isWallapopItemUrl(url: string | null | undefined): boolean {
   return wallapopItemUrlOrNull(url) != null
 }
 
+/** `/item/<slug>` with a real listing slug (not bare `/item/` or site root). */
+export function wallapopItemSlugHrefOrNull(
+  url: string | null | undefined,
+): string | null {
+  const href = wallapopItemUrlOrNull(url)
+  if (!href) return null
+  try {
+    const path = new URL(href).pathname
+    if (!/\/item\/[^/]{8,}/i.test(path)) return null
+    return href
+  } catch {
+    return null
+  }
+}
+
 /** C8: public item URL on es.wallapop.com only. */
 export function wallapopEsItemUrlOrNull(
   url: string | null | undefined,

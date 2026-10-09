@@ -9,6 +9,8 @@ import "../load-env"
 
 import { chromium } from "playwright"
 
+import { wallapopItemSlugHrefOrNull } from "../../lib/inventory/wallapop-item-url"
+
 import { findDefaultAccountId } from "../src/lib/default-account"
 import { getPrisma } from "../src/lib/db"
 import {
@@ -139,6 +141,16 @@ async function main() {
   for (const skip of plan.skips) {
     console.log(
       `SKIP   ${skip.reason}  ${skip.sku ?? ""}  ${skip.title}`.trim(),
+    )
+  }
+
+  const invalid = plan.links.filter((link) => !wallapopItemSlugHrefOrNull(link.href))
+  if (invalid.length > 0) {
+    for (const row of invalid) {
+      console.error(`INVALID_HREF  ${row.sku}  ${row.href}`)
+    }
+    throw new Error(
+      `${invalid.length} link(s) without a valid /item/… URL. Fix before --apply.`,
     )
   }
 

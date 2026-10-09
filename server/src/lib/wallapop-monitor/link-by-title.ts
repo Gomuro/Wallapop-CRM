@@ -1,4 +1,7 @@
-import { wallapopItemUrlOrNull } from "../../../../lib/inventory/wallapop-item-url"
+import {
+  wallapopItemSlugHrefOrNull,
+  wallapopItemUrlOrNull,
+} from "../../../../lib/inventory/wallapop-item-url"
 
 export type CatalogTitleCard = {
   href: string
@@ -200,7 +203,7 @@ export function planTitleUrlLinks(
   const uniqueCards: CatalogTitleCard[] = []
   const seenHref = new Set<string>()
   for (const card of cards) {
-    const href = wallapopItemUrlOrNull(card.href)
+    const href = wallapopItemSlugHrefOrNull(card.href)
     if (!href) continue
     if (!catalogPrefix(card.title) && !slugTitleFromHref(href)) continue
     if (seenHref.has(href)) continue

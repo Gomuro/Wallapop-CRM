@@ -1,4 +1,7 @@
-import { wallapopItemUrlOrNull } from "../../../../lib/inventory/wallapop-item-url"
+import {
+  wallapopItemSlugHrefOrNull,
+  wallapopItemUrlOrNull,
+} from "../../../../lib/inventory/wallapop-item-url"
 import { groqChatJson } from "../groq-chat-json"
 import { parseCatalogPriceEur } from "../wallapop-publish/catalog-url"
 import {
@@ -56,7 +59,7 @@ export function parseLlmPick(raw: Record<string, unknown>): LlmPick {
 }
 
 function normalizeHref(href: string): string | null {
-  return wallapopItemUrlOrNull(href)
+  return wallapopItemSlugHrefOrNull(href)
 }
 
 function uniqueCatalogCards(cards: CatalogTitleCard[]): CatalogTitleCard[] {
