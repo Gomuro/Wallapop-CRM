@@ -28,6 +28,25 @@ describe("ListingStatus.RESERVED", () => {
     expect(computeListingActive(reservedListing)).toBe(true)
   })
 
+  it("is not En Wallapop without a public /item/ URL", () => {
+    expect(
+      computeListingActive({ ...reservedListing, status: "ACTIVE", externalUrl: null }),
+    ).toBe(false)
+    expect(
+      computeListingActive({
+        ...reservedListing,
+        status: "ACTIVE",
+        externalUrl: "https://es.wallapop.com/app/catalog/upload/consumer-goods",
+      }),
+    ).toBe(false)
+    expect(
+      listingIndicatorShort(
+        { ...reservedListing, status: "ACTIVE", externalUrl: null },
+        false,
+      ),
+    ).toBe("Sin enlace")
+  })
+
   it("badge says Reservado, not En Wallapop", () => {
     expect(listingStatusLabel("RESERVED")).toBe("Reservado")
     expect(listingIndicatorShort(reservedListing, true)).toBe("Reservado")

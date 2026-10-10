@@ -3,6 +3,7 @@ import type { Request, Response } from "express"
 import { ZodError } from "zod"
 
 import { isShippingPublishReady } from "../../../lib/inventory/shipping-for-publish"
+import { wallapopItemUrlOrNull } from "../../../lib/inventory/wallapop-item-url"
 import { productListQuerySchema } from "../../../lib/validations/product"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
@@ -218,9 +219,12 @@ type ProductListItemRow = {
 
 function toProductListItemListing(row: ProductListItemRow) {
   const listingStatus = row.listings[0]?.status ?? null
+  const live =
+    listingStatus === "ACTIVE" || listingStatus === "RESERVED"
   return {
     listingStatus,
-    listingActive: listingStatus === "ACTIVE" || listingStatus === "RESERVED",
+    listingActive:
+      live && wallapopItemUrlOrNull(row.listings[0]?.externalUrl) != null,
     lastPostedAt: row.listings[0]?.lastPostedAt?.toISOString() ?? null,
     shippingPublishReady: isShippingPublishReady({
       weightKg: decimalJson(row.weightKg),

@@ -610,6 +610,46 @@ describe("API v1 integration (Express + Postgres)", () => {
       }
     })
 
+    it("activatePostingListing fails without a public /item/ URL", async () => {
+      const prisma = getPrisma()
+      expect(prisma).toBeTruthy()
+      const accountId = await findDefaultAccountId(prisma!)
+      expect(accountId).toBeTruthy()
+
+      const categoryId = await findLeafCategoryId(agent)
+      const created = await agent.post("/api/v1/products").send({
+        sku: `API-NOURL-${Date.now()}`,
+        title: "API activate without item url",
+        description: "Vitest activatePostingListing missing URL",
+        price: 5.5,
+        currency: "EUR",
+        categoryId,
+        condition: "GOOD",
+        brand: "Acme",
+      })
+      expect(created.status).toBe(201)
+      const id = created.body.product?.id as string
+      expect(id).toBeTruthy()
+
+      try {
+        const claimed = await claimListingForPublish(prisma!, id, accountId!)
+        expect(claimed).toBe(true)
+
+        const activated = await activatePostingListing(prisma!, id, accountId!, {
+          externalUrl: "https://es.wallapop.com/app/catalog/published",
+          shippingEnabled: true,
+        })
+        expect(activated?.status).toBe("FAILED")
+        expect(activated?.externalUrl).toBeNull()
+
+        const get = await agent.get(`/api/v1/products/${id}/listing`)
+        expect(get.body.listing?.status).toBe("FAILED")
+        expect(get.body.listing?.externalUrl).toBeNull()
+      } finally {
+        await agent.delete(`/api/v1/products/${id}`)
+      }
+    })
+
     it("activatePostingListing does not clobber DEACTIVATED", async () => {
       const prisma = getPrisma()
       expect(prisma).toBeTruthy()

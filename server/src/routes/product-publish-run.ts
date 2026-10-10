@@ -26,6 +26,8 @@ import {
 
 const LIVE_SUCCESS_LISTING_STALE_MESSAGE =
   "Wallapop puede tener ya este artículo. El listing local ya no está en POSTING (no se forzó ACTIVE)."
+const MISSING_ITEM_URL_MESSAGE =
+  "Tras Publicar no se obtuvo el enlace público /item/. El anuncio no se marca En Wallapop."
 /** Atomic READY_TO_POST → POSTING for (product, account) without a public item URL. */
 export async function claimListingForPublish(
   prisma: PrismaClient,
@@ -134,9 +136,25 @@ export async function activatePostingListing(
     shippingEnabled: boolean
   },
 ): Promise<ReturnType<typeof toListingJson> | null> {
+  const itemUrl = wallapopItemUrlOrNull(data.externalUrl ?? null)
+  if (!itemUrl) {
+    const failed = await prisma.productListing.updateMany({
+      where: { productId, accountId, status: "POSTING" },
+      data: {
+        status: "FAILED",
+        externalUrl: null,
+        lastPublishError: MISSING_ITEM_URL_MESSAGE,
+      },
+    })
+    if (failed.count === 0) {
+      await warnListingNotPosting(prisma, productId, accountId)
+      return null
+    }
+    return loadActivatedListingJson(prisma, productId, accountId)
+  }
   const result = await prisma.productListing.updateMany({
     where: { productId, accountId, status: "POSTING" },
-    data: postingActivateData(data),
+    data: postingActivateData({ ...data, externalUrl: itemUrl }),
   })
   if (result.count === 0) {
     await warnListingNotPosting(prisma, productId, accountId)
@@ -217,6 +235,9 @@ async function verifyProductPublish(
   )
   if (!published) {
     return publishFail(500, "PUBLISH_FAILED", LIVE_SUCCESS_LISTING_STALE_MESSAGE)
+  }
+  if (published.status !== "ACTIVE") {
+    return publishFail(500, "PUBLISH_FAILED", MISSING_ITEM_URL_MESSAGE)
   }
   return { ok: true, dryRun: false, listing: published, step: result.step }
 }

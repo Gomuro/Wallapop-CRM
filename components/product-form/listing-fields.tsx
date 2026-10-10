@@ -22,7 +22,7 @@ import {
   SelectValue,
 } from "@/components/ui/select"
 import { listingStatusLabel, formatListingPostedAt } from "@/lib/inventory/format"
-import { isLiveOnWallapopStatus } from "@/lib/inventory/listing-active"
+import { computeListingActive } from "@/lib/inventory/listing-active"
 import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
 import type { InventoryListing } from "@/lib/inventory/types"
 import { wallapopItemUrlOrNull } from "@/lib/inventory/wallapop-item-url"
@@ -376,7 +376,7 @@ export function ListingFields({
         <ListingStatusBadge
           product={{
             listing,
-            listingActive: isLiveOnWallapopStatus(listing.status),
+            listingActive: computeListingActive(listing),
           }}
           className="shrink-0"
         />

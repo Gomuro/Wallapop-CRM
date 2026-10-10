@@ -10,7 +10,7 @@ import {
   conditionFromFormValue,
   conditionLabel,
 } from "@/lib/inventory/conditions"
-import { isLiveOnWallapopStatus } from "@/lib/inventory/listing-active"
+import { computeListingActive } from "@/lib/inventory/listing-active"
 import { isShippingPublishReady } from "@/lib/inventory/shipping-for-publish"
 import type {
   InventoryListing,
@@ -141,7 +141,7 @@ function listItemListingActive(
   listing: InventoryListing | null,
 ): boolean {
   if (listing?.status === "POSTING") return false
-  if (listing) return isLiveOnWallapopStatus(listing.status)
+  if (listing?.id) return computeListingActive(listing)
   return Boolean(row.listingActive)
 }
 
@@ -245,7 +245,7 @@ export function toInventoryProduct({
       product.typeAttributes && typeof product.typeAttributes === "object"
         ? product.typeAttributes
         : {},
-    listingActive: isLiveOnWallapopStatus(listing?.status),
+    listingActive: computeListingActive(listing),
     shippingPublishReady: isShippingPublishReady({
       weightKg: asNullableNumber(product?.weightKg),
       shippingEnabled: listing?.shippingEnabled,

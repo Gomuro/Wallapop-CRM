@@ -199,5 +199,5 @@ export async function resolveItemUrlAfterPublish(
     { reason: grabbed.reason, href: grabbed.href, scanned: grabbed.scanned },
   );
   await dismissYuhuModal(page);
-  return grabbed.href;
+  return wallapopItemUrlOrNull(grabbed.href);
 }

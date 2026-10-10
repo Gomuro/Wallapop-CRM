@@ -1,7 +1,7 @@
 import type { ListingStatusRead } from "@/lib/inventory/types"
 import type { ProductStatus } from "@/lib/validations"
 
-import { isLiveOnWallapopStatus } from "./listing-active"
+import { computeListingActive, isLiveOnWallapopStatus } from "./listing-active"
 
 export function formatEuro(amount: number) {
   return new Intl.NumberFormat("es-ES", {
@@ -74,10 +74,23 @@ export function conditionLabel(value: string) {
 }
 
 export function isListingActive(
-  listing: { status: ListingStatusRead } | null | undefined,
+  listing:
+    | {
+        status: ListingStatusRead
+        id?: string
+        externalUrl?: string | null
+      }
+    | null
+    | undefined,
   listingActive?: boolean,
 ) {
   if (listing?.status === "POSTING") return false
+  if (listing?.id) {
+    return computeListingActive({
+      status: listing.status,
+      externalUrl: listing.externalUrl ?? null,
+    })
+  }
   if (listingActive === true) return true
   if (listingActive === false) return false
   return isLiveOnWallapopStatus(listing?.status)
@@ -91,6 +104,12 @@ export function listingIndicatorShort(
   if (!listing) return null
   if (listing.status === "POSTING") return "Publicando…"
   if (listing.status === "FAILED") return "Error al publicar"
+  if (
+    isLiveOnWallapopStatus(listing.status) &&
+    !isListingActive(listing, listingActive)
+  ) {
+    return "Sin enlace"
+  }
   if (listing.status === "RESERVED") return "Reservado"
   if (isListingActive(listing, listingActive)) return "En Wallapop"
   if (listing.status === "READY_TO_POST") return "Listo para publicar"
