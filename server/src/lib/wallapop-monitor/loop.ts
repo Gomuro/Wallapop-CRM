@@ -54,7 +54,7 @@ async function runScheduledTick(generation: number): Promise<void> {
 
 /**
  * Session-valid, first monitor tick, then every 5 minutes.
- * Idempotent. Chrome stays up between ticks.
+ * Idempotent. Chrome quits after the tick if no other worker slot is busy.
  */
 export function startWallapopMonitorLoop(): void {
   if (started) {

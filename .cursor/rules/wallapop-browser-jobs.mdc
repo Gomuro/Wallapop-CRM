@@ -20,15 +20,15 @@ alwaysApply: true
 
 ## Кінець роботи
 
-- **Publish / sold:** закрити **своє** вікно/таби. Не `browser.close()`, якщо інший слот ще живий. `chrome.exe` гасити лише коли **всі** воркер-слоти idle **і** monitor-loop не тримає Chrome теплим.
-- **Monitor:** Chrome не гасити між тіками (5 хв). Закрити лише вікно monitor.
-- **Session:** закрити своє вікно; Chrome лишається після ACTIVE.
+- **Publish / sold / monitor / session:** закрити **своє** вікно. `chrome.exe` гасити, коли **всі** слоти idle (не тримати процес на homepage Google між тіками). Автопост і наступний monitor самі `attachOrLaunch`.
+- **Гонка close ↔ автопост:** гасити лише якщо слоти порожні. Якщо `publish` уже зайнятий — не гасити. Якщо `Browser.close` уже пішов — автопост чекає (`waitForChromeQuit`) і відкриває новий Chrome. 2FA — `keepChromeWarm`, не гасити.
+- **Session:** закрити своє вікно. Після ACTIVE не тримати Chrome теплим «для монітора».
 - Селектори **не вгадувати**. Sold/unpublish — лише живий DOM. Ніколи Destacar / Eliminar / Reservar / Cancelar, якщо це не задача **цього** воркера.
 
 ## Workers (now)
 
 1. **Session-valid** — boot і перед monitor, якщо RAM не ACTIVE. `ensureWorkerWindow("session")`.
-2. **Monitor** — En venta: `wallapop-badge[badgetype="reserved"]` → listing `RESERVED` (склад лишається ACTIVE). Бейдж зник, лот ще в En venta → listing `ACTIVE`. Потім `/app/catalog/sold` → новий `/item/` → `markProductSoldTx`. Match лише `external_url`. Власне вікно; Chrome stays up.
+2. **Monitor** — En venta: `wallapop-badge[badgetype="reserved"]` → listing `RESERVED` (склад лишається ACTIVE). Бейдж зник, лот ще в En venta → listing `ACTIVE`. Потім `/app/catalog/sold` → новий `/item/` → `markProductSoldTx`. Match лише `external_url`. Власне вікно; після тіка `quitChromeIfNoWorkerSlots`.
 3. **Publish** — 9222 / `ChromeCDP-Persistent`. **Look at the SKU first** (title vs Tu Catálogo). Do not post a duplicate; Follow-up may delete after Yuhu. After Publicar: grab first `tsl-catalog-item` `/item/` href immediately (DOM under Yuhu), then dismiss «Ahora no, gracias». Close the publish window.
 4. **Sold** (C8) — same Chrome, own window. Needs a saved public `/item/…` URL. Live DOM (2026-10-08): `walla-button[text="Marcar como vendido"]` in `[class*="ItemDetailSellerButtons"]` → new tab `tsl-sold-modal` `#markAsSoldButton` → `/app/catalog/sold` first `.CatalogItem__content--sold` href match. Close item + modal tabs after the job.
 

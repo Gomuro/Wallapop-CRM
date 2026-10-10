@@ -13,6 +13,7 @@ import {
 } from "playwright"
 
 import { log } from "../log"
+import { waitForChromeQuit } from "./busy"
 
 export const CDP_URL = process.env.WALLAPOP_CDP_URL ?? "http://127.0.0.1:9222"
 export const CDP_PORT = Number(process.env.WALLAPOP_CDP_PORT ?? "9222")
@@ -286,6 +287,7 @@ async function reopenCdpIfPagesFail(): Promise<void> {
  * and login. Does not open a job tab/window.
  */
 export async function ensureCdpAttached(): Promise<WallapopBrowserHandle> {
+  await waitForChromeQuit()
   await resetStaleCdpHandle()
   await attachCdpHandleOrThrow()
   await reopenCdpIfPagesFail()

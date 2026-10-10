@@ -12,6 +12,7 @@ import {
   type WallapopBrowserHandle,
 } from "./attach"
 import {
+  beginChromeQuit,
   BrowserBusyError,
   getBrowserBusy,
   isAnyWorkerSlotBusy,
@@ -66,7 +67,11 @@ export async function closeWallapopBrowser(): Promise<void> {
   await quitWallapopChrome()
 }
 
-/** After a worker job: quit chrome.exe only if no slot is busy and monitor is not keeping it warm. */
+/**
+ * After a worker job: quit chrome.exe if no slot is busy.
+ * If publish already holds a slot, skip. If quit already started, wait —
+ * the next job's ensureCdpAttached also waits, then launches a new Chrome.
+ */
 export async function quitChromeIfNoWorkerSlots(): Promise<void> {
   if (isAnyWorkerSlotBusy()) {
     log("info", "wallapop_chrome_kept_other_slot", {
@@ -75,10 +80,16 @@ export async function quitChromeIfNoWorkerSlots(): Promise<void> {
     return
   }
   if (isKeepChromeWarm()) {
-    log("info", "wallapop_chrome_kept_monitor_loop")
+    log("info", "wallapop_chrome_kept_warm")
     return
   }
-  await quitWallapopChrome()
+  await beginChromeQuit(async () => {
+    if (isAnyWorkerSlotBusy()) {
+      log("info", "wallapop_chrome_kept_other_slot", { busy: true })
+      return
+    }
+    await quitWallapopChrome()
+  })
 }
 
 export function isLoginOr2faUrl(url: string): boolean {

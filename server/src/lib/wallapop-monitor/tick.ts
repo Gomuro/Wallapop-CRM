@@ -10,6 +10,7 @@ import {
   isBrowserBusyError,
   isLoginOr2faUrl,
   navigateViaAssign,
+  quitChromeIfNoWorkerSlots,
   runWithBrowserBusy,
 } from "../wallapop-cdp";
 import { gotoVendidosCatalog } from "../wallapop-sold/nav";
@@ -98,6 +99,7 @@ export async function runWallapopMonitorTick(): Promise<void> {
   const session = getWallapopSession();
   if (session.status !== "ACTIVE") {
     log("info", "wallapop_monitor_skip_session", { status: session.status });
+    await quitChromeIfNoWorkerSlots();
     return;
   }
   try {
@@ -110,5 +112,7 @@ export async function runWallapopMonitorTick(): Promise<void> {
     log("warn", "wallapop_monitor_tick_failed", {
       err: serializeError(error),
     });
+  } finally {
+    await quitChromeIfNoWorkerSlots();
   }
 }

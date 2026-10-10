@@ -18,8 +18,10 @@ let exclusiveBusy: BrowserExclusiveOp | null = null
 let publishAbort: AbortController | null = null
 /** Set by Stop: skip quitWallapopChrome so the session stays warm for next Start. */
 let keepChromeAfterAbort = false
-/** Monitor loop: keep chrome.exe between ticks (slot is idle for 5 min). */
+/** 2FA / Stop: do not quit chrome.exe. Autopost and monitor relaunch when they need it. */
 let keepChromeWarm = false
+/** In-flight Browser.close + kill. Autopost waits, then attachOrLaunch. */
+let chromeQuit: Promise<void> | null = null
 
 export class BrowserBusyError extends Error {
   readonly code = "BROWSER_BUSY" as const
@@ -104,6 +106,19 @@ export function isKeepChromeWarm(): boolean {
   return keepChromeWarm
 }
 
+export function waitForChromeQuit(): Promise<void> {
+  return chromeQuit ?? Promise.resolve()
+}
+
+/** One quit at a time. Caller must have already seen idle worker slots. */
+export function beginChromeQuit(fn: () => Promise<void>): Promise<void> {
+  if (chromeQuit) return chromeQuit
+  chromeQuit = fn().finally(() => {
+    chromeQuit = null
+  })
+  return chromeQuit
+}
+
 function occupantForExclusive(): BrowserBusy {
   if (exclusiveBusy) return exclusiveBusy
   return firstBusyWorkerSlot() ?? "idle"
@@ -145,6 +160,7 @@ export function resetWallapopPublishAbortForTests(): void {
   publishAbort = null
   keepChromeAfterAbort = false
   keepChromeWarm = false
+  chromeQuit = null
   exclusiveBusy = null
   workerSlots.clear()
 }

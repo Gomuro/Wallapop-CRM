@@ -39,6 +39,8 @@ export {
   isBrowserSoldBusy,
   isKeepChromeWarm,
   setKeepChromeWarm,
+  waitForChromeQuit,
+  beginChromeQuit,
   isInFlightPublishAborted,
   isPublishAbortedError,
   PublishAbortedError,

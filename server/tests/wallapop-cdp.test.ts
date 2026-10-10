@@ -10,6 +10,8 @@ import {
   isBrowserSoldBusy,
   isKeepChromeWarm,
   setKeepChromeWarm,
+  beginChromeQuit,
+  waitForChromeQuit,
   isClosedPage,
   isHandleAlive,
   isInFlightPublishAborted,
@@ -311,9 +313,21 @@ describe("worker slots", () => {
     await sessionRun
   })
 
-  it("keeps chrome warm for the monitor loop", () => {
+  it("keeps chrome warm only while flagged (2FA / Stop), not between monitor ticks", () => {
     expect(isKeepChromeWarm()).toBe(false)
     setKeepChromeWarm(true)
     expect(isKeepChromeWarm()).toBe(true)
+  })
+
+  it("lets a new attach wait out an in-flight chrome quit", async () => {
+    let finished = false
+    const quit = beginChromeQuit(async () => {
+      await new Promise((resolve) => setTimeout(resolve, 25))
+      finished = true
+    })
+    await waitForChromeQuit()
+    expect(finished).toBe(true)
+    await quit
+    await waitForChromeQuit()
   })
 })

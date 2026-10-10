@@ -122,16 +122,14 @@ export async function getWallapopSessionSnapshot(): Promise<WallapopSessionSnaps
 
 /**
  * Session-valid worker: own window on CDP (spawn Chrome if needed), classify, close window.
- * Chrome stays warm after ACTIVE so monitor can tick. NONE quits chrome if no other slots.
+ * After ACTIVE the next worker (monitor / publish) launches Chrome if this process already quit.
  */
 export async function rehydrateWallapopSessionOnBoot(): Promise<WallapopSessionSnapshot> {
   try {
     await runWithBrowserBusy("session", async () => {
       const reconciled = await classifyOwnedSessionWindow()
       await applyReconcileResult(reconciled)
-      if (reconciled === "ACTIVE") {
-        setKeepChromeWarm(true)
-      } else if (reconciled === "NONE") {
+      if (reconciled === "NONE") {
         setKeepChromeWarm(false)
       }
     })
@@ -171,12 +169,13 @@ async function finishConnectSuccess(
     state.status = "AUTHENTICATING"
     state.requires2FA = true
     state.error = null
+    setKeepChromeWarm(true)
     return { ok: true, session: snapshot() }
   }
   state.status = "ACTIVE"
   state.requires2FA = false
   state.error = null
-  setKeepChromeWarm(true)
+  setKeepChromeWarm(false)
   await syncDefaultAccountStatus("ACTIVE")
   const listingsReset = await bindWallapopIdentity()
   return { ok: true, session: { ...snapshot(), listingsReset } }
@@ -223,7 +222,11 @@ export async function connectWallapopSession(input: {
     if (gen !== connectGeneration) {
       return { ok: true, session: snapshot() }
     }
-    return await finishConnectSuccess(outcome)
+    const result = await finishConnectSuccess(outcome)
+    if (result.ok && result.session.status === "ACTIVE") {
+      await quitChromeIfNoWorkerSlots()
+    }
+    return result
   } catch (error) {
     if (gen !== connectGeneration) {
       return { ok: true, session: snapshot() }
@@ -254,7 +257,7 @@ async function finish2faSuccess(): Promise<Submit2faResult> {
   state.status = "ACTIVE"
   state.requires2FA = false
   state.error = null
-  setKeepChromeWarm(true)
+  setKeepChromeWarm(false)
   await syncDefaultAccountStatus("ACTIVE")
   const listingsReset = await bindWallapopIdentity()
   return { ok: true, session: { ...snapshot(), listingsReset } }
@@ -290,7 +293,9 @@ export async function submitWallapopSession2fa(
     if (gen !== connectGeneration) {
       return { ok: true, session: snapshot() }
     }
-    return await finish2faSuccess()
+    const result = await finish2faSuccess()
+    if (result.ok) await quitChromeIfNoWorkerSlots()
+    return result
   } catch (error) {
     if (gen !== connectGeneration) {
       return { ok: true, session: snapshot() }
