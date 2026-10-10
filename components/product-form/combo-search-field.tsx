@@ -96,7 +96,11 @@ export function ComboSearchField({
             className="absolute z-50 mt-1 max-h-52 w-full overflow-y-auto rounded-lg border bg-background text-sm shadow-md"
           >
             {suggestions.map((option) => (
-              <li key={option.id} role="option">
+              <li
+                key={option.id}
+                role="option"
+                aria-selected={option.id === value || option.title === query}
+              >
                 <button
                   type="button"
                   className="flex min-h-10 w-full items-center px-3 text-left hover:bg-muted"

@@ -28,6 +28,7 @@ import {
   saveDraftPhotos,
 } from "@/lib/product-form/draft"
 import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
+import { submitProductForm } from "@/components/product-form/product-form-submit"
 
 export {
   ProductFormFields,
@@ -352,15 +353,13 @@ export function ProductForm({
   }, [state])
 
   function onSubmit(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault()
-    isSubmittingRef.current = true
-    if (restoreDraft) {
-      persistFromForm(event.currentTarget)
-    }
-    const formData = new FormData(event.currentTarget)
-    pendingFilesRef.current.forEach((file) => formData.append("files", file))
-    startTransition(() => {
-      formAction(formData)
+    submitProductForm(event, {
+      isSubmittingRef,
+      restoreDraft,
+      persistFromForm,
+      pendingFilesRef,
+      startTransition,
+      formAction,
     })
   }
 

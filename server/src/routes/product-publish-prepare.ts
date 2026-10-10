@@ -35,10 +35,7 @@ function decimalToNumberOrNull(
   return Number.isFinite(n) ? n : null
 }
 
-function isPublishShippingEnabled(_product: {
-  shippingPackageSize: string | null
-  listings: { shippingEnabled: boolean }[]
-}): boolean {
+function isPublishShippingEnabled(): boolean {
   return true
 }
 
@@ -76,7 +73,7 @@ export type RunProductPublishResult = RunProductPublishOk | RunProductPublishErr
 export type PrismaDb = NonNullable<ReturnType<typeof getPrisma>>
 export type ProductCard = NonNullable<Awaited<ReturnType<typeof loadProductCard>>>
 
-export type PublishReady = {
+export type PublishReadyContext = {
   ok: true
   prisma: PrismaDb
   product: ProductCard
@@ -84,6 +81,9 @@ export type PublishReady = {
   dryRun: boolean
   imagePaths: string[]
   categoryLabels: string[]
+}
+
+export type PublishReadyShipping = {
   shippingEnabled: boolean
   packageType: string
   weightKg: number | null
@@ -91,6 +91,8 @@ export type PublishReady = {
   lengthCm: number | null
   heightCm: number | null
 }
+
+export type PublishReady = PublishReadyContext & PublishReadyShipping
 
 export function publishFail(httpStatus: number, code: string, message: string): RunProductPublishErr {
   return { ok: false, httpStatus, code, message }
@@ -199,7 +201,7 @@ function weightBandInvalid(shippingEnabled: boolean, packageType: string, weight
 }
 
 function publishShippingMeasures(product: ProductCard): PublishShipping {
-  const shippingEnabled = isPublishShippingEnabled(product)
+  const shippingEnabled = isPublishShippingEnabled()
   return {
     categoryLabels: [],
     shippingEnabled,

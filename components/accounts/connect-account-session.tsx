@@ -12,8 +12,13 @@ import {
   type WallapopAccountSession,
 } from "@/lib/api/wallapop-account";
 
-type PendingKind = "connect" | "2fa" | "disconnect" | null;
-type ResetMode = "disconnect" | "cancel";
+import type {
+  ConnectAccountSession,
+  PendingKind,
+  ResetMode,
+} from "@/components/accounts/connect-account-session-types"
+
+export type { ConnectAccountSession } from "@/components/accounts/connect-account-session-types"
 
 type ConnectSessionSetters = {
   setEmail: React.Dispatch<React.SetStateAction<string>>;
@@ -199,47 +204,6 @@ async function runDisconnectAccount(ctx: {
     ctx.setters.setPendingKind(null);
   }
 }
-
-export type ConnectAccountSession = {
-  apiReady: boolean;
-  email: string;
-  password: string;
-  proxy: string;
-  showPassword: boolean;
-  session: WallapopAccountSession;
-  error: string | null;
-  pendingKind: PendingKind;
-  twoFaOpen: boolean;
-  twoFaCode: string;
-  statusLoading: boolean;
-  disconnectConfirmOpen: boolean;
-  resetMode: ResetMode;
-  listingsResetNotice: boolean;
-  resetBusy: boolean;
-  connectedEmail: string | null;
-  isActive: boolean;
-  isAuthenticating: boolean;
-  isDisconnected: boolean;
-  showSessionReset: boolean;
-  showConnectHint: boolean;
-  resetPendingLabel: string;
-  resetIdleLabel: string;
-  resetConfirmTitle: string;
-  resetConfirmDescription: string;
-  resetConfirmAction: string;
-  setEmail: (value: string) => void;
-  setPassword: (value: string) => void;
-  setProxy: (value: string) => void;
-  setShowPassword: React.Dispatch<React.SetStateAction<boolean>>;
-  setTwoFaCode: (value: string) => void;
-  setTwoFaOpen: (open: boolean) => void;
-  setDisconnectConfirmOpen: (open: boolean) => void;
-  onConnect: (event: React.FormEvent) => void;
-  onSubmit2fa: (event: React.FormEvent) => void;
-  onDisconnect: () => void;
-  openResetConfirm: (mode: ResetMode) => void;
-  requestDisconnect: () => void;
-};
 
 function snapshotConnectSession(ctx: {
   apiReady: boolean;

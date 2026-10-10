@@ -18,8 +18,8 @@ import {
   CATALOG_PUBLISHED_URL,
   CATALOG_SOLD_URL,
 } from "../src/lib/wallapop-monitor/catalog"
+import { ITEM_PAGE_FACTS_EVAL } from "../src/lib/wallapop-monitor/link-by-item-page-eval"
 import {
-  ITEM_PAGE_FACTS_EVAL,
   planItemPageUrlLinks,
   type ItemPageCrmListing,
   type ItemPageFacts,

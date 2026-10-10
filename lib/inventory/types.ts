@@ -20,34 +20,48 @@ export type InventoryListing = {
   shippingEnabled: boolean
 }
 
-export type InventoryProduct = {
+export type InventoryProductIdentity = {
   id: string
   sku: string
+  categoryId: string
+  category: string
+  status: ProductStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export type InventoryProductCopy = {
   title: string
   description: string
   price: number
-  categoryId: string
-  category: string
   condition: string
   conditionCode: ProductCondition
   brand: string | null
+}
+
+export type InventoryProductWarehouse = {
   weight: number | null
   shippingPackageSize: ShippingPackageSize | null
   widthCm: number | null
   lengthCm: number | null
   heightCm: number | null
+}
+
+export type InventoryProductMedia = {
   images: string[]
   productImages: InventoryProductImage[]
-  status: ProductStatus
   externalLinks: string[]
-  createdAt: string
-  updatedAt: string
   listing: InventoryListing | null
   typeAttributes: Record<string, unknown>
   /** From GET /products list when full listing is omitted. */
   listingActive?: boolean
   shippingPublishReady: boolean
 }
+
+export type InventoryProduct = InventoryProductIdentity &
+  InventoryProductCopy &
+  InventoryProductWarehouse &
+  InventoryProductMedia
 
 export type ProductListQuery = {
   q?: string

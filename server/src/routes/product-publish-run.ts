@@ -10,10 +10,7 @@ import {
   validateExtraUploadFields,
 } from "../../../lib/inventory/category-upload-fields"
 import { wallapopBrandFromProduct } from "../../../lib/inventory/wallapop-brand"
-import {
-  listingWithoutPublicItemUrlWhere,
-  wallapopItemUrlOrNull,
-} from "../../../lib/inventory/wallapop-item-url"
+import { wallapopItemUrlOrNull } from "../../../lib/inventory/wallapop-item-url"
 import {
   ALREADY_POSTED_MESSAGE,
   decimalToNumber,
@@ -23,62 +20,22 @@ import {
   type RunProductPublishErr,
   type RunProductPublishResult,
 } from "./product-publish-prepare"
+import {
+  claimListingForPublish,
+  revertPublishClaimIfNeeded,
+  type PublishClaimFlags,
+} from "./product-publish-claim"
+
+export {
+  claimListingForPublish,
+  revertPublishClaim,
+  shouldRevertPublishClaim,
+} from "./product-publish-claim"
 
 const LIVE_SUCCESS_LISTING_STALE_MESSAGE =
   "Wallapop puede tener ya este artículo. El listing local ya no está en POSTING (no se forzó ACTIVE)."
 const MISSING_ITEM_URL_MESSAGE =
   "Tras Publicar no se obtuvo el enlace público /item/. El anuncio no se marca En Wallapop."
-/** Atomic READY_TO_POST → POSTING for (product, account) without a public item URL. */
-export async function claimListingForPublish(
-  prisma: PrismaClient,
-  productId: string,
-  accountId: string,
-): Promise<boolean> {
-  const result = await prisma.productListing.updateMany({
-    where: {
-      productId,
-      accountId,
-      status: "READY_TO_POST",
-      ...listingWithoutPublicItemUrlWhere,
-    },
-    data: {
-      status: "POSTING",
-      externalUrl: null,
-      postingAttempts: { increment: 1 },
-      lastPublishError: null,
-    },
-  })
-  return result.count > 0
-}
-
-/** Revert POSTING → READY_TO_POST only. Never touches ACTIVE / RESERVED. */
-export async function revertPublishClaim(
-  prisma: PrismaClient,
-  productId: string,
-  accountId: string,
-): Promise<void> {
-  await prisma.productListing.updateMany({
-    where: {
-      productId,
-      accountId,
-      status: "POSTING",
-    },
-    data: { status: "READY_TO_POST" },
-  })
-}
-
-/**
- * Revert POSTING → READY_TO_POST only when we claimed and Publicar was never clicked.
- * `postedOnWallapop` is true after D9 verified the published catalog (or /item/).
- * `clickedPublicar` / `keepClaim`: click ran but verify failed — stay POSTING, not ACTIVE.
- */
-export function shouldRevertPublishClaim(
-  claimed: boolean,
-  postedOnWallapop: boolean,
-  clickedPublicar = false,
-): boolean {
-  return claimed && !postedOnWallapop && !clickedPublicar
-}
 
 async function warnListingNotPosting(
   prisma: PrismaClient,
@@ -242,11 +199,6 @@ async function verifyProductPublish(
   return { ok: true, dryRun: false, listing: published, step: result.step }
 }
 
-type PublishClaimFlags = {
-  postedOnWallapop: boolean
-  clickedPublicar: boolean
-}
-
 function applyPublishErrorFlags(error: unknown, flags: PublishClaimFlags) {
   if (error instanceof WallapopPublishError && error.step === "published") {
     flags.postedOnWallapop = true
@@ -306,28 +258,6 @@ function mapPublishCatch(
   return publishFail(500, "PUBLISH_FAILED", `${step}: ${message}`)
 }
 
-async function revertPublishClaimIfNeeded(
-  prisma: PrismaDb,
-  productId: string,
-  accountId: string,
-  claimed: boolean,
-  flags: PublishClaimFlags,
-): Promise<void> {
-  if (!shouldRevertPublishClaim(claimed, flags.postedOnWallapop, flags.clickedPublicar)) {
-    return
-  }
-  try {
-    await revertPublishClaim(prisma, productId, accountId)
-  } catch (revertError) {
-    log("error", "wallapop_publish_claim_revert_failed", {
-      productId,
-      accountId,
-      message:
-        revertError instanceof Error ? revertError.message : String(revertError),
-    })
-  }
-}
-
 export async function executeLivePublish(
   prepared: PublishReady,
   productId: string,
@@ -348,6 +278,12 @@ export async function executeLivePublish(
     applyPublishErrorFlags(error, flags)
     return mapPublishCatch(error, productId, prepared.accountId, flags.postedOnWallapop)
   } finally {
-    await revertPublishClaimIfNeeded(prepared.prisma, productId, prepared.accountId, claimed, flags)
+    await revertPublishClaimIfNeeded({
+      prisma: prepared.prisma,
+      productId,
+      accountId: prepared.accountId,
+      claimed,
+      flags,
+    })
   }
 }

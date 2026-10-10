@@ -1,7 +1,4 @@
-import {
-  wallapopItemSlugHrefOrNull,
-  wallapopItemUrlOrNull,
-} from "../../../../lib/inventory/wallapop-item-url"
+import { wallapopItemSlugHrefOrNull } from "../../../../lib/inventory/wallapop-item-url"
 import { groqChatJson } from "../groq-chat-json"
 import { parseCatalogPriceEur } from "../wallapop-publish/catalog-url"
 import {
@@ -132,25 +129,18 @@ export type PlanLlmOptions = {
   ask?: typeof askGroqForLink
 }
 
-export async function planCombinedTitleUrlLinks(
+function llmPoolFromDeterministic(
   listings: CrmLinkListing[],
-  cards: CatalogTitleCard[],
-  opts: PlanLlmOptions = {},
-): Promise<LlmLinkPlan> {
-  const delayMs = opts.delayMs ?? 400
-  const shortlistSize = opts.shortlistSize ?? 8
-  const ask = opts.ask ?? askGroqForLink
-
-  const det = planTitleUrlLinks(listings, cards)
+  det: ReturnType<typeof planTitleUrlLinks>,
+) {
   const links: CombinedLink[] = det.links.map((link) => ({
     ...link,
-    source: "deterministic",
+    source: "deterministic" as const,
   }))
   const usedHrefs = new Set(
     links.map((link) => normalizeHref(link.href)).filter(Boolean) as string[],
   )
   const linkedIds = new Set(links.map((link) => link.listingId))
-
   const pool = listings.filter(
     (row) =>
       listingMayBeOnWallapop(row.status) &&
@@ -162,11 +152,82 @@ export async function planCombinedTitleUrlLinks(
     (row) => (byTitle.get(foldTitleKey(row.title)) ?? []).length === 1,
   )
   const llmSkuSet = new Set(llmRows.map((row) => row.sku))
-
   const skips: TitleUrlSkip[] = det.skips.filter(
     (skip) =>
       skip.reason !== "no_match" || !skip.sku || !llmSkuSet.has(skip.sku),
   )
+  return { links, usedHrefs, linkedIds, llmRows, skips }
+}
+
+function isHighConfidenceLlmPick(
+  pick: LlmPick,
+  shortlistLength: number,
+): pick is LlmPick & { candidateIndex: number } {
+  return (
+    pick.match &&
+    pick.confidence === "high" &&
+    pick.candidateIndex != null &&
+    pick.candidateIndex >= 0 &&
+    pick.candidateIndex < shortlistLength
+  )
+}
+
+function noMatchSkip(row: CrmLinkListing): TitleUrlSkip {
+  return { reason: "no_match", title: row.title, sku: row.sku }
+}
+
+function combinedLlmLink(
+  row: CrmLinkListing,
+  href: string,
+  reason: string,
+): CombinedLink {
+  return {
+    listingId: row.listingId,
+    sku: row.sku,
+    title: row.title,
+    href,
+    source: "llm",
+    reason,
+  }
+}
+
+async function linkOneLlmRow(ctx: {
+  row: CrmLinkListing
+  available: CatalogTitleCard[]
+  usedHrefs: Set<string>
+  shortlistSize: number
+  delayMs: number
+  ask: NonNullable<PlanLlmOptions["ask"]>
+  pushSkip: (skip: TitleUrlSkip) => void
+}): Promise<{ link: CombinedLink | null; calledLlm: boolean }> {
+  const { row } = ctx
+  const shortlist = rankCatalogCardsForListing(
+    row.title,
+    ctx.available,
+    ctx.shortlistSize,
+  )
+  if (shortlist.length === 0) {
+    ctx.pushSkip(noMatchSkip(row))
+    return { link: null, calledLlm: false }
+  }
+  const pick = await ctx.ask(row, shortlist)
+  if (ctx.delayMs > 0) {
+    await new Promise((resolve) => setTimeout(resolve, ctx.delayMs))
+  }
+  if (!isHighConfidenceLlmPick(pick, shortlist.length)) {
+    ctx.pushSkip(noMatchSkip(row))
+    return { link: null, calledLlm: true }
+  }
+  const href = normalizeHref(shortlist[pick.candidateIndex].href)
+  if (!href || ctx.usedHrefs.has(href)) {
+    ctx.pushSkip(noMatchSkip(row))
+    return { link: null, calledLlm: true }
+  }
+  return { calledLlm: true, link: combinedLlmLink(row, href, pick.reason) }
+}
+
+function skipBag(initial: TitleUrlSkip[]) {
+  const skips = [...initial]
   const skipKeys = new Set(
     skips.map(
       (skip) => `${skip.reason}:${skip.sku ?? ""}:${foldTitleKey(skip.title)}`,
@@ -178,85 +239,73 @@ export async function planCombinedTitleUrlLinks(
     skipKeys.add(key)
     skips.push(skip)
   }
+  return { skips, pushSkip }
+}
 
-  let available = uniqueCatalogCards(cards).filter((card) => {
-    const href = normalizeHref(card.href)
-    return href && !usedHrefs.has(href)
-  })
-
-  const llmQueue = [...llmRows].sort((a, b) => {
-    const maxA = available.reduce(
-      (best, card) => Math.max(best, scoreListingCatalogCard(a.title, card)),
+function sortLlmQueue(
+  llmRows: CrmLinkListing[],
+  available: CatalogTitleCard[],
+) {
+  const bestScore = (row: CrmLinkListing) =>
+    available.reduce(
+      (best, card) => Math.max(best, scoreListingCatalogCard(row.title, card)),
       0,
     )
-    const maxB = available.reduce(
-      (best, card) => Math.max(best, scoreListingCatalogCard(b.title, card)),
-      0,
-    )
-    return maxB - maxA
-  })
+  return [...llmRows].sort((a, b) => bestScore(b) - bestScore(a))
+}
 
+async function runLlmQueue(ctx: {
+  llmRows: CrmLinkListing[]
+  available: CatalogTitleCard[]
+  usedHrefs: Set<string>
+  linkedIds: Set<string>
+  links: CombinedLink[]
+  shortlistSize: number
+  delayMs: number
+  ask: NonNullable<PlanLlmOptions["ask"]>
+  pushSkip: (skip: TitleUrlSkip) => void
+}) {
+  let available = ctx.available
   let llmCalls = 0
-  for (const row of llmQueue) {
-    if (linkedIds.has(row.listingId)) continue
-    const shortlist = rankCatalogCardsForListing(
-      row.title,
-      available,
-      shortlistSize,
+  for (const row of sortLlmQueue(ctx.llmRows, available)) {
+    if (ctx.linkedIds.has(row.listingId)) continue
+    const result = await linkOneLlmRow({ ...ctx, row, available })
+    if (result.calledLlm) llmCalls += 1
+    if (!result.link) continue
+    ctx.usedHrefs.add(result.link.href)
+    ctx.linkedIds.add(row.listingId)
+    available = available.filter(
+      (card) => normalizeHref(card.href) !== result.link!.href,
     )
-    if (shortlist.length === 0) {
-      pushSkip({
-        reason: "no_match",
-        title: row.title,
-        sku: row.sku,
-      })
-      continue
-    }
-
-    llmCalls += 1
-    const pick = await ask(row, shortlist)
-    if (delayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs))
-    }
-
-    if (
-      !pick.match ||
-      pick.confidence !== "high" ||
-      pick.candidateIndex == null ||
-      pick.candidateIndex < 0 ||
-      pick.candidateIndex >= shortlist.length
-    ) {
-      pushSkip({
-        reason: "no_match",
-        title: row.title,
-        sku: row.sku,
-      })
-      continue
-    }
-
-    const card = shortlist[pick.candidateIndex]
-    const href = normalizeHref(card.href)
-    if (!href || usedHrefs.has(href)) {
-      pushSkip({
-        reason: "no_match",
-        title: row.title,
-        sku: row.sku,
-      })
-      continue
-    }
-
-    usedHrefs.add(href)
-    linkedIds.add(row.listingId)
-    available = available.filter((c) => normalizeHref(c.href) !== href)
-    links.push({
-      listingId: row.listingId,
-      sku: row.sku,
-      title: row.title,
-      href,
-      source: "llm",
-      reason: pick.reason,
-    })
+    ctx.links.push(result.link)
   }
+  return llmCalls
+}
 
-  return { links, skips, llmCalls }
+export async function planCombinedTitleUrlLinks(
+  listings: CrmLinkListing[],
+  cards: CatalogTitleCard[],
+  opts: PlanLlmOptions = {},
+): Promise<LlmLinkPlan> {
+  const seeded = llmPoolFromDeterministic(
+    listings,
+    planTitleUrlLinks(listings, cards),
+  )
+  const { skips, pushSkip } = skipBag(seeded.skips)
+  const available = uniqueCatalogCards(cards).filter((card) => {
+    const href = normalizeHref(card.href)
+    return Boolean(href && !seeded.usedHrefs.has(href))
+  })
+  const llmCalls = await runLlmQueue({
+    llmRows: seeded.llmRows,
+    available,
+    usedHrefs: seeded.usedHrefs,
+    linkedIds: seeded.linkedIds,
+    links: seeded.links,
+    shortlistSize: opts.shortlistSize ?? 8,
+    delayMs: opts.delayMs ?? 400,
+    ask: opts.ask ?? askGroqForLink,
+    pushSkip,
+  })
+  return { links: seeded.links, skips, llmCalls }
 }

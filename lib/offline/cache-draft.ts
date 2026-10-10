@@ -61,6 +61,31 @@ export function productImagesFromDraftUrls(
   }))
 }
 
+function draftShippingPackageSize(
+  draft: OfflineProductDraft,
+  prev: InventoryProduct | undefined,
+) {
+  if (draft.shippingPackageSize === undefined) {
+    return prev?.shippingPackageSize ?? "STANDARD"
+  }
+  return draft.shippingPackageSize
+}
+
+function draftListingMeta(
+  prev: InventoryProduct | undefined,
+  weight: number | null,
+) {
+  return {
+    listing: prev?.listing ?? null,
+    typeAttributes: prev?.typeAttributes ?? {},
+    listingActive: prev?.listingActive,
+    shippingPublishReady: isShippingPublishReady({
+      weightKg: weight,
+      shippingEnabled: prev?.listing?.shippingEnabled,
+    }),
+  }
+}
+
 export function inventoryFromOfflineDraft(input: {
   draft: OfflineProductDraft
   prev: InventoryProduct | undefined
@@ -83,23 +108,14 @@ export function inventoryFromOfflineDraft(input: {
     conditionCode: draft.condition,
     brand: prev?.brand ?? null,
     ...measures,
-    shippingPackageSize:
-      draft.shippingPackageSize === undefined
-        ? (prev?.shippingPackageSize ?? "STANDARD")
-        : draft.shippingPackageSize,
+    shippingPackageSize: draftShippingPackageSize(draft, prev),
     images,
     productImages: productImagesFromDraftUrls(id, images, prev),
     status: draft.status,
     externalLinks: prev?.externalLinks ?? [],
     createdAt: prev?.createdAt ?? now,
     updatedAt: now,
-    listing: prev?.listing ?? null,
-    typeAttributes: prev?.typeAttributes ?? {},
-    listingActive: prev?.listingActive,
-    shippingPublishReady: isShippingPublishReady({
-      weightKg: measures.weight,
-      shippingEnabled: prev?.listing?.shippingEnabled,
-    }),
+    ...draftListingMeta(prev, measures.weight),
   }
 }
 

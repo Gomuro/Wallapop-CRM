@@ -128,10 +128,13 @@ export function PhotoSlotCell({
   )
 }
 
-type PhotoSlotsGridProps = {
+type PhotoSlotsGridRefs = {
   inputRef: RefObject<HTMLInputElement | null>
   gridRef: RefObject<HTMLDivElement | null>
   replaceIndexRef: MutableRefObject<number | undefined>
+}
+
+type PhotoSlotsGridState = {
   gridSlots: (SlotImage | null)[]
   imageCount: number
   productId?: string
@@ -139,6 +142,9 @@ type PhotoSlotsGridProps = {
   overIndex: number | null
   uploading: boolean
   error: string | null
+}
+
+type PhotoSlotsGridHandlers = {
   onAddFiles: (files: FileList | null, atIndex?: number) => void
   onRemove: (index: number) => void
   onClearAll: () => void
@@ -148,6 +154,10 @@ type PhotoSlotsGridProps = {
   onPointerMove: (event: ReactPointerEvent<HTMLDivElement>) => void
   onPointerUp: (event: ReactPointerEvent<HTMLDivElement>) => void
 }
+
+type PhotoSlotsGridProps = PhotoSlotsGridRefs &
+  PhotoSlotsGridState &
+  PhotoSlotsGridHandlers
 
 export function PhotoSlotsGrid({
   inputRef,

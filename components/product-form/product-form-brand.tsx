@@ -23,6 +23,12 @@ export function BrandPicker({
   const [query, setQuery] = useState(defaultValue ?? "")
   const [debounced, setDebounced] = useState(query)
   const [options, setOptions] = useState<string[]>([])
+  const [optionsFor, setOptionsFor] = useState(categoryId)
+
+  if (categoryId !== optionsFor) {
+    setOptionsFor(categoryId)
+    if (!categoryId) setOptions([])
+  }
 
   useEffect(() => {
     const timer = window.setTimeout(() => setDebounced(query), 200)
@@ -30,10 +36,7 @@ export function BrandPicker({
   }, [query])
 
   useEffect(() => {
-    if (!categoryId) {
-      setOptions([])
-      return
-    }
+    if (!categoryId) return
     let cancelled = false
     apiListBrands(categoryId, debounced)
       .then((brands) => {

@@ -37,13 +37,14 @@ export function settleSwipeIndex({
   return Math.min(count - 1, Math.max(0, next))
 }
 
-export function setSlideTrack(
-  track: HTMLElement | null,
-  viewport: HTMLElement | null,
-  index: number,
-  dx: number,
-  animate: boolean,
-) {
+export function setSlideTrack(opts: {
+  track: HTMLElement | null
+  viewport: HTMLElement | null
+  index: number
+  dx: number
+  animate: boolean
+}) {
+  const { track, viewport, index, dx, animate } = opts
   if (!track) return
   const width = viewport?.clientWidth || track.clientWidth || 0
   track.style.transition = animate ? SLIDE_EASE : "none"
@@ -288,7 +289,13 @@ export function useSwipeCarousel(args: SwipeCarouselOptions) {
   const refs = useSwipeRefs(args)
   const apply = useCallback(
     (nextIndex: number, dx: number, animate: boolean) =>
-      setSlideTrack(trackRef.current, viewportRef.current, nextIndex, dx, animate),
+      setSlideTrack({
+        track: trackRef.current,
+        viewport: viewportRef.current,
+        index: nextIndex,
+        dx,
+        animate,
+      }),
     [trackRef, viewportRef],
   )
   useEffect(() => {

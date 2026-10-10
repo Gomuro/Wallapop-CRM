@@ -144,13 +144,14 @@ async function rejectReadyToPostWithoutBrand(
   return true
 }
 
-async function rejectPostingStatusChange(
-  prisma: PrismaDb,
-  productId: string,
-  accountId: string,
-  body: ListingPutBody,
-  res: Response,
-): Promise<boolean> {
+async function rejectPostingStatusChange(input: {
+  prisma: PrismaDb
+  productId: string
+  accountId: string
+  body: ListingPutBody
+  res: Response
+}): Promise<boolean> {
+  const { prisma, productId, accountId, body, res } = input
   if (body.status === undefined) return false
   const existing = await prisma.productListing.findUnique({
     where: { productId_accountId: { productId, accountId } },
@@ -191,7 +192,9 @@ export async function putProductListing(req: Request, res: Response) {
   if (!accountId) return
   if (!(await assertProductExists(prisma, productId, res))) return
   if (await rejectReadyToPostWithoutBrand(prisma, productId, body, res)) return
-  if (await rejectPostingStatusChange(prisma, productId, accountId, body, res)) {
+  if (
+    await rejectPostingStatusChange({ prisma, productId, accountId, body, res })
+  ) {
     return
   }
 

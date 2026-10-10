@@ -2,11 +2,14 @@ import type { CategoryUploadField } from "@/lib/inventory/category-upload-fields
 import type { ListingStatusRead } from "@/lib/inventory/types"
 import type { ProductCondition, ProductStatus } from "@/lib/validations"
 
-export type ApiCategory = {
+export type ApiCategoryIds = {
   id: string
   wallapopId: number
   parentId: string | null
   slug: string
+}
+
+export type ApiCategoryTree = {
   nameEs: string
   nameUk: string
   isLeaf: boolean
@@ -16,6 +19,8 @@ export type ApiCategory = {
   sortOrder: number
   fields?: CategoryUploadField[]
 }
+
+export type ApiCategory = ApiCategoryIds & ApiCategoryTree
 
 export type ApiProductImage = {
   id: string
@@ -35,41 +40,61 @@ export type ApiListing = {
   lastPostedAt: string | null
 }
 
-export type ApiProduct = {
+export type ApiProductIdentity = {
   id: string
   sku: string
+  categoryId: string
+  status: ProductStatus
+  createdAt: string
+  updatedAt: string
+}
+
+export type ApiProductCopy = {
   title: string
   description: string
   price: number
   currency: string
-  categoryId: string
   condition: ProductCondition
   brand: string | null
+  typeAttributes: Record<string, unknown>
+}
+
+export type ApiProductWarehouse = {
   weightKg: number | null
   shippingPackageSize: "STANDARD" | "BULKY" | null
   widthCm: number | null
   lengthCm: number | null
   heightCm: number | null
-  status: ProductStatus
-  typeAttributes: Record<string, unknown>
   soldAt: string | null
   soldPrice: number | null
+}
+
+export type ApiProductMedia = {
   images: ApiProductImage[]
   listing: ApiListing | null
-  createdAt: string
+}
+
+export type ApiProduct = ApiProductIdentity &
+  ApiProductCopy &
+  ApiProductWarehouse &
+  ApiProductMedia
+
+export type ApiProductListIdentity = {
+  id: string
+  sku: string
+  categoryId: string
+  status: ProductStatus
   updatedAt: string
 }
 
-export type ApiProductListItem = {
-  id: string
-  sku: string
+export type ApiProductListCopy = {
   title: string
   price: number
   currency: string
-  status: ProductStatus
-  categoryId: string
   coverUrl: string | null
-  updatedAt: string
+}
+
+export type ApiProductListListing = {
   listingActive: boolean
   /** Default-account listing status, or null when none exists. */
   listingStatus: ListingStatusRead | null
@@ -77,6 +102,10 @@ export type ApiProductListItem = {
   lastPostedAt: string | null
   shippingPublishReady: boolean
 }
+
+export type ApiProductListItem = ApiProductListIdentity &
+  ApiProductListCopy &
+  ApiProductListListing
 
 export type ApiProductListResponse = {
   products: ApiProductListItem[]

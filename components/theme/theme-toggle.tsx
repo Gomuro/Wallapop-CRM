@@ -1,9 +1,10 @@
 "use client"
 
-import { useSyncExternalStore } from "react"
+import { useLayoutEffect, useSyncExternalStore } from "react"
 import { MoonIcon, SunIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import { persistTheme, THEME_STORAGE_KEY } from "@/lib/theme-script"
 
 function isDark() {
   return document.documentElement.classList.contains("dark")
@@ -19,9 +20,13 @@ function subscribe(onStoreChange: () => void) {
 }
 
 function applyTheme(dark: boolean) {
-  document.documentElement.classList.toggle("dark", dark)
-  localStorage.setItem("theme", dark ? "dark" : "light")
+  persistTheme(dark)
   window.dispatchEvent(new Event("themechange"))
+}
+
+function storedTheme(): "dark" | "light" | null {
+  const t = localStorage.getItem(THEME_STORAGE_KEY)
+  return t === "dark" || t === "light" ? t : null
 }
 
 export function ThemeToggle({
@@ -30,6 +35,15 @@ export function ThemeToggle({
   variant?: "icon" | "row"
 }) {
   const dark = useSyncExternalStore(subscribe, isDark, () => false)
+
+  useLayoutEffect(() => {
+    const saved = storedTheme()
+    if (saved) {
+      applyTheme(saved === "dark")
+      return
+    }
+    applyTheme(matchMedia("(prefers-color-scheme: dark)").matches)
+  }, [])
 
   function toggle() {
     applyTheme(!isDark())

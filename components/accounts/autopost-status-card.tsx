@@ -59,6 +59,96 @@ export function AutopostRecentSkips({
   )
 }
 
+function AutopostBadges({
+  autopost,
+  running,
+}: {
+  autopost: ApiAutopostStatus
+  running: boolean
+}) {
+  return (
+    <>
+      <div className="mb-4 flex flex-wrap gap-2">
+        <Badge variant={running ? "default" : "outline"}>
+          Autopost: {running ? "en marcha" : "parado"}
+        </Badge>
+        <Badge variant={autopost.livePublish ? "default" : "secondary"}>
+          Publicación: {autopost.livePublish ? "en vivo" : "simulación"}
+        </Badge>
+      </div>
+      <p className="mb-2 text-sm text-muted-foreground">
+        {formatIntervalHint(autopost)}
+      </p>
+    </>
+  )
+}
+
+function AutopostNotices({ error, saved }: { error: string | null; saved: boolean }) {
+  return (
+    <>
+      {error ? (
+        <p
+          className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
+          role="alert"
+        >
+          {error}
+        </p>
+      ) : null}
+      {saved ? (
+        <p
+          className="mb-4 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
+          aria-live="polite"
+        >
+          Guardado
+        </p>
+      ) : null}
+    </>
+  )
+}
+
+function AutopostToggle({
+  running,
+  apiReady,
+  toggling,
+  sessionActive,
+  setters,
+}: Pick<
+  AutopostIntervalState,
+  "running" | "apiReady" | "toggling" | "sessionActive" | "setters"
+>) {
+  return (
+    <>
+      {running ? (
+        <Button
+          type="button"
+          variant="destructive"
+          className="h-12 w-full"
+          disabled={!apiReady || toggling}
+          onClick={() => void stopAutopostRun(setters)}
+          aria-busy={toggling || undefined}
+        >
+          {toggling ? <LoaderCircleIcon className="animate-spin" /> : null}
+          {toggling ? "Deteniendo…" : "Detener autopost"}
+        </Button>
+      ) : (
+        <Button
+          type="button"
+          className="h-12 w-full"
+          disabled={!apiReady || toggling || !sessionActive}
+          onClick={() => setters.setStartConfirmOpen(true)}
+        >
+          Iniciar autopost
+        </Button>
+      )}
+      {sessionActive ? null : (
+        <p className="mt-2 text-xs text-muted-foreground">
+          Conecta la cuenta de Wallapop para poder iniciar.
+        </p>
+      )}
+    </>
+  )
+}
+
 export function AutopostStatusCard({ state }: { state: AutopostIntervalState }) {
   const {
     apiReady,
@@ -88,22 +178,7 @@ export function AutopostStatusCard({ state }: { state: AutopostIntervalState }) 
         </div>
       </div>
 
-      {autopost ? (
-        <div className="mb-4 flex flex-wrap gap-2">
-          <Badge variant={running ? "default" : "outline"}>
-            Autopost: {running ? "en marcha" : "parado"}
-          </Badge>
-          <Badge variant={autopost.livePublish ? "default" : "secondary"}>
-            Publicación: {autopost.livePublish ? "en vivo" : "simulación"}
-          </Badge>
-        </div>
-      ) : null}
-
-      {autopost ? (
-        <p className="mb-2 text-sm text-muted-foreground">
-          {formatIntervalHint(autopost)}
-        </p>
-      ) : null}
+      {autopost ? <AutopostBadges autopost={autopost} running={running} /> : null}
 
       <p className="mb-4 text-sm text-muted-foreground">
         Última publicación: {lastLabel}
@@ -122,53 +197,16 @@ export function AutopostStatusCard({ state }: { state: AutopostIntervalState }) 
       ) : null}
 
       <AutopostRecentSkips autopost={autopost} />
-
-      {error ? (
-        <p
-          className="mb-4 rounded-lg border border-destructive/30 bg-destructive/10 px-3 py-2 text-sm text-destructive"
-          role="alert"
-        >
-          {error}
-        </p>
-      ) : null}
-
-      {saved ? (
-        <p
-          className="mb-4 rounded-lg border border-border bg-muted/40 px-3 py-2 text-sm text-muted-foreground"
-          aria-live="polite"
-        >
-          Guardado
-        </p>
-      ) : null}
+      <AutopostNotices error={error} saved={saved} />
 
       <div className="mb-6">
-        {running ? (
-          <Button
-            type="button"
-            variant="destructive"
-            className="h-12 w-full"
-            disabled={!apiReady || toggling}
-            onClick={() => void stopAutopostRun(setters)}
-            aria-busy={toggling || undefined}
-          >
-            {toggling ? <LoaderCircleIcon className="animate-spin" /> : null}
-            {toggling ? "Deteniendo…" : "Detener autopost"}
-          </Button>
-        ) : (
-          <Button
-            type="button"
-            className="h-12 w-full"
-            disabled={!apiReady || toggling || !sessionActive}
-            onClick={() => setters.setStartConfirmOpen(true)}
-          >
-            Iniciar autopost
-          </Button>
-        )}
-        {!sessionActive ? (
-          <p className="mt-2 text-xs text-muted-foreground">
-            Conecta la cuenta de Wallapop para poder iniciar.
-          </p>
-        ) : null}
+        <AutopostToggle
+          running={running}
+          apiReady={apiReady}
+          toggling={toggling}
+          sessionActive={sessionActive}
+          setters={setters}
+        />
       </div>
     </>
   )

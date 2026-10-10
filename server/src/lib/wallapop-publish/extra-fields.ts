@@ -52,6 +52,43 @@ function openPanel(page: Page) {
     .last();
 }
 
+async function clickOneFieldOption(
+  page: Page,
+  panel: ReturnType<typeof openPanel>,
+  id: string,
+  title: string,
+): Promise<boolean> {
+  const byBox = panel
+    .locator(`walla-dropdown-item[role="option"]:has(input#${id})`)
+    .filter({ visible: true });
+  const byAria = panel
+    .getByRole("option", { name: title, exact: true })
+    .filter({ visible: true });
+  const item = (await byBox.count()) > 0 ? byBox.first() : byAria.first();
+  if ((await item.count()) < 1) return false;
+  await item.scrollIntoViewIfNeeded();
+  await item.click({ force: true });
+  await page.waitForTimeout(150);
+  return true;
+}
+
+async function confirmDropdownPanel(
+  page: Page,
+  panel: ReturnType<typeof openPanel>,
+) {
+  const sticky = panel.locator(".walla-dropdown__sticky-button walla-button");
+  if ((await sticky.count()) > 0) {
+    await sticky.first().click({ force: true });
+    return;
+  }
+  const confirm = panel.getByRole("button", {
+    name: /^(Seleccionar|Aplicar)$/i,
+  });
+  if ((await confirm.count()) > 0) {
+    await confirm.first().click({ force: true });
+  }
+}
+
 /** Click the visible option row. Slotted 0×0 copies do not receive the click. */
 async function clickFieldOptions(
   page: Page,
@@ -68,33 +105,45 @@ async function clickFieldOptions(
   let n = 0;
   for (let i = 0; i < optionIds.length; i++) {
     const id = optionIds[i];
-    const title = titles[i] ?? id;
-    const byBox = panel
-      .locator(`walla-dropdown-item[role="option"]:has(input#${id})`)
-      .filter({ visible: true });
-    const byAria = panel
-      .getByRole("option", { name: title, exact: true })
-      .filter({ visible: true });
-    const item = (await byBox.count()) > 0 ? byBox.first() : byAria.first();
-    if ((await item.count()) < 1) continue;
-    await item.scrollIntoViewIfNeeded();
-    await item.click({ force: true });
-    n += 1;
-    await page.waitForTimeout(150);
+    if (await clickOneFieldOption(page, panel, id, titles[i] ?? id)) n += 1;
   }
-  const sticky = panel.locator(".walla-dropdown__sticky-button walla-button");
-  if ((await sticky.count()) > 0) {
-    await sticky.first().click({ force: true });
-  } else {
-    const confirm = panel.getByRole("button", {
-      name: /^(Seleccionar|Aplicar)$/i,
-    });
-    if ((await confirm.count()) > 0) {
-      await confirm.first().click({ force: true });
-    }
-  }
+  await confirmDropdownPanel(page, panel);
   await page.waitForTimeout(400);
   return n;
+}
+
+async function fillOneExtraField(
+  page: Page,
+  field: CategoryUploadField,
+  ids: string[],
+): Promise<void> {
+  const titles = titlesForIds(field, ids);
+  await closeOpenDropdowns(page);
+  const opened = (await page.evaluate(
+    `${OPEN_FIELD_JS}(${JSON.stringify(field.id)}, ${JSON.stringify(field.label)})`,
+  )) as boolean;
+  let clicked = 0;
+  if (opened) {
+    try {
+      clicked = await clickFieldOptions(page, titles, ids);
+    } catch {
+      clicked = 0;
+    }
+  }
+  await closeOpenDropdowns(page);
+  log("info", "wallapop_publish_extra_field", {
+    id: field.id,
+    opened,
+    clicked,
+    titles,
+    ids,
+  });
+  if (field.required && clicked < 1) {
+    throw new WallapopPublishError(
+      "form",
+      `No se pudo seleccionar ${field.label} en Wallapop.`,
+    );
+  }
 }
 
 export async function ensureExtraUploadFields(
@@ -102,8 +151,7 @@ export async function ensureExtraUploadFields(
   fields: CategoryUploadField[],
   typeAttributes: unknown,
 ): Promise<void> {
-  const extra = extraUploadFields(fields);
-  for (const field of extra) {
+  for (const field of extraUploadFields(fields)) {
     const ids = selectedIdsForField(typeAttributes, field.id);
     if (field.required && ids.length < Math.max(1, field.min)) {
       throw new WallapopPublishError(
@@ -113,32 +161,6 @@ export async function ensureExtraUploadFields(
     }
     if (ids.length === 0) continue;
     if (field.id === "brand" || field.type === "combo_box") continue;
-    const titles = titlesForIds(field, ids);
-    await closeOpenDropdowns(page);
-    const opened = (await page.evaluate(
-      `${OPEN_FIELD_JS}(${JSON.stringify(field.id)}, ${JSON.stringify(field.label)})`,
-    )) as boolean;
-    let clicked = 0;
-    if (opened) {
-      try {
-        clicked = await clickFieldOptions(page, titles, ids);
-      } catch {
-        clicked = 0;
-      }
-    }
-    await closeOpenDropdowns(page);
-    log("info", "wallapop_publish_extra_field", {
-      id: field.id,
-      opened,
-      clicked,
-      titles,
-      ids,
-    });
-    if (field.required && clicked < 1) {
-      throw new WallapopPublishError(
-        "form",
-        `No se pudo seleccionar ${field.label} en Wallapop.`,
-      );
-    }
+    await fillOneExtraField(page, field, ids);
   }
 }

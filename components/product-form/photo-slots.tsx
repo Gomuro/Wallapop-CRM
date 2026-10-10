@@ -69,6 +69,67 @@ async function persistPhotoSlotOrder(
   }
 }
 
+function spliceOrAppendSlots(
+  current: SlotImage[],
+  added: SlotImage[],
+  atIndex?: number,
+  revokeReplacedBlob = false,
+) {
+  const next = [...current]
+  if (typeof atIndex === "number" && atIndex >= 0 && atIndex < next.length) {
+    const old = next[atIndex]
+    if (revokeReplacedBlob && old?.url.startsWith("blob:")) {
+      URL.revokeObjectURL(old.url)
+    }
+    next.splice(atIndex, 1, ...added)
+  } else {
+    next.push(...added)
+  }
+  return next.slice(0, PRODUCT_IMAGE_MAX)
+}
+
+function photoSlotNotes(skipped: number, rejectedType: number) {
+  const notes: string[] = []
+  if (skipped > 0) {
+    notes.push(
+      `Máximo ${PRODUCT_IMAGE_MAX} fotos. No se añadieron los archivos extra.`,
+    )
+  }
+  if (rejectedType > 0) {
+    notes.push("Algunos archivos se omitieron. Usa JPEG, PNG o WebP.")
+  }
+  return notes.join(" ")
+}
+
+async function commitUploadedPhotoSlots(
+  ctx: {
+    productId: string
+    atIndex?: number
+    safeImages: SlotImage[]
+    setError: (error: string | null) => void
+    commit: (next: SlotImage[]) => void
+  },
+  compressed: File[],
+) {
+  const formData = new FormData()
+  compressed.forEach((file) => formData.append("files", file))
+  try {
+    const result = await uploadProductImages(formData, ctx.productId)
+    if (result.error || result.urls.length === 0) {
+      ctx.setError(result.error ?? "No se pudo guardar la imagen.")
+      return
+    }
+    const uploaded = result.urls.map((url, index) => ({
+      url,
+      id: result.imageIds?.[index],
+    }))
+    ctx.commit(spliceOrAppendSlots(ctx.safeImages, uploaded, ctx.atIndex))
+  } catch (error) {
+    if (isNextRedirect(error)) throw error
+    ctx.setError(actionFailureMessage(error))
+  }
+}
+
 async function addPhotoSlotFiles(ctx: {
   fileList: FileList | null
   atIndex?: number
@@ -115,33 +176,11 @@ async function addPhotoSlotFiles(ctx: {
   }
 
   if (ctx.productId) {
-    const formData = new FormData()
-    compressed.forEach((file) => formData.append("files", file))
     try {
-      const result = await uploadProductImages(formData, ctx.productId)
-      if (result.error || result.urls.length === 0) {
-        ctx.setError(result.error ?? "No se pudo guardar la imagen.")
-        return
-      }
-      const uploaded = result.urls.map((url, index) => ({
-        url,
-        id: result.imageIds?.[index],
-      }))
-      const next = [...ctx.safeImages]
-      if (
-        typeof ctx.atIndex === "number" &&
-        ctx.atIndex >= 0 &&
-        ctx.atIndex < next.length
-      ) {
-        next.splice(ctx.atIndex, 1, ...uploaded)
-      } else {
-        next.push(...uploaded)
-      }
-      ctx.commit(next.slice(0, PRODUCT_IMAGE_MAX))
-    } catch (error) {
-      if (isNextRedirect(error)) throw error
-      ctx.setError(actionFailureMessage(error))
-      return
+      await commitUploadedPhotoSlots(
+        { ...ctx, productId: ctx.productId },
+        compressed,
+      )
     } finally {
       ctx.setUploading(false)
     }
@@ -150,32 +189,12 @@ async function addPhotoSlotFiles(ctx: {
       url: URL.createObjectURL(file),
       file,
     }))
-    const next = [...ctx.safeImages]
-    if (
-      typeof ctx.atIndex === "number" &&
-      ctx.atIndex >= 0 &&
-      ctx.atIndex < next.length
-    ) {
-      const old = next[ctx.atIndex]
-      if (old?.url.startsWith("blob:")) URL.revokeObjectURL(old.url)
-      next.splice(ctx.atIndex, 1, ...added)
-    } else {
-      next.push(...added)
-    }
-    ctx.commit(next.slice(0, PRODUCT_IMAGE_MAX))
+    ctx.commit(spliceOrAppendSlots(ctx.safeImages, added, ctx.atIndex, true))
     ctx.setUploading(false)
   }
 
-  const notes: string[] = []
-  if (skipped > 0) {
-    notes.push(
-      `Máximo ${PRODUCT_IMAGE_MAX} fotos. No se añadieron los archivos extra.`,
-    )
-  }
-  if (rejectedType > 0) {
-    notes.push("Algunos archivos se omitieron. Usa JPEG, PNG o WebP.")
-  }
-  if (notes.length > 0) ctx.setError(notes.join(" "))
+  const notes = photoSlotNotes(skipped, rejectedType)
+  if (notes) ctx.setError(notes)
 }
 
 async function removePhotoSlot(ctx: {

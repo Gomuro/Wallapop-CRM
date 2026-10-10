@@ -59,23 +59,31 @@ function warehouseCreateBody(input: ProductCreateInput) {
   }
 }
 
+const WAREHOUSE_PATCH_FIELDS: Array<{
+  from: keyof ProductUpdateInput
+  to: string
+}> = [
+  { from: "sku", to: "sku" },
+  { from: "title", to: "title" },
+  { from: "description", to: "description" },
+  { from: "price", to: "price" },
+  { from: "categoryId", to: "categoryId" },
+  { from: "condition", to: "condition" },
+  { from: "brand", to: "brand" },
+  { from: "weight", to: "weightKg" },
+  { from: "shippingPackageSize", to: "shippingPackageSize" },
+  { from: "widthCm", to: "widthCm" },
+  { from: "lengthCm", to: "lengthCm" },
+  { from: "heightCm", to: "heightCm" },
+  { from: "typeAttributes", to: "typeAttributes" },
+]
+
 function warehousePatchBody(input: ProductUpdateInput) {
   const body: Record<string, unknown> = {}
-  if (input.sku !== undefined) body.sku = input.sku
-  if (input.title !== undefined) body.title = input.title
-  if (input.description !== undefined) body.description = input.description
-  if (input.price !== undefined) body.price = input.price
-  if (input.categoryId !== undefined) body.categoryId = input.categoryId
-  if (input.condition !== undefined) body.condition = input.condition
-  if (input.brand !== undefined) body.brand = input.brand
-  if (input.weight !== undefined) body.weightKg = input.weight
-  if (input.shippingPackageSize !== undefined) {
-    body.shippingPackageSize = input.shippingPackageSize
+  for (const { from, to } of WAREHOUSE_PATCH_FIELDS) {
+    const value = input[from]
+    if (value !== undefined) body[to] = value
   }
-  if (input.widthCm !== undefined) body.widthCm = input.widthCm
-  if (input.lengthCm !== undefined) body.lengthCm = input.lengthCm
-  if (input.heightCm !== undefined) body.heightCm = input.heightCm
-  if (input.typeAttributes !== undefined) body.typeAttributes = input.typeAttributes
   return body
 }
 

@@ -25,7 +25,6 @@ export type ItemPageFacts = {
 export type ItemPageCrmListing = CrmLinkListing & {
   description: string
 }
-
 export type ItemPageLinkPlan = {
   links: CombinedLink[]
   skips: TitleUrlSkip[]
@@ -42,57 +41,13 @@ match true solo si un candidato es el mismo producto físico.
 Si hay duda, dos candidatos plausibles, o ninguno encaja: match false y confidence low.
 Solo confidence high cuando estás seguro. candidateIndex es el índice 0-based de la lista de candidatos.`
 
-export const ITEM_PAGE_FACTS_EVAL = `(() => {
-  function og(prop) {
-    const el = document.querySelector('meta[property="' + prop + '"]')
-    return el ? String(el.getAttribute("content") || "").trim() : ""
-  }
-  function named(name) {
-    const el = document.querySelector('meta[name="' + name + '"]')
-    return el ? String(el.getAttribute("content") || "").trim() : ""
-  }
-  let jsonTitle = ""
-  let jsonDesc = ""
-  let jsonPrice = ""
-  document.querySelectorAll('script[type="application/ld+json"]').forEach((node) => {
-    try {
-      const parsed = JSON.parse(node.textContent || "")
-      const nodes = Array.isArray(parsed) ? parsed : [parsed]
-      for (const row of nodes) {
-        if (!row || typeof row !== "object") continue
-        const type = row["@type"]
-        const isProduct =
-          type === "Product" ||
-          (Array.isArray(type) && type.includes("Product"))
-        if (!isProduct) continue
-        if (row.name) jsonTitle = String(row.name)
-        if (row.description) jsonDesc = String(row.description)
-        const offers = row.offers
-        const offer = Array.isArray(offers) ? offers[0] : offers
-        if (offer && offer.price != null) jsonPrice = String(offer.price)
-      }
-    } catch (e) {}
-  })
-  const h1 = document.querySelector("h1")
-  const h1Text = h1
-    ? String(h1.textContent || "").replace(/\\s+/g, " ").trim()
-    : ""
-  return {
-    href: String(location.href || ""),
-    title: jsonTitle || og("og:title") || h1Text,
-    description: jsonDesc || og("og:description") || named("description"),
-    priceText: jsonPrice || og("product:price:amount") || og("og:price:amount"),
-  }
-})()`
-
 function normalizeHref(href: string): string | null {
   return wallapopItemSlugHrefOrNull(href)
 }
 
 function clip(value: string, max: number): string {
   const text = value.replace(/\s+/g, " ").trim()
-  if (text.length <= max) return text
-  return `${text.slice(0, max)}…`
+  return text.length <= max ? text : `${text.slice(0, max)}…`
 }
 
 function descTokens(value: string): string[] {
@@ -109,10 +64,7 @@ export function scoreItemPageToListing(
     href: facts.href,
     title: facts.title,
   })
-  const bag = new Set([
-    ...descTokens(listing.title),
-    ...descTokens(listing.description),
-  ])
+  const bag = new Set([...descTokens(listing.title), ...descTokens(listing.description)])
   for (const token of descTokens(facts.description)) {
     if (bag.has(token)) score += 4
   }
@@ -199,6 +151,150 @@ export type PlanItemPageOptions = {
   ) => Promise<LlmPick>
 }
 
+function takenItemHrefs(listings: ItemPageCrmListing[]) {
+  const takenHrefs = new Set<string>()
+  for (const row of listings) {
+    const href = normalizeHref(row.externalUrl ?? "")
+    if (href) takenHrefs.add(href)
+  }
+  return takenHrefs
+}
+
+function uniqueUnlinkedPages(
+  pages: ItemPageFacts[],
+  takenHrefs: Set<string>,
+) {
+  const uniquePages: ItemPageFacts[] = []
+  const seen = new Set<string>()
+  let alreadyLinked = 0
+  for (const page of pages) {
+    const href = normalizeHref(page.href)
+    if (!href || seen.has(href)) continue
+    seen.add(href)
+    if (takenHrefs.has(href)) {
+      alreadyLinked += 1
+      continue
+    }
+    uniquePages.push({ ...page, href })
+  }
+  return { uniquePages, alreadyLinked }
+}
+
+function isHighConfidencePick(
+  pick: LlmPick,
+  shortlistLength: number,
+): pick is LlmPick & { candidateIndex: number } {
+  return (
+    pick.match &&
+    pick.confidence === "high" &&
+    pick.candidateIndex != null &&
+    pick.candidateIndex >= 0 &&
+    pick.candidateIndex < shortlistLength
+  )
+}
+
+function llmLinkFromListing(
+  row: ItemPageCrmListing,
+  href: string,
+  reason: string,
+): CombinedLink {
+  return {
+    listingId: row.listingId,
+    sku: row.sku,
+    title: row.title,
+    href,
+    source: "llm",
+    reason,
+  }
+}
+
+async function delayMsIfNeeded(delayMs: number) {
+  if (delayMs > 0) await new Promise((resolve) => setTimeout(resolve, delayMs))
+}
+
+async function linkOneItemPage(ctx: {
+  facts: ItemPageFacts
+  available: ItemPageCrmListing[]
+  linkedIds: Set<string>
+  takenHrefs: Set<string>
+  shortlistSize: number
+  delayMs: number
+  ask: NonNullable<PlanItemPageOptions["ask"]>
+  pushSkip: (skip: TitleUrlSkip) => void
+}): Promise<{ link: CombinedLink | null; calledLlm: boolean }> {
+  const { facts } = ctx
+  if (!facts.title.trim() && !slugTitleFromHref(facts.href)) {
+    ctx.pushSkip({ reason: "empty_title", title: facts.title || facts.href })
+    return { link: null, calledLlm: false }
+  }
+  const shortlist = rankListingsForItemPage(
+    facts,
+    ctx.available.filter((row) => !ctx.linkedIds.has(row.listingId)),
+    ctx.shortlistSize,
+  )
+  if (shortlist.length === 0) {
+    ctx.pushSkip({ reason: "no_match", title: facts.title })
+    return { link: null, calledLlm: false }
+  }
+  const pick = await ctx.ask(facts, shortlist)
+  await delayMsIfNeeded(ctx.delayMs)
+  if (!isHighConfidencePick(pick, shortlist.length)) {
+    ctx.pushSkip({ reason: "no_match", title: facts.title })
+    return { link: null, calledLlm: true }
+  }
+  const row = shortlist[pick.candidateIndex]
+  if (ctx.linkedIds.has(row.listingId) || ctx.takenHrefs.has(facts.href)) {
+    ctx.pushSkip({ reason: "duplicate_catalog", title: row.title, sku: row.sku })
+    return { link: null, calledLlm: true }
+  }
+  return { calledLlm: true, link: llmLinkFromListing(row, facts.href, pick.reason) }
+}
+
+function createSkipBag() {
+  const skips: TitleUrlSkip[] = []
+  const skipKeys = new Set<string>()
+  const pushSkip = (skip: TitleUrlSkip) => {
+    const key = `${skip.reason}:${skip.sku ?? ""}:${foldTitleKey(skip.title)}`
+    if (skipKeys.has(key)) return
+    skipKeys.add(key)
+    skips.push(skip)
+  }
+  return { skips, pushSkip }
+}
+
+function listingsNeedingUrl(listings: ItemPageCrmListing[]) {
+  return listings.filter(
+    (row) =>
+      listingMayBeOnWallapop(row.status) &&
+      normalizeHref(row.externalUrl ?? "") == null,
+  )
+}
+
+async function linkUniqueItemPages(ctx: {
+  uniquePages: ItemPageFacts[]
+  pool: ItemPageCrmListing[]
+  takenHrefs: Set<string>
+  shortlistSize: number
+  delayMs: number
+  ask: NonNullable<PlanItemPageOptions["ask"]>
+  pushSkip: (skip: TitleUrlSkip) => void
+}) {
+  const linkedIds = new Set<string>()
+  const links: CombinedLink[] = []
+  let available = [...ctx.pool]
+  let llmCalls = 0
+  for (const facts of ctx.uniquePages) {
+    const result = await linkOneItemPage({ ...ctx, facts, available, linkedIds })
+    if (result.calledLlm) llmCalls += 1
+    if (!result.link) continue
+    linkedIds.add(result.link.listingId)
+    ctx.takenHrefs.add(result.link.href)
+    available = available.filter((item) => item.listingId !== result.link!.listingId)
+    links.push(result.link)
+  }
+  return { linkedIds, links, llmCalls }
+}
+
 /**
  * One Wallapop /item/ page → one CRM listing without a public URL.
  * Duplicate CRM titles stay in the pool (descriptions distinguish them).
@@ -208,105 +304,23 @@ export async function planItemPageUrlLinks(
   pages: ItemPageFacts[],
   opts: PlanItemPageOptions = {},
 ): Promise<ItemPageLinkPlan> {
-  const delayMs = opts.delayMs ?? 400
-  const shortlistSize = opts.shortlistSize ?? 8
-  const ask = opts.ask ?? askGroqForItemPage
-
-  const takenHrefs = new Set<string>()
-  for (const row of listings) {
-    const href = normalizeHref(row.externalUrl ?? "")
-    if (href) takenHrefs.add(href)
-  }
-
-  const uniquePages: ItemPageFacts[] = []
-  const seen = new Set<string>()
-  let alreadyLinked = 0
-  for (const page of pages) {
-    const href = normalizeHref(page.href)
-    if (!href) continue
-    if (seen.has(href)) continue
-    seen.add(href)
-    if (takenHrefs.has(href)) {
-      alreadyLinked += 1
-      continue
-    }
-    uniquePages.push({ ...page, href })
-  }
-
-  const pool = listings.filter(
-    (row) =>
-      listingMayBeOnWallapop(row.status) &&
-      normalizeHref(row.externalUrl ?? "") == null,
-  )
-  const linkedIds = new Set<string>()
-  const links: CombinedLink[] = []
-  const skips: TitleUrlSkip[] = []
-  const skipKeys = new Set<string>()
-  const pushSkip = (skip: TitleUrlSkip) => {
-    const key = `${skip.reason}:${skip.sku ?? ""}:${foldTitleKey(skip.title)}`
-    if (skipKeys.has(key)) return
-    skipKeys.add(key)
-    skips.push(skip)
-  }
-
-  let available = [...pool]
-  let llmCalls = 0
-
-  for (const facts of uniquePages) {
-    if (!facts.title.trim() && !slugTitleFromHref(facts.href)) {
-      pushSkip({ reason: "empty_title", title: facts.title || facts.href })
-      continue
-    }
-    const shortlist = rankListingsForItemPage(
-      facts,
-      available.filter((row) => !linkedIds.has(row.listingId)),
-      shortlistSize,
-    )
-    if (shortlist.length === 0) {
-      pushSkip({ reason: "no_match", title: facts.title })
-      continue
-    }
-
-    llmCalls += 1
-    const pick = await ask(facts, shortlist)
-    if (delayMs > 0) {
-      await new Promise((resolve) => setTimeout(resolve, delayMs))
-    }
-
-    if (
-      !pick.match ||
-      pick.confidence !== "high" ||
-      pick.candidateIndex == null ||
-      pick.candidateIndex < 0 ||
-      pick.candidateIndex >= shortlist.length
-    ) {
-      pushSkip({ reason: "no_match", title: facts.title })
-      continue
-    }
-
-    const row = shortlist[pick.candidateIndex]
-    if (linkedIds.has(row.listingId) || takenHrefs.has(facts.href)) {
-      pushSkip({ reason: "duplicate_catalog", title: row.title, sku: row.sku })
-      continue
-    }
-
-    linkedIds.add(row.listingId)
-    takenHrefs.add(facts.href)
-    available = available.filter((item) => item.listingId !== row.listingId)
-    links.push({
-      listingId: row.listingId,
-      sku: row.sku,
-      title: row.title,
-      href: facts.href,
-      source: "llm",
-      reason: pick.reason,
-    })
-  }
-
+  const takenHrefs = takenItemHrefs(listings)
+  const { uniquePages, alreadyLinked } = uniqueUnlinkedPages(pages, takenHrefs)
+  const pool = listingsNeedingUrl(listings)
+  const { skips, pushSkip } = createSkipBag()
+  const linked = await linkUniqueItemPages({
+    uniquePages,
+    pool,
+    takenHrefs,
+    shortlistSize: opts.shortlistSize ?? 8,
+    delayMs: opts.delayMs ?? 400,
+    ask: opts.ask ?? askGroqForItemPage,
+    pushSkip,
+  })
   for (const row of pool) {
-    if (linkedIds.has(row.listingId)) continue
-    pushSkip({ reason: "no_match", title: row.title, sku: row.sku })
+    if (!linked.linkedIds.has(row.listingId)) {
+      pushSkip({ reason: "no_match", title: row.title, sku: row.sku })
+    }
   }
-
-  return { links, skips, llmCalls, alreadyLinked }
+  return { links: linked.links, skips, llmCalls: linked.llmCalls, alreadyLinked }
 }

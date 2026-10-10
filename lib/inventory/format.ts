@@ -26,21 +26,17 @@ export function statusLabel(status: ProductStatus) {
   }
 }
 
+const LISTING_STATUS_LABEL: Record<ListingStatusRead, string> = {
+  ACTIVE: "En venta",
+  RESERVED: "Reservado",
+  DEACTIVATED: "Desactivado",
+  READY_TO_POST: "Listo para publicar",
+  POSTING: "Publicando…",
+  FAILED: "Error al publicar",
+}
+
 export function listingStatusLabel(status: ListingStatusRead) {
-  switch (status) {
-    case "ACTIVE":
-      return "En venta"
-    case "RESERVED":
-      return "Reservado"
-    case "DEACTIVATED":
-      return "Desactivado"
-    case "READY_TO_POST":
-      return "Listo para publicar"
-    case "POSTING":
-      return "Publicando…"
-    case "FAILED":
-      return "Error al publicar"
-  }
+  return LISTING_STATUS_LABEL[status]
 }
 
 const CATEGORY_LABELS: Record<string, string> = {

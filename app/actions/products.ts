@@ -132,31 +132,57 @@ async function uploadFilesAfterCreate(productId: string, formData: FormData) {
   await apiUploadProductImages(productId, payload)
 }
 
-export async function createProductAction(
-  _prev: ProductActionState,
-  formData: FormData,
-): Promise<ProductActionState> {
+function markedFieldsState(
+  fieldErrors: Record<string, string>,
+): ProductActionState {
+  return { error: "Revisa los campos marcados.", fieldErrors }
+}
+
+async function validateCreatePayload(formData: FormData) {
   const parsed = productCreateSchema.safeParse(formToPayload(formData))
   if (!parsed.success) {
-    return {
-      error: "Revisa los campos marcados.",
-      fieldErrors: firstFieldError(parsed.error),
-    }
+    return { ok: false as const, state: markedFieldsState(firstFieldError(parsed.error)) }
   }
   const extraErrors = await extraFieldErrors(
     parsed.data.categoryId,
     parsed.data.typeAttributes,
   )
   if (Object.keys(extraErrors).length > 0) {
-    return {
-      error: "Revisa los campos marcados.",
-      fieldErrors: extraErrors,
-    }
+    return { ok: false as const, state: markedFieldsState(extraErrors) }
   }
+  return { ok: true as const, data: parsed.data }
+}
+
+async function validateUpdatePayload(
+  formData: FormData,
+  existing: NonNullable<Awaited<ReturnType<typeof getProduct>>>,
+) {
+  const parsed = productUpdateSchema.safeParse(
+    formToPayload(formData, existing.sku),
+  )
+  if (!parsed.success) {
+    return { ok: false as const, state: markedFieldsState(firstFieldError(parsed.error)) }
+  }
+  const extraErrors = await extraFieldErrors(
+    parsed.data.categoryId ?? existing.categoryId,
+    parsed.data.typeAttributes,
+  )
+  if (Object.keys(extraErrors).length > 0) {
+    return { ok: false as const, state: markedFieldsState(extraErrors) }
+  }
+  return { ok: true as const, data: parsed.data }
+}
+
+export async function createProductAction(
+  _prev: ProductActionState,
+  formData: FormData,
+): Promise<ProductActionState> {
+  const checked = await validateCreatePayload(formData)
+  if (!checked.ok) return checked.state
 
   let product: Awaited<ReturnType<typeof createProduct>>
   try {
-    product = await createProduct(parsed.data)
+    product = await createProduct(checked.data)
   } catch (error) {
     if (isRedirectError(error)) throw error
     return transportOrUnknownError(error)
@@ -193,29 +219,12 @@ export async function updateProductAction(
     return { error: "Producto no encontrado." }
   }
 
-  const parsed = productUpdateSchema.safeParse(
-    formToPayload(formData, existing.sku),
-  )
-  if (!parsed.success) {
-    return {
-      error: "Revisa los campos marcados.",
-      fieldErrors: firstFieldError(parsed.error),
-    }
-  }
-  const extraErrors = await extraFieldErrors(
-    parsed.data.categoryId ?? existing.categoryId,
-    parsed.data.typeAttributes,
-  )
-  if (Object.keys(extraErrors).length > 0) {
-    return {
-      error: "Revisa los campos marcados.",
-      fieldErrors: extraErrors,
-    }
-  }
+  const checked = await validateUpdatePayload(formData, existing)
+  if (!checked.ok) return checked.state
 
   try {
-    const product = await updateProduct(id, parsed.data, {
-      status: parsed.data.status,
+    const product = await updateProduct(id, checked.data, {
+      status: checked.data.status,
       previousStatus: existing.status,
     })
     if (!product) {

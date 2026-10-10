@@ -6,7 +6,7 @@
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
-    "lint": "eslint",
+    "lint": "eslint app components lib server/src proxy.ts",
     "postinstall": "prisma generate --config server/prisma.config.ts",
     "db:generate": "prisma generate --config server/prisma.config.ts",
     "db:validate": "prisma validate --config server/prisma.config.ts",

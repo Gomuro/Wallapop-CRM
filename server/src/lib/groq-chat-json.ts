@@ -15,6 +15,36 @@ export function parseGroqJsonObject(text: string): Record<string, unknown> {
   return asRecord(parsed) ?? {}
 }
 
+type GroqChatBody = {
+  error?: { message?: string }
+  choices?: { message?: { content?: string } }[]
+}
+
+async function postGroqChat(key: string, system: string, user: string) {
+  const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
+    method: "POST",
+    headers: {
+      "Content-Type": "application/json",
+      Authorization: `Bearer ${key}`,
+    },
+    body: JSON.stringify({
+      model: GROQ_MODEL,
+      temperature: 0.1,
+      response_format: { type: "json_object" },
+      messages: [
+        { role: "system", content: system },
+        { role: "user", content: user },
+      ],
+    }),
+  })
+  const body = (await res.json()) as GroqChatBody
+  return { res, body }
+}
+
+function groqRetryable(status: number, message: string) {
+  return status === 429 || /try again|unavailable|rate/i.test(message)
+}
+
 export async function groqChatJson(
   system: string,
   user: string,
@@ -26,31 +56,10 @@ export async function groqChatJson(
     if (attempt > 0) {
       await new Promise((resolve) => setTimeout(resolve, 2000 * attempt))
     }
-    const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
-      method: "POST",
-      headers: {
-        "Content-Type": "application/json",
-        Authorization: `Bearer ${key}`,
-      },
-      body: JSON.stringify({
-        model: GROQ_MODEL,
-        temperature: 0.1,
-        response_format: { type: "json_object" },
-        messages: [
-          { role: "system", content: system },
-          { role: "user", content: user },
-        ],
-      }),
-    })
-    const body = (await res.json()) as {
-      error?: { message?: string }
-      choices?: { message?: { content?: string } }[]
-    }
+    const { res, body } = await postGroqChat(key, system, user)
     if (!res.ok) {
       last = body.error?.message || `Groq HTTP ${res.status}`
-      if (res.status === 429 || /try again|unavailable|rate/i.test(last)) {
-        continue
-      }
+      if (groqRetryable(res.status, last)) continue
       throw new Error(last)
     }
     const text = body.choices?.[0]?.message?.content?.trim()

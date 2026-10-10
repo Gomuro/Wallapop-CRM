@@ -272,6 +272,7 @@ function RemoteCategoryPicker({
     return () => {
       cancelled = true
     }
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- omit levels.length; remounts crash mobile
   }, [initialRoots, value])
 
   async function pickLevel(depth: number, categoryId: string) {

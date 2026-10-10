@@ -211,6 +211,25 @@ type InventoryProductSource = {
   conditionCode: ProductCondition
 }
 
+function inventoryListingMeta(
+  product: ApiProduct,
+  listing: InventoryListing | null,
+) {
+  const weightKg = asNullableNumber(product?.weightKg)
+  return {
+    listing,
+    typeAttributes:
+      product.typeAttributes && typeof product.typeAttributes === "object"
+        ? product.typeAttributes
+        : {},
+    listingActive: computeListingActive(listing),
+    shippingPublishReady: isShippingPublishReady({
+      weightKg,
+      shippingEnabled: listing?.shippingEnabled,
+    }),
+  }
+}
+
 export function toInventoryProduct({
   product,
   category,
@@ -240,16 +259,7 @@ export function toInventoryProduct({
     externalLinks: listing?.externalUrl ? [listing.externalUrl] : [],
     createdAt: asString(product?.createdAt),
     updatedAt: asString(product?.updatedAt),
-    listing,
-    typeAttributes:
-      product.typeAttributes && typeof product.typeAttributes === "object"
-        ? product.typeAttributes
-        : {},
-    listingActive: computeListingActive(listing),
-    shippingPublishReady: isShippingPublishReady({
-      weightKg: asNullableNumber(product?.weightKg),
-      shippingEnabled: listing?.shippingEnabled,
-    }),
+    ...inventoryListingMeta(product, listing),
   }
 }
 

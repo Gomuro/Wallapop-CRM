@@ -166,26 +166,36 @@ export async function stopAutopostRun(setters: AutopostSetters) {
   }
 }
 
-export type AutopostIntervalState = {
+export type AutopostIntervalValues = {
   apiReady: boolean
   value: string
   unit: AutopostIntervalUnit
   autopost: ApiAutopostStatus | null
+  running: boolean
+  nextTickLabel: string | null
+  sessionActive: boolean
+  lastLabel: string
+}
+
+export type AutopostIntervalBusy = {
   loading: boolean
   saving: boolean
   toggling: boolean
   error: string | null
   saved: boolean
   startConfirmOpen: boolean
-  running: boolean
-  nextTickLabel: string | null
   busy: boolean
-  sessionActive: boolean
-  lastLabel: string
+}
+
+export type AutopostIntervalControls = {
   setters: AutopostSetters
   setValue: (value: string) => void
   setUnit: (unit: AutopostIntervalUnit) => void
 }
+
+export type AutopostIntervalState = AutopostIntervalValues &
+  AutopostIntervalBusy &
+  AutopostIntervalControls
 
 export function useAutopostIntervalState(): AutopostIntervalState {
   const apiReady = isApiConfigured()

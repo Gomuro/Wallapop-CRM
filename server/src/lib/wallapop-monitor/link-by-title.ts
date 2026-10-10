@@ -185,21 +185,7 @@ function groupByTitle<T>(
   return map
 }
 
-/**
- * Unique CRM listing ↔ unique catalog card.
- * Truncated card titles match as a prefix of the CRM title.
- * Does not set reserved/sold — only the public /item/ URL.
- */
-export function planTitleUrlLinks(
-  listings: CrmTitleListing[],
-  cards: CatalogTitleCard[],
-): TitleUrlPlan {
-  const candidates = listings.filter(
-    (row) =>
-      listingMayBeOnWallapop(row.status) &&
-      wallapopItemUrlOrNull(row.externalUrl) == null,
-  )
-  const byCrm = groupByTitle(candidates, (row) => row.title)
+function uniqueTitleCards(cards: CatalogTitleCard[]) {
   const uniqueCards: CatalogTitleCard[] = []
   const seenHref = new Set<string>()
   for (const card of cards) {
@@ -210,40 +196,39 @@ export function planTitleUrlLinks(
     seenHref.add(href)
     uniqueCards.push({ href, title: card.title })
   }
+  return uniqueCards
+}
 
+function claimTitleHref(
+  row: CrmTitleListing,
+  uniqueCards: CatalogTitleCard[],
+  byCrm: Map<string, CrmTitleListing[]>,
+  claimed: Map<string, CrmTitleListing[]>,
+): TitleUrlSkip | null {
+  const key = foldTitleKey(row.title)
+  if (!key) return { reason: "empty_title", title: row.title, sku: row.sku }
+  if ((byCrm.get(key) ?? []).length !== 1) {
+    return { reason: "duplicate_crm", title: row.title, sku: row.sku }
+  }
+  const hits = uniqueCards.filter((card) => cardMatchesListing(row.title, card))
+  if (hits.length === 0) {
+    return { reason: "no_match", title: row.title, sku: row.sku }
+  }
+  if (hits.length !== 1) {
+    return { reason: "duplicate_catalog", title: row.title, sku: row.sku }
+  }
+  const href = hits[0].href
+  const owners = claimed.get(href) ?? []
+  owners.push(row)
+  claimed.set(href, owners)
+  return null
+}
+
+function finalizeTitleClaims(
+  claimed: Map<string, CrmTitleListing[]>,
+): TitleUrlPlan {
   const links: TitleUrlLink[] = []
   const skips: TitleUrlSkip[] = []
-  const claimed = new Map<string, CrmTitleListing[]>()
-
-  for (const row of candidates) {
-    const key = foldTitleKey(row.title)
-    if (!key) {
-      skips.push({ reason: "empty_title", title: row.title, sku: row.sku })
-      continue
-    }
-    if ((byCrm.get(key) ?? []).length !== 1) {
-      skips.push({ reason: "duplicate_crm", title: row.title, sku: row.sku })
-      continue
-    }
-    const hits = uniqueCards.filter((card) => cardMatchesListing(row.title, card))
-    if (hits.length === 0) {
-      skips.push({ reason: "no_match", title: row.title, sku: row.sku })
-      continue
-    }
-    if (hits.length !== 1) {
-      skips.push({
-        reason: "duplicate_catalog",
-        title: row.title,
-        sku: row.sku,
-      })
-      continue
-    }
-    const href = hits[0].href
-    const owners = claimed.get(href) ?? []
-    owners.push(row)
-    claimed.set(href, owners)
-  }
-
   for (const [href, owners] of claimed) {
     if (owners.length !== 1) {
       for (const row of owners) {
@@ -263,8 +248,33 @@ export function planTitleUrlLinks(
       href,
     })
   }
-
   return { links, skips }
+}
+
+/**
+ * Unique CRM listing ↔ unique catalog card.
+ * Truncated card titles match as a prefix of the CRM title.
+ * Does not set reserved/sold — only the public /item/ URL.
+ */
+export function planTitleUrlLinks(
+  listings: CrmTitleListing[],
+  cards: CatalogTitleCard[],
+): TitleUrlPlan {
+  const candidates = listings.filter(
+    (row) =>
+      listingMayBeOnWallapop(row.status) &&
+      wallapopItemUrlOrNull(row.externalUrl) == null,
+  )
+  const byCrm = groupByTitle(candidates, (row) => row.title)
+  const uniqueCards = uniqueTitleCards(cards)
+  const claimed = new Map<string, CrmTitleListing[]>()
+  const skips: TitleUrlSkip[] = []
+  for (const row of candidates) {
+    const skip = claimTitleHref(row, uniqueCards, byCrm, claimed)
+    if (skip) skips.push(skip)
+  }
+  const final = finalizeTitleClaims(claimed)
+  return { links: final.links, skips: [...skips, ...final.skips] }
 }
 
 export const CATALOG_TITLE_CARDS_EVAL = `(() => {

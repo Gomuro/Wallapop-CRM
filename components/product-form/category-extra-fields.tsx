@@ -21,12 +21,15 @@ export function CategoryExtraFields({
   fieldErrors?: Record<string, string>
 }) {
   const [fields, setFields] = useState<CategoryUploadField[]>([])
+  const [fieldsFor, setFieldsFor] = useState(categoryId)
+
+  if (categoryId !== fieldsFor) {
+    setFieldsFor(categoryId)
+    if (!categoryId) setFields([])
+  }
 
   useEffect(() => {
-    if (!categoryId) {
-      setFields([])
-      return
-    }
+    if (!categoryId) return
     let cancelled = false
     apiGetCategoryFields(categoryId)
       .then((next) => {

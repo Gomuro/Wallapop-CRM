@@ -18,19 +18,20 @@ export function codeForHttpStatus(status: number): ApiErrorCode {
   return "INTERNAL"
 }
 
+const HTTP_TIMEOUT_MESSAGE =
+  "El servidor no ha respondido a tiempo. Inténtalo de nuevo."
+const HTTP_UNAVAILABLE_MESSAGE =
+  "El servidor no está disponible. Inténtalo de nuevo."
+const HTTP_STATUS_MESSAGES: Record<number, string> = {
+  413: "Las fotos son demasiado pesadas. Reduce el tamaño e inténtalo de nuevo.",
+  408: HTTP_TIMEOUT_MESSAGE,
+  504: HTTP_TIMEOUT_MESSAGE,
+  502: HTTP_UNAVAILABLE_MESSAGE,
+  503: HTTP_UNAVAILABLE_MESSAGE,
+}
+
 export function messageForHttpStatus(status: number): string {
-  switch (status) {
-    case 413:
-      return "Las fotos son demasiado pesadas. Reduce el tamaño e inténtalo de nuevo."
-    case 408:
-    case 504:
-      return "El servidor no ha respondido a tiempo. Inténtalo de nuevo."
-    case 502:
-    case 503:
-      return "El servidor no está disponible. Inténtalo de nuevo."
-    default:
-      return "Algo ha salido mal. Inténtalo de nuevo."
-  }
+  return HTTP_STATUS_MESSAGES[status] ?? "Algo ha salido mal. Inténtalo de nuevo."
 }
 
 type ErrorBody = {

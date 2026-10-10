@@ -76,6 +76,31 @@ function mapSoldBrowserError(error: unknown): RunWallapopSoldErr {
   }
 }
 
+async function runPreparedSold(
+  prepared: WallapopSoldReady,
+  res: Response,
+): Promise<void> {
+  try {
+    const browser = await markWallapopSoldInBrowser({
+      itemUrl: prepared.itemUrl,
+      dryRun: prepared.dryRun,
+    })
+    if (browser.dryRun) {
+      res.json({
+        ok: true,
+        dryRun: true,
+        step: browser.step,
+        product: null,
+        error: null,
+      })
+      return
+    }
+    await persistCrmSold(prepared, res)
+  } catch (error) {
+    sendPrepareErr(res, mapSoldBrowserError(error))
+  }
+}
+
 export async function postProductWallapopSold(req: Request, res: Response) {
   const productId = paramId(req)
   if (!productId) {
@@ -97,23 +122,5 @@ export async function postProductWallapopSold(req: Request, res: Response) {
     sendPrepareErr(res, prepared)
     return
   }
-  try {
-    const browser = await markWallapopSoldInBrowser({
-      itemUrl: prepared.itemUrl,
-      dryRun: prepared.dryRun,
-    })
-    if (browser.dryRun) {
-      res.json({
-        ok: true,
-        dryRun: true,
-        step: browser.step,
-        product: null,
-        error: null,
-      })
-      return
-    }
-    await persistCrmSold(prepared, res)
-  } catch (error) {
-    sendPrepareErr(res, mapSoldBrowserError(error))
-  }
+  await runPreparedSold(prepared, res)
 }

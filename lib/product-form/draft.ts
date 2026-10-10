@@ -2,21 +2,26 @@ const TEXT_KEY = "wallapop-crm.product-draft.new"
 const DB_NAME = "wallapop-crm"
 const STORE = "draft-photos"
 
-export type ProductDraftFields = {
+export type ProductDraftCopy = {
   title: string
   sku: string
   description: string
   price: string
-  weight: string
-  shippingPackageSize: string
-  widthCm: string
-  lengthCm: string
-  heightCm: string
   categoryId: string
   condition: string
   status: string
   brand?: string
 }
+
+export type ProductDraftMeasures = {
+  weight: string
+  shippingPackageSize: string
+  widthCm: string
+  lengthCm: string
+  heightCm: string
+}
+
+export type ProductDraftFields = ProductDraftCopy & ProductDraftMeasures
 
 export function loadDraftFields(): ProductDraftFields | null {
   if (typeof window === "undefined") return null

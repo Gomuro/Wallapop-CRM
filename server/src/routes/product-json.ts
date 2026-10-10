@@ -71,30 +71,44 @@ type ProductJsonListing = {
   lastPostedAt: Date | null
 }
 
-type ProductJsonRow = {
+type ProductJsonIdentity = {
   id: string
   sku: string
+  categoryId: string
+  status: string
+  createdAt: Date
+  updatedAt: Date
+}
+
+type ProductJsonCopy = {
   title: string
   description: string
   price: { toString(): string }
   currency: string
-  categoryId: string
   condition: string
   brand: string | null
+  typeAttributes: unknown
+}
+
+type ProductJsonWarehouse = {
   weightKg: { toString(): string } | null
   shippingPackageSize: string | null
   widthCm: { toString(): string } | null
   lengthCm: { toString(): string } | null
   heightCm: { toString(): string } | null
-  status: string
-  typeAttributes: unknown
   soldAt: Date | null
   soldPrice: { toString(): string } | null
-  createdAt: Date
-  updatedAt: Date
+}
+
+type ProductJsonMedia = {
   images: ProductJsonImage[]
   listings: ProductJsonListing[]
 }
+
+type ProductJsonRow = ProductJsonIdentity &
+  ProductJsonCopy &
+  ProductJsonWarehouse &
+  ProductJsonMedia
 
 function toProductJsonCore(row: ProductJsonRow) {
   return {
@@ -195,7 +209,7 @@ export function buildListWhere(
   return where
 }
 
-type ProductListItemRow = {
+type ProductListItemIdentity = {
   id: string
   sku: string
   title: string
@@ -204,6 +218,9 @@ type ProductListItemRow = {
   status: string
   categoryId: string
   updatedAt: Date
+}
+
+type ProductListItemExtras = {
   weightKg: { toString(): string } | null
   widthCm: { toString(): string } | null
   lengthCm: { toString(): string } | null
@@ -216,6 +233,8 @@ type ProductListItemRow = {
     shippingEnabled: boolean
   }>
 }
+
+type ProductListItemRow = ProductListItemIdentity & ProductListItemExtras
 
 function toProductListItemListing(row: ProductListItemRow) {
   const listingStatus = row.listings[0]?.status ?? null

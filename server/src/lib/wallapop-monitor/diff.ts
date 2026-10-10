@@ -55,34 +55,25 @@ function soldItemKeys(rows: SoldCatalogRow[]): Set<string> {
   return keys
 }
 
-/**
- * Match only `/item/` href ↔ listing.externalUrl. Never title.
- * Sold wins over En venta. Unseen rows: no change (do not un-SOLD / un-RESERVED).
- */
-export function planMonitorUpdates(
-  published: PublishedCatalogRow[],
-  sold: SoldCatalogRow[],
-  listings: MonitorCrmListing[],
-): MonitorPlan {
-  const byListing = listingByItemKey(listings)
-  const byPublished = publishedByItemKey(published)
-  const soldKeys = soldItemKeys(sold)
-
-  const orphanPublished: string[] = []
-  for (const row of published) {
+function orphanHrefs(
+  rows: { href: string; sold?: boolean }[],
+  byListing: Map<string, MonitorCrmListing>,
+  soldOnly: boolean,
+) {
+  const orphan: string[] = []
+  for (const row of rows) {
+    if (soldOnly && !row.sold) continue
     const key = wallapopItemPathKey(row.href)
-    if (!key) continue
-    if (!byListing.has(key)) orphanPublished.push(row.href)
+    if (!key || byListing.has(key)) continue
+    orphan.push(row.href)
   }
+  return orphan
+}
 
-  const orphanSold: string[] = []
-  for (const row of sold) {
-    if (!row.sold) continue
-    const key = wallapopItemPathKey(row.href)
-    if (!key) continue
-    if (!byListing.has(key)) orphanSold.push(row.href)
-  }
-
+function soldFromCatalog(
+  byListing: Map<string, MonitorCrmListing>,
+  soldKeys: Set<string>,
+) {
   const toSoldProductIds: string[] = []
   const soldProductIds = new Set<string>()
   const soldListingIds = new Set<string>()
@@ -92,7 +83,15 @@ export function planMonitorUpdates(
     soldListingIds.add(listing.id)
     toSoldProductIds.push(listing.productId)
   }
+  return { toSoldProductIds, soldProductIds, soldListingIds }
+}
 
+function reservedAndActive(
+  byListing: Map<string, MonitorCrmListing>,
+  byPublished: Map<string, PublishedCatalogRow>,
+  soldListingIds: Set<string>,
+  soldProductIds: Set<string>,
+) {
   const toReserved: string[] = []
   const toActive: string[] = []
   for (const [key, listing] of byListing) {
@@ -108,12 +107,32 @@ export function planMonitorUpdates(
       toActive.push(listing.id)
     }
   }
+  return { toReserved, toActive }
+}
 
+/**
+ * Match only `/item/` href ↔ listing.externalUrl. Never title.
+ * Sold wins over En venta. Unseen rows: no change (do not un-SOLD / un-RESERVED).
+ */
+export function planMonitorUpdates(
+  published: PublishedCatalogRow[],
+  sold: SoldCatalogRow[],
+  listings: MonitorCrmListing[],
+): MonitorPlan {
+  const byListing = listingByItemKey(listings)
+  const byPublished = publishedByItemKey(published)
+  const soldKeys = soldItemKeys(sold)
+  const soldPlan = soldFromCatalog(byListing, soldKeys)
+  const reserved = reservedAndActive(
+    byListing,
+    byPublished,
+    soldPlan.soldListingIds,
+    soldPlan.soldProductIds,
+  )
   return {
-    toReserved,
-    toActive,
-    toSoldProductIds,
-    orphanPublished,
-    orphanSold,
+    ...reserved,
+    toSoldProductIds: soldPlan.toSoldProductIds,
+    orphanPublished: orphanHrefs(published, byListing, false),
+    orphanSold: orphanHrefs(sold, byListing, true),
   }
 }

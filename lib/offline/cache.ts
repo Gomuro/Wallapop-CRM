@@ -145,6 +145,34 @@ function sanitizeCachedProduct(product: InventoryProduct): InventoryProduct {
   return { ...product, images, productImages }
 }
 
+function isKeptOfflineKey(key: string) {
+  return key === PRODUCTS_KEY || key === CATEGORIES_KEY
+}
+
+function isBloatedMediaValue(value: string) {
+  return value.includes("data:image") && value.length > 50_000
+}
+
+function bloatedMediaKeys(storage: Storage) {
+  const toRemove: string[] = []
+  for (let index = 0; index < storage.length; index += 1) {
+    const key = storage.key(index)
+    if (!key || isKeptOfflineKey(key)) continue
+    if (isBloatedMediaValue(storage.getItem(key) ?? "")) toRemove.push(key)
+  }
+  return toRemove
+}
+
+function removeStorageKeys(storage: Storage, keys: string[]) {
+  for (const key of keys) {
+    try {
+      storage.removeItem(key)
+    } catch {
+      // ignore
+    }
+  }
+}
+
 export function purgeBloatedOfflineMedia() {
   if (typeof window === "undefined") return
   try {
@@ -155,25 +183,10 @@ export function purgeBloatedOfflineMedia() {
   }
 
   for (const storage of [window.localStorage, window.sessionStorage]) {
-    const toRemove: string[] = []
     try {
-      for (let index = 0; index < storage.length; index += 1) {
-        const key = storage.key(index)
-        if (!key || key === PRODUCTS_KEY || key === CATEGORIES_KEY) continue
-        const value = storage.getItem(key) ?? ""
-        if (value.includes("data:image") && value.length > 50_000) {
-          toRemove.push(key)
-        }
-      }
+      removeStorageKeys(storage, bloatedMediaKeys(storage))
     } catch {
       continue
-    }
-    for (const key of toRemove) {
-      try {
-        storage.removeItem(key)
-      } catch {
-        // ignore
-      }
     }
   }
 }

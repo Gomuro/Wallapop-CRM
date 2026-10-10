@@ -65,7 +65,7 @@ export type SetPublishStep = (step: PublishStep) => void;
 
 export type ShippingPackageType = "STANDARD" | "BULKY";
 
-export type PublishWallapopInput = {
+export type PublishWallapopCopy = {
   title: string;
   description: string;
   price: number;
@@ -75,6 +75,9 @@ export type PublishWallapopInput = {
   /** Spanish breadcrumb root → leaf from CRM `Category.path`. */
   categoryLabels: string[];
   dryRun: boolean;
+};
+
+export type PublishWallapopShipping = {
   shippingEnabled?: boolean;
   packageType?: ShippingPackageType;
   weightKg?: number | null;
@@ -84,6 +87,8 @@ export type PublishWallapopInput = {
   typeAttributes?: unknown;
   uploadFields?: CategoryUploadField[];
 };
+
+export type PublishWallapopInput = PublishWallapopCopy & PublishWallapopShipping;
 
 export type PublishWallapopResult = {
   ok: true;

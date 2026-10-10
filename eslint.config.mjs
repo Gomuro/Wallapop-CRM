@@ -82,6 +82,8 @@ const eslintConfig = defineConfig([
     "server/generated/**",
     "components/ui/**",
     "**/node_modules/**",
+    "profiles/**",
+    "tmp/**",
   ]),
 ]);
 
