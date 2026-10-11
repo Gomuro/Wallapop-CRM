@@ -107,6 +107,16 @@ export async function waitForEliminarDialog(page: Page): Promise<void> {
   )
 }
 
+export async function waitForEliminarDialogClosed(page: Page): Promise<void> {
+  const deadline = Date.now() + DIALOG_WAIT_MS
+  while (Date.now() < deadline) {
+    const result = (await page.evaluate(FIND_ELIMINAR_DIALOG_EVAL)) as string
+    if (result !== "found") return
+    await page.waitForTimeout(POLL_MS)
+  }
+  log("warn", "wallapop_eliminar_dialog_still_open")
+}
+
 export async function clickConfirmEliminar(page: Page): Promise<void> {
   const result = (await page.evaluate(CLICK_CONFIRM_ELIMINAR_EVAL)) as string
   log("info", "wallapop_eliminar_confirm_click", { result })

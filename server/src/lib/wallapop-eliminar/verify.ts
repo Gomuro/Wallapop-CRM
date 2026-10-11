@@ -18,9 +18,10 @@ import {
 import { findSellerEliminarButton } from "./click"
 import { WallapopEliminarError } from "./types"
 
-/** Seller block may hydrate late; wait this long before calling the item gone. */
-const ITEM_LIVE_WAIT_MS = 8_000
-const POLL_MS = 400
+/** Seller block hydrates after a real reload; cached same-URL assign is not a reload. */
+const ITEM_LIVE_WAIT_MS = 10_000
+const EN_VENTA_WAIT_MS = 20_000
+const POLL_MS = 500
 
 export function publishedRowsContainItem(
   rows: PublishedCatalogRow[],
@@ -29,6 +30,13 @@ export function publishedRowsContainItem(
   const wanted = wallapopItemPathKey(itemUrl)
   if (!wanted) return false
   return rows.some((row) => wallapopItemPathKey(row.href) === wanted)
+}
+
+/** Force a real navigation: location.assign to the same /item/ does not reload. */
+export function cacheBustItemUrl(itemUrl: string): string {
+  const parsed = new URL(itemUrl)
+  parsed.searchParams.set("_crm", String(Date.now()))
+  return parsed.href
 }
 
 function assertNotLogin(page: Page): void {
@@ -40,9 +48,33 @@ function assertNotLogin(page: Page): void {
   }
 }
 
-/** True while our seller «Eliminar» still renders on the old /item/ page. */
+async function scrapeEnVenta(page: Page): Promise<PublishedCatalogRow[]> {
+  await navigateViaAssign(page, CATALOG_PUBLISHED_URL)
+  await dismissWallapopConsent(page)
+  assertNotLogin(page)
+  await scrollCatalogUntilStable(page)
+  return scrapePublishedCatalogRows(page)
+}
+
+async function enVentaContainsItem(page: Page, itemUrl: string): Promise<boolean> {
+  const deadline = Date.now() + EN_VENTA_WAIT_MS
+  let found = true
+  let scanned = 0
+  while (Date.now() < deadline) {
+    const rows = await scrapeEnVenta(page)
+    scanned = rows.length
+    found = publishedRowsContainItem(rows, itemUrl)
+    log("info", "wallapop_eliminar_en_venta_verify", { found, scanned })
+    if (!found) return false
+    await page.waitForTimeout(POLL_MS)
+  }
+  log("warn", "wallapop_eliminar_en_venta_still_listed", { scanned })
+  return true
+}
+
+/** True if seller «Eliminar» hydrates after a cache-busted reload of /item/. */
 async function itemPageStillLive(page: Page, itemUrl: string): Promise<boolean> {
-  await navigateViaAssign(page, itemUrl)
+  await navigateViaAssign(page, cacheBustItemUrl(itemUrl))
   await dismissWallapopConsent(page)
   assertNotLogin(page)
   const deadline = Date.now() + ITEM_LIVE_WAIT_MS
@@ -53,25 +85,20 @@ async function itemPageStillLive(page: Page, itemUrl: string): Promise<boolean> 
   return false
 }
 
-async function enVentaContainsItem(page: Page, itemUrl: string): Promise<boolean> {
-  await navigateViaAssign(page, CATALOG_PUBLISHED_URL)
-  await dismissWallapopConsent(page)
-  assertNotLogin(page)
-  await scrollCatalogUntilStable(page)
-  const rows = await scrapePublishedCatalogRows(page)
-  const found = publishedRowsContainItem(rows, itemUrl)
-  log(found ? "warn" : "info", "wallapop_eliminar_en_venta_verify", {
-    found,
-    scanned: rows.length,
-  })
-  return found
-}
-
-/** Gone = old /item/ has no seller Eliminar and En venta has no such href. */
+/**
+ * Gone = En venta has no such href, then the reloaded /item/ has no seller Eliminar.
+ * Catalog first so we leave the item URL (assign to the same href is a no-op).
+ */
 export async function verifyItemEliminated(
   page: Page,
   itemUrl: string,
 ): Promise<void> {
+  if (await enVentaContainsItem(page, itemUrl)) {
+    throw new WallapopEliminarError(
+      "verify",
+      "El anuncio sigue en «En venta» de Wallapop.",
+    )
+  }
   const stillLive = await itemPageStillLive(page, itemUrl)
   log(stillLive ? "warn" : "info", "wallapop_eliminar_item_verify", {
     stillLive,
@@ -81,12 +108,6 @@ export async function verifyItemEliminated(
     throw new WallapopEliminarError(
       "verify",
       "El anuncio sigue visible en Wallapop después de eliminar.",
-    )
-  }
-  if (await enVentaContainsItem(page, itemUrl)) {
-    throw new WallapopEliminarError(
-      "verify",
-      "El anuncio sigue en «En venta» de Wallapop.",
     )
   }
 }

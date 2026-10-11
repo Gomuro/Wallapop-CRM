@@ -6,6 +6,7 @@ import {
   clickSellerEliminarButton,
   findSellerEliminarButton,
   waitForEliminarDialog,
+  waitForEliminarDialogClosed,
 } from "./click"
 import {
   type EliminarStep,
@@ -47,6 +48,7 @@ export async function runEliminarAfterAttach(
   await clickSellerEliminarButton(page)
   await waitForEliminarDialog(page)
   await clickConfirmEliminar(page)
+  await waitForEliminarDialogClosed(page)
   await page.waitForTimeout(CONFIRM_SETTLE_MS)
   mark("verify")
   await verifyItemEliminated(page, input.itemUrl)

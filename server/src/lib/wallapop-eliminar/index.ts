@@ -21,7 +21,7 @@ export {
   FIND_ELIMINAR_DIALOG_EVAL,
   FIND_SELLER_ELIMINAR_EVAL,
 } from "./click"
-export { publishedRowsContainItem } from "./verify"
+export { cacheBustItemUrl, publishedRowsContainItem } from "./verify"
 
 async function eliminarInner(
   input: EliminarWallapopInput,

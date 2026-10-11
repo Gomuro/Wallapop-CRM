@@ -21,6 +21,7 @@ import {
   CLICK_SELLER_ELIMINAR_EVAL,
   FIND_ELIMINAR_DIALOG_EVAL,
   FIND_SELLER_ELIMINAR_EVAL,
+  cacheBustItemUrl,
   publishedRowsContainItem,
 } from "../src/lib/wallapop-eliminar"
 import {
@@ -79,6 +80,15 @@ describe("eliminar DOM fixture (live 2026-10-11)", () => {
       )
       expect(await page.evaluate(FIND_ELIMINAR_DIALOG_EVAL)).toBe("missing_dialog")
     })
+  })
+})
+
+describe("cacheBustItemUrl", () => {
+  it("keeps the /item/ path and adds a query so assign is not a same-href no-op", () => {
+    const next = cacheBustItemUrl(ASALVO)
+    expect(next.startsWith(ASALVO)).toBe(true)
+    expect(next).not.toBe(ASALVO)
+    expect(new URL(next).searchParams.get("_crm")).toMatch(/^\d+$/)
   })
 })
 
