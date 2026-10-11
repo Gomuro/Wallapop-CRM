@@ -10,6 +10,7 @@ import {
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import { listingJsonSelect, toListingJson } from "../lib/listing-json"
+import { rescheduleAutopostLoop } from "../lib/wallapop-autopost"
 import { paramId } from "./products"
 
 function sendZod(res: Response, error: ZodError) {
@@ -204,5 +205,8 @@ export async function putProductListing(req: Request, res: Response) {
     update: buildUpsertUpdate(body),
     select: listingJsonSelect,
   })
+  if (listing.status === "READY_TO_POST") {
+    await rescheduleAutopostLoop()
+  }
   res.json({ listing: toListingJson(listing) })
 }

@@ -148,7 +148,18 @@ export function startWallapopAutopostLoop(): void {
  */
 export async function rescheduleAutopostLoop(): Promise<void> {
   if (!started || !scheduling) return
+  try {
+    if (!(await isDefaultAccountAutopostEnabled())) return
+  } catch {
+    // Keep scheduling when the enabled probe fails (tests / brief DB blip).
+  }
   await scheduleNextAsync()
+}
+
+/** Stop the 1-minute queue timer (empty cola or Detener). Start / new READY_TO_POST call reschedule. */
+export function pauseAutopostSchedule(): void {
+  scheduleGeneration += 1
+  clearScheduledTick()
 }
 
 async function scheduleNextAsync(): Promise<void> {
@@ -174,11 +185,13 @@ async function scheduleNextAsync(): Promise<void> {
     scheduleTimer = null
     nextAutopostTickAtMs = null
     void runAutopostTick()
+      .then((keepGoing) => {
+        if (keepGoing && generation === scheduleGeneration) {
+          void scheduleNextAsync()
+        }
+      })
       .catch((error) => {
         log("error", "wallapop_autopost_tick_failed", serializeError(error))
-      })
-      .finally(() => {
-        if (generation === scheduleGeneration) void scheduleNextAsync()
       })
   }, delayMs)
 }
@@ -274,19 +287,24 @@ async function publishPickedAutopostListing(
 
 export async function runAutopostTick(
   publishProduct: typeof runProductPublish = runProductPublish,
-): Promise<void> {
+): Promise<boolean> {
   const prisma = getPrisma()
   if (!prisma) {
     log("warn", "wallapop_autopost_skip_no_db")
-    return
+    return false
   }
   await recoverStalePostingOnTick(prisma)
   const accountId = await autopostTickGates(prisma)
-  if (!accountId) return
+  if (!accountId) return true
   const picked = await pickNextAutopostListing(prisma, accountId)
   if (!picked.listing) {
     logAutopostIdlePick(picked)
-    return
+    if (picked.scanned === 0) {
+      log("info", "wallapop_autopost_paused_empty_queue")
+      return false
+    }
+    return true
   }
   await publishPickedAutopostListing(picked.listing, publishProduct)
+  return true
 }

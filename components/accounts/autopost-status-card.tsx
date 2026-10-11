@@ -184,7 +184,7 @@ export function AutopostStatusCard({ state }: { state: AutopostIntervalState }) 
         Última publicación: {lastLabel}
       </p>
 
-      {running && nextTickLabel ? (
+      {running && autopost?.nextTickAt && nextTickLabel ? (
         <p
           className="mb-4 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm tabular-nums"
           aria-live="polite"
@@ -193,6 +193,12 @@ export function AutopostStatusCard({ state }: { state: AutopostIntervalState }) 
             Próxima comprobación de la cola:{" "}
           </span>
           <span className="font-medium text-foreground">{nextTickLabel}</span>
+        </p>
+      ) : null}
+      {running && !autopost?.nextTickAt ? (
+        <p className="mb-4 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+          Sin anuncios pendientes. El autopost espera hasta que haya algo listo
+          para publicar.
         </p>
       ) : null}
 

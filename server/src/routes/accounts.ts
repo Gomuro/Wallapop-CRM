@@ -11,6 +11,7 @@ import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import {
   loadAutopostStatus,
+  pauseAutopostSchedule,
   rescheduleAutopostLoop,
 } from "../lib/wallapop-autopost"
 import {
@@ -199,6 +200,7 @@ export async function stopDefaultAccountAutopost(
   }
 
   await abortInFlightPublish()
+  pauseAutopostSchedule()
   await jsonDefaultAutopost(res)
 }
 

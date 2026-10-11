@@ -136,7 +136,7 @@ export type ApiAutopostStatus = {
   enabled: boolean
   livePublish: boolean
   lastPublication: { at: string; title: string } | null
-  /** Next in-process queue check (ISO). Null when autopost is stopped. */
+  /** Next queue check (ISO). Null when stopped or the READY_TO_POST queue is empty. */
   nextTickAt: string | null
   recentSkips: Array<{
     at: string

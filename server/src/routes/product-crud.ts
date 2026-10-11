@@ -14,6 +14,7 @@ import {
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import { isUniqueConstraint, prismaErrorCode } from "../lib/prisma-error"
+import { rescheduleAutopostLoop } from "../lib/wallapop-autopost"
 import {
   buildListWhere,
   loadProductCard,
@@ -193,6 +194,7 @@ export async function createProduct(req: Request, res: Response) {
       sendError(res, 500, "INTERNAL", "Product was not saved.")
       return
     }
+    await rescheduleAutopostLoop()
     res.status(201).json({ product: toProductJson(product) })
   } catch (error) {
     if (!sendCreateProductError(res, error)) throw error

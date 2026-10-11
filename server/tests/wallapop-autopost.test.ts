@@ -9,6 +9,7 @@ import {
   isWallapopAutopostEnabled,
   getNextAutopostTickAt,
   isWallapopAutopostLoopScheduling,
+  pauseAutopostSchedule,
   pickNextAutopostListing,
   readAutopostIntervalMs,
   resolveAutopostInterval,
@@ -362,6 +363,17 @@ describe("startWallapopAutopostLoop", () => {
     expect(remainingMs).toBeGreaterThanOrEqual(Math.floor(minMs) - 1)
     expect(remainingMs).toBeLessThanOrEqual(Math.ceil(maxMs) + 1)
 
+    vi.clearAllTimers()
+  })
+
+  it("pauseAutopostSchedule drops the next queue check", async () => {
+    vi.useFakeTimers()
+    startWallapopAutopostLoop()
+    await vi.waitFor(() => {
+      expect(getNextAutopostTickAt()).not.toBeNull()
+    })
+    pauseAutopostSchedule()
+    expect(getNextAutopostTickAt()).toBeNull()
     vi.clearAllTimers()
   })
 })
