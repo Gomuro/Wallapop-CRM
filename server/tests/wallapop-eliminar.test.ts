@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import {
   canEliminarOnWallapop,
+  canMarkWarehouseInactive,
   canRequeueListing,
 } from "../../lib/inventory/listing-active"
 import type { InventoryProduct } from "../../lib/inventory/types"
@@ -219,5 +220,44 @@ describe("card buttons", () => {
     expect(canRequeueListing(product("INACTIVE", { status: "DEACTIVATED", externalUrl: null }))).toBe(true)
     expect(canRequeueListing(product("SOLD", { status: "DEACTIVATED", externalUrl: null }))).toBe(false)
     expect(canRequeueListing(product("ACTIVE", { status: "ACTIVE", externalUrl: ASALVO }))).toBe(false)
+  })
+
+  it("shows Marcar como inactivo only when En venta and not live on Wallapop", () => {
+    expect(
+      canMarkWarehouseInactive(
+        product("ACTIVE", { status: "READY_TO_POST", externalUrl: null }),
+      ),
+    ).toBe(true)
+    expect(canMarkWarehouseInactive(product("ACTIVE", null))).toBe(true)
+    expect(
+      canMarkWarehouseInactive(
+        product("ACTIVE", { status: "DEACTIVATED", externalUrl: null }),
+      ),
+    ).toBe(true)
+    expect(
+      canMarkWarehouseInactive(
+        product("ACTIVE", { status: "ACTIVE", externalUrl: ASALVO }),
+      ),
+    ).toBe(false)
+    expect(
+      canMarkWarehouseInactive(
+        product("ACTIVE", { status: "RESERVED", externalUrl: ASALVO }),
+      ),
+    ).toBe(false)
+    expect(
+      canMarkWarehouseInactive(
+        product("ACTIVE", { status: "POSTING", externalUrl: null }),
+      ),
+    ).toBe(false)
+    expect(
+      canMarkWarehouseInactive(
+        product("SOLD", { status: "DEACTIVATED", externalUrl: null }),
+      ),
+    ).toBe(false)
+    expect(
+      canMarkWarehouseInactive(
+        product("INACTIVE", { status: "READY_TO_POST", externalUrl: null }),
+      ),
+    ).toBe(false)
   })
 })

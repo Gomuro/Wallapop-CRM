@@ -8,6 +8,7 @@ import {
 import { deleteLocalImage } from "../../../lib/uploads/delete-local-image"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
+import { listingBlocksWarehouseInactive } from "../../../lib/inventory/listing-active"
 import { markProductSoldTx, type SoldTxResult } from "../lib/product-sold"
 import { prismaErrorCode } from "../lib/prisma-error"
 import { loadProductCard, paramId, sendZod, toProductJson } from "./product-json"
@@ -29,11 +30,19 @@ async function parseStatusPatchBody(req: Request, res: Response) {
 async function assertStatusPatchAllowed(
   prisma: PrismaDb,
   id: string,
+  body: { status: "ACTIVE" | "INACTIVE" },
   res: Response,
 ): Promise<boolean> {
   const existing = await prisma.product.findUnique({
     where: { id },
-    select: { status: true },
+    select: {
+      status: true,
+      listings: {
+        where: { account: { isDefault: true } },
+        take: 1,
+        select: { status: true, externalUrl: true },
+      },
+    },
   })
   if (!existing) {
     sendError(res, 404, "NOT_FOUND", "Product not found.")
@@ -45,6 +54,18 @@ async function assertStatusPatchAllowed(
       409,
       "PRODUCT_SOLD",
       "Sold products cannot change warehouse status.",
+    )
+    return false
+  }
+  if (
+    body.status === "INACTIVE" &&
+    listingBlocksWarehouseInactive(existing.listings[0])
+  ) {
+    sendError(
+      res,
+      409,
+      "LIVE_ON_WALLAPOP",
+      "Quita el anuncio de Wallapop antes de marcarlo inactivo.",
     )
     return false
   }
@@ -65,7 +86,7 @@ export async function patchProductStatus(req: Request, res: Response) {
     sendError(res, 500, "INTERNAL", "Database is not configured.")
     return
   }
-  if (!(await assertStatusPatchAllowed(prisma, id, res))) return
+  if (!(await assertStatusPatchAllowed(prisma, id, body, res))) return
 
   try {
     await prisma.product.update({

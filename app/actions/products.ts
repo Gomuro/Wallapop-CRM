@@ -6,6 +6,7 @@ import { redirect } from "next/navigation"
 
 import { apiUploadProductImages } from "@/lib/api/images"
 import { ApiError, apiErrorToFieldErrors } from "@/lib/api/errors"
+import { apiPatchProductStatus } from "@/lib/api/products"
 import {
   createProduct,
   deleteProduct,
@@ -255,6 +256,19 @@ export async function markProductSoldAction(
   } catch (error) {
     if (error instanceof ApiError) return { error: error.message }
     return { error: "No se pudo marcar como vendido." }
+  }
+}
+
+export async function markProductInactiveAction(
+  id: string,
+): Promise<{ error?: string }> {
+  try {
+    await apiPatchProductStatus(id, "INACTIVE")
+    revalidateProductViews(id)
+    return {}
+  } catch (error) {
+    if (error instanceof ApiError) return { error: error.message }
+    return { error: "No se pudo marcar como inactivo." }
   }
 }
 

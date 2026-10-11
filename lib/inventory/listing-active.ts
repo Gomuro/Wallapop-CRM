@@ -45,6 +45,27 @@ export function canRequeueListing(product: InventoryProduct): boolean {
   return product.status !== "SOLD" && product.listing?.status === "DEACTIVATED"
 }
 
+/** Live /item/ or a publish in flight — warehouse must not flip to Inactivo. */
+export function listingBlocksWarehouseInactive(
+  listing:
+    | Pick<InventoryListing, "status" | "externalUrl">
+    | null
+    | undefined,
+): boolean {
+  if (!listing) return false
+  if (listing.status === "POSTING") return true
+  return computeListingActive(listing)
+}
+
+/**
+ * «Marcar como inactivo»: warehouse En venta, and the ad is not on Wallapop.
+ * Sold / live / Publicando stay blocked so CRM does not invent an off-site state.
+ */
+export function canMarkWarehouseInactive(product: InventoryProduct): boolean {
+  if (product.status !== "ACTIVE") return false
+  return !listingBlocksWarehouseInactive(product.listing)
+}
+
 export function withListingActive(product: InventoryProduct): InventoryProduct {
   const active = computeListingActive(product.listing, product.listingActive)
   return {

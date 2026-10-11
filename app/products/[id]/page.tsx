@@ -10,6 +10,7 @@ import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
 import {
   DeleteProductButton,
+  MarkInactiveButton,
   SoldSyncButton,
 } from "@/components/product-form/product-actions"
 import {
@@ -19,6 +20,7 @@ import {
 import { TestPublishButton } from "@/components/product-form/test-publish-button"
 import {
   canEliminarOnWallapop,
+  canMarkWarehouseInactive,
   canRequeueListing,
 } from "@/lib/inventory/listing-active"
 import { ListingDetailSection } from "@/components/catalog/listing-detail"
@@ -111,6 +113,9 @@ function ProductDetailAside({ product }: { product: InventoryProduct }) {
         ) : null}
         {canRequeueListing(product) ? (
           <RequeueListingButton productId={product.id} />
+        ) : null}
+        {canMarkWarehouseInactive(product) ? (
+          <MarkInactiveButton productId={product.id} />
         ) : null}
         <DeleteProductButton productId={product.id} />
       </div>

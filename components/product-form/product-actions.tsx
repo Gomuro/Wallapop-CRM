@@ -3,7 +3,10 @@
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 
-import { deleteProductAction } from "@/app/actions/products"
+import {
+  deleteProductAction,
+  markProductInactiveAction,
+} from "@/app/actions/products"
 import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
 import {
   markWallapopSold,
@@ -69,6 +72,49 @@ export function SoldSyncButton({
       error={error}
       pending={pending}
       onConfirm={confirmSold}
+    />
+  )
+}
+
+export function MarkInactiveButton({ productId }: { productId: string }) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, startTransition] = useTransition()
+
+  return (
+    <ConfirmAction
+      open={open}
+      onOpenChange={(next) => {
+        setOpen(next)
+        if (!next) setError(null)
+      }}
+      triggerLabel="Marcar como inactivo"
+      triggerClassName="h-12 w-full"
+      triggerVariant="secondary"
+      title="Marcar como inactivo"
+      description="El producto pasará a Inactivo en el CRM. Wallapop no se toca: esta acción sólo vale si el anuncio no está publicado. El autopost no lo cogerá."
+      confirmLabel="Marcar inactivo"
+      pendingLabel="Guardando…"
+      error={error}
+      pending={pending}
+      onConfirm={() => {
+        setError(null)
+        startTransition(async () => {
+          try {
+            const result = await markProductInactiveAction(productId)
+            if (result?.error) {
+              setError(result.error)
+              return
+            }
+            setOpen(false)
+            router.refresh()
+          } catch (caught) {
+            if (isNextRedirect(caught)) throw caught
+            setError(actionFailureMessage(caught))
+          }
+        })
+      }}
     />
   )
 }
