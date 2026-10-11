@@ -2,6 +2,7 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import {
   abortInFlightPublish,
+  canClaimWorkerPage,
   consumeKeepChromeAfterAbort,
   isBrowserBusyError,
   isBrowserPublishBusy,
@@ -26,6 +27,32 @@ import {
   throwIfPublishAborted,
   type WallapopBrowserHandle,
 } from "../src/lib/wallapop-cdp"
+
+describe("canClaimWorkerPage", () => {
+  it("does not steal a tab another slot already owns", () => {
+    expect(
+      canClaimWorkerPage({
+        wasAlreadyOpen: false,
+        isClosed: false,
+        ownedByOtherSlot: true,
+      }),
+    ).toBe(false)
+    expect(
+      canClaimWorkerPage({
+        wasAlreadyOpen: true,
+        isClosed: false,
+        ownedByOtherSlot: false,
+      }),
+    ).toBe(false)
+    expect(
+      canClaimWorkerPage({
+        wasAlreadyOpen: false,
+        isClosed: false,
+        ownedByOtherSlot: false,
+      }),
+    ).toBe(true)
+  })
+})
 
 describe("isLoginOr2faUrl", () => {
   it("guards accounts and login-actions tabs", () => {

@@ -65,6 +65,7 @@ export {
 } from "./tabs"
 
 export {
+  canClaimWorkerPage,
   closeSoldJobPages,
   closeWorkerSlotPages,
   ensureWallapopPage,
