@@ -5,6 +5,7 @@ import { describe, expect, it } from "vitest"
 
 import {
   extraUploadFields,
+  extraUploadFieldsWithOptionalBrand,
   fingerprintUploadFields,
   parseUploadComponents,
   validateExtraUploadFields,
@@ -63,6 +64,38 @@ describe("parseUploadComponents", () => {
     expect(fingerprintUploadFields(fields)).toBe(
       fingerprintUploadFields(parseUploadComponents(fixture)),
     )
+  })
+})
+
+describe("extraUploadFieldsWithOptionalBrand", () => {
+  it("keeps Wallapop brand required/optional as-is", () => {
+    const extra = extraUploadFields(parseUploadComponents(fixture))
+    const withBrand = extraUploadFieldsWithOptionalBrand(extra)
+    expect(withBrand.find((field) => field.id === "brand")?.required).toBe(
+      false,
+    )
+    expect(withBrand.filter((field) => field.id === "brand")).toHaveLength(1)
+  })
+
+  it("adds an optional Marca when the leaf has no brand field", () => {
+    const withBrand = extraUploadFieldsWithOptionalBrand([
+      {
+        id: "color",
+        type: "select_box",
+        required: true,
+        label: "Color",
+        min: 1,
+        max: 1,
+        options: [],
+        source: null,
+      },
+    ])
+    expect(withBrand[0]).toMatchObject({
+      id: "brand",
+      required: false,
+      label: "Marca",
+    })
+    expect(withBrand.map((field) => field.id)).toEqual(["brand", "color"])
   })
 })
 

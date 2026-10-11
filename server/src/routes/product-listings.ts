@@ -2,6 +2,10 @@ import type { Prisma } from "../../generated/prisma/client"
 import type { Request, Response } from "express"
 import { ZodError } from "zod"
 
+import {
+  productMissingRequiredWallapopBrand,
+  WALLAPOP_BRAND_REQUIRED_MESSAGE,
+} from "../../../lib/inventory/wallapop-brand"
 import { productListingApiPutBodySchema } from "../../../lib/validations/listing"
 import {
   DEFAULT_ACCOUNT_MISSING_MESSAGE,
@@ -133,15 +137,25 @@ async function rejectReadyToPostWithoutBrand(
   if (body.status !== "READY_TO_POST") return false
   const product = await prisma.product.findUnique({
     where: { id: productId },
-    select: { brand: true },
+    select: {
+      brand: true,
+      description: true,
+      typeAttributes: true,
+      category: { select: { attributes: true } },
+    },
   })
-  if (product?.brand?.trim()) return false
-  sendError(
-    res,
-    400,
-    "BRAND_REQUIRED",
-    "Introduce una marca. Wallapop no deja publicar el anuncio sin Marca.",
-  )
+  if (
+    !product ||
+    !productMissingRequiredWallapopBrand({
+      brand: product.brand,
+      description: product.description,
+      typeAttributes: product.typeAttributes,
+      categoryAttributes: product.category.attributes,
+    })
+  ) {
+    return false
+  }
+  sendError(res, 400, "BRAND_REQUIRED", WALLAPOP_BRAND_REQUIRED_MESSAGE)
   return true
 }
 

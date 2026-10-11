@@ -7,7 +7,10 @@ import { Field } from "@/components/product-form/product-form-chrome"
 import { BrandPicker } from "@/components/product-form/product-form-brand"
 import { apiGetCategoryFields } from "@/lib/api/category-fields"
 import type { CategoryUploadField } from "@/lib/inventory/category-upload-fields"
-import { selectedIdsForField } from "@/lib/inventory/category-upload-fields"
+import {
+  extraUploadFieldsWithOptionalBrand,
+  selectedIdsForField,
+} from "@/lib/inventory/category-upload-fields"
 
 export function CategoryExtraFields({
   categoryId,
@@ -20,12 +23,12 @@ export function CategoryExtraFields({
   brandFallback?: string
   fieldErrors?: Record<string, string>
 }) {
-  const [fields, setFields] = useState<CategoryUploadField[]>([])
+  const [fields, setFields] = useState<CategoryUploadField[] | null>(null)
   const [fieldsFor, setFieldsFor] = useState(categoryId)
 
   if (categoryId !== fieldsFor) {
     setFieldsFor(categoryId)
-    if (!categoryId) setFields([])
+    setFields(null)
   }
 
   useEffect(() => {
@@ -43,11 +46,12 @@ export function CategoryExtraFields({
     }
   }, [categoryId])
 
-  if (!categoryId || fields.length === 0) return null
+  if (!categoryId || fields === null) return null
+  const shown = extraUploadFieldsWithOptionalBrand(fields)
 
   return (
     <>
-      {fields.map((field) => (
+      {shown.map((field) => (
         <UploadFieldInput
           key={field.id}
           field={field}

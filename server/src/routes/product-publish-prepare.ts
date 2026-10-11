@@ -12,7 +12,10 @@ import { getWallapopSessionSnapshot } from "../lib/wallapop-session"
 import { wallapopStandardWeightBandFromCrm } from "../lib/wallapop-weight-band"
 import { categoryBreadcrumbLabelsEs } from "../lib/category-breadcrumb"
 import { validateShippingForPublish } from "../../../lib/inventory/shipping-for-publish"
-import { wallapopBrandFromProduct } from "../../../lib/inventory/wallapop-brand"
+import {
+  productMissingRequiredWallapopBrand,
+  WALLAPOP_BRAND_REQUIRED_MESSAGE,
+} from "../../../lib/inventory/wallapop-brand"
 import { wallapopItemUrlOrNull } from "../../../lib/inventory/wallapop-item-url"
 import { loadProductCard } from "./products"
 
@@ -142,9 +145,10 @@ async function guardPublishAccountAndListing(
   return { ok: true, accountId }
 }
 
-function resolvePublishImages(
+async function resolvePublishImages(
+  prisma: PrismaDb,
   product: ProductCard,
-): RunProductPublishErr | { ok: true; imagePaths: string[] } {
+): Promise<RunProductPublishErr | { ok: true; imagePaths: string[] }> {
   if (!product.images.length) {
     return publishFail(
       400,
@@ -152,18 +156,19 @@ function resolvePublishImages(
       "El producto necesita al menos una foto antes de publicar.",
     )
   }
+  const category = await prisma.category.findUnique({
+    where: { id: product.categoryId },
+    select: { attributes: true },
+  })
   if (
-    !wallapopBrandFromProduct({
+    productMissingRequiredWallapopBrand({
       brand: product.brand,
       description: product.description,
       typeAttributes: product.typeAttributes,
+      categoryAttributes: category?.attributes,
     })
   ) {
-    return publishFail(
-      400,
-      "BRAND_REQUIRED",
-      "Introduce una marca. Wallapop no deja publicar el anuncio sin Marca.",
-    )
+    return publishFail(400, "BRAND_REQUIRED", WALLAPOP_BRAND_REQUIRED_MESSAGE)
   }
   const imagePaths: string[] = []
   for (const image of product.images) {
@@ -282,7 +287,7 @@ export async function prepareProductPublish(
     dryRun,
   )
   if (!account.ok) return account
-  const assets = resolvePublishImages(loaded.product)
+  const assets = await resolvePublishImages(loaded.prisma, loaded.product)
   if (!assets.ok) return assets
   const shipping = await resolvePublishShipping(loaded.prisma, loaded.product, dryRun)
   if (!shipping.ok) return shipping

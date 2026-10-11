@@ -32,6 +32,26 @@ export function extraUploadFields(
   return fields.filter((field) => !CRM_OWNED_UPLOAD_FIELD_IDS.has(field.id))
 }
 
+/** Shown in the product form when Wallapop's leaf schema has no Marca field. */
+export const OPTIONAL_BRAND_UPLOAD_FIELD: CategoryUploadField = {
+  id: "brand",
+  type: "combo_box",
+  required: false,
+  label: "Marca",
+  min: 0,
+  max: 1,
+  options: [],
+  source: null,
+}
+
+export function extraUploadFieldsWithOptionalBrand(
+  fields: CategoryUploadField[],
+): CategoryUploadField[] {
+  const extra = extraUploadFields(fields)
+  if (extra.some((field) => field.id === "brand")) return extra
+  return [OPTIONAL_BRAND_UPLOAD_FIELD, ...extra]
+}
+
 function asRecord(value: unknown): Record<string, unknown> | null {
   if (!value || typeof value !== "object" || Array.isArray(value)) return null
   return value as Record<string, unknown>

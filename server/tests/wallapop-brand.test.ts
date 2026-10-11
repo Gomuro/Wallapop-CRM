@@ -1,6 +1,10 @@
 import { describe, expect, it } from "vitest"
 
-import { wallapopBrandFromProduct } from "../../lib/inventory/wallapop-brand"
+import {
+  isBrandRequiredForCategory,
+  productMissingRequiredWallapopBrand,
+  wallapopBrandFromProduct,
+} from "../../lib/inventory/wallapop-brand"
 
 describe("wallapopBrandFromProduct", () => {
   it("prefers the CRM brand field", () => {
@@ -50,5 +54,59 @@ describe("wallapopBrandFromProduct", () => {
         typeAttributes: {},
       }),
     ).toBeNull()
+  })
+})
+
+describe("isBrandRequiredForCategory", () => {
+  it("is false for Motor recambios leaves without a brand upload field", () => {
+    const snapshot = JSON.parse(
+      require("node:fs").readFileSync(
+        require("node:path").join(
+          __dirname,
+          "../prisma/data/wallapop-upload-fields.json",
+        ),
+        "utf8",
+      ),
+    ) as {
+      catalogs: Array<{ leafWallapopIds: number[]; fields: unknown[] }>
+    }
+    const motor = snapshot.catalogs.find((catalog) =>
+      catalog.leafWallapopIds.includes(10334),
+    )
+    expect(motor).toBeDefined()
+    expect(
+      isBrandRequiredForCategory({ uploadFields: motor!.fields }),
+    ).toBe(false)
+  })
+
+  it("is true only when upload schema marks brand required", () => {
+    const attrs = {
+      uploadFields: [
+        {
+          id: "brand",
+          type: "combo_box",
+          required: true,
+          label: "Marca",
+          min: 1,
+          max: 1,
+          options: [],
+          source: null,
+        },
+      ],
+    }
+    expect(isBrandRequiredForCategory(attrs)).toBe(true)
+    expect(
+      productMissingRequiredWallapopBrand({
+        categoryAttributes: attrs,
+        brand: null,
+        description: "Sin marca en texto",
+      }),
+    ).toBe(true)
+    expect(
+      productMissingRequiredWallapopBrand({
+        categoryAttributes: attrs,
+        brand: "Nike",
+      }),
+    ).toBe(false)
   })
 })

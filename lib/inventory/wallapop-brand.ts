@@ -1,3 +1,27 @@
+import {
+  extraUploadFields,
+  uploadFieldsFromCategoryAttributes,
+  type CategoryUploadField,
+} from "./category-upload-fields"
+
+export const WALLAPOP_BRAND_REQUIRED_MESSAGE =
+  "Introduce una marca. Wallapop no deja publicar el anuncio sin Marca."
+
+export function categoryExtraBrandField(
+  categoryAttributes: unknown,
+): CategoryUploadField | undefined {
+  return extraUploadFields(
+    uploadFieldsFromCategoryAttributes(categoryAttributes),
+  ).find((field) => field.id === "brand")
+}
+
+/** True when Wallapop upload schema marks Marca as required for this leaf category. */
+export function isBrandRequiredForCategory(
+  categoryAttributes: unknown,
+): boolean {
+  return Boolean(categoryExtraBrandField(categoryAttributes)?.required)
+}
+
 export function brandFromTypeAttributes(
   typeAttributes: unknown,
 ): string | null {
@@ -38,4 +62,14 @@ export function wallapopBrandFromProduct(product: {
     brandFromTypeAttributes(product.typeAttributes) ??
     brandFromDescription(product.description)
   )
+}
+
+export function productMissingRequiredWallapopBrand(input: {
+  brand?: string | null
+  description?: string | null
+  typeAttributes?: unknown
+  categoryAttributes?: unknown
+}): boolean {
+  if (!isBrandRequiredForCategory(input.categoryAttributes)) return false
+  return !wallapopBrandFromProduct(input)
 }
