@@ -29,6 +29,7 @@
 | `API_ORIGIN` | Опційно для `npm run server:smoke`, якщо не `http://127.0.0.1:$PORT` |
 | `WALLAPOP_PUBLISH_DRY_RUN` | Publish: не `false` = стоп перед Publicar. Див. [Publish](#publish-phase-1) |
 | `WALLAPOP_SOLD_DRY_RUN` | C8 sold: не `false` = стоп перед confirm `#markAsSoldButton`. Не reuse publish-env. Див. [Wallapop sold](#wallapop-sold-c8) |
+| `WALLAPOP_ELIMINAR_DRY_RUN` | Eliminar: не `false` = стоп перед «Sí, eliminarlo». Див. [Wallapop eliminar](#wallapop-eliminar) |
 | `WALLAPOP_AUTOPOST` | Deprecated / ignored. Черга вмикається з UI `POST /accounts/default/autopost/start` (`accounts.autopost_enabled`) |
 | `WALLAPOP_AUTOPOST_INTERVAL_MS` | Fallback інтервалу, якщо `accounts.autopost_interval_ms` null. Default `900000` = 15 хв + ±20% jitter. UI `PATCH /accounts/default/autopost` перемагає env |
 | `WALLAPOP_POSTING_STALE_MS` | Watchdog: `POSTING` старший за це (default `1200000` = 20 хв) і Chrome не в `publish` → retry. Див. [Autopost queue](#autopost-queue) |
@@ -120,7 +121,7 @@ Postman-колекція: `server/postman/`.
 
 ## Wallapop sold (C8)
 
-Один Chrome **9222** / `ChromeCDP-Persistent`. Sold — **окреме вікно** (не другий порт). Слоти `publish` / `sold` / `monitor` / `session` можуть іти паралельно; повтор того самого слота → **409** `BROWSER_BUSY`. Login/logout ексклюзивні.
+Один Chrome **9222** / `ChromeCDP-Persistent`. Sold — **окреме вікно** (не другий порт). Слоти `publish` / `sold` / `eliminar` / `monitor` / `session` можуть іти паралельно; повтор того самого слота → **409** `BROWSER_BUSY`. Login/logout ексклюзивні.
 
 Канон: лише `ProductListing.externalUrl` = `https://es.wallapop.com/item/…`. Listing має бути `ACTIVE`. Продукт уже `SOLD` → **409** `ALREADY_SOLD` (браузер ні). Session не `ACTIVE` → **409** `NOT_ACTIVE`.
 
@@ -132,6 +133,18 @@ Dry-run default: `WALLAPOP_SOLD_DRY_RUN !== "false"` (або body `{ "dryRun": t
 **200** live: `{ ok: true, dryRun: false, step: "sold", product, error: null }`.
 
 Модулі: `server/src/lib/wallapop-sold/`. Кнопка картки **Marcar como vendido** → цей ендпоінт (не CRM-only `POST …/sold`). `POST …/sold` лишається для API.
+
+## Wallapop eliminar
+
+`POST /api/v1/products/:id/wallapop-eliminar` — прибрати оголошення **лише на Wallapop**. Слот `eliminar`, своє вікно того ж Chrome 9222.
+
+Умови: listing `ACTIVE` або `RESERVED`, `externalUrl` = `https://es.wallapop.com/item/…`, продукт не `SOLD`, session `ACTIVE`. Інакше **409** `LISTING_NOT_ACTIVE` / `NO_ITEM_URL` / `ALREADY_SOLD` / `NOT_ACTIVE`.
+
+Браузер (живий DOM 2026-10-11): `[class*="ItemDetailSellerButtons"]` `walla-button[text="Eliminar"]` (не Destacar / Reservar / Vendido) → same-tab `walla-dialog[is-open]` «¿Quieres borrar el anuncio?» → `walla-button[text="Sí, eliminarlo"]`. Перевірка: на старому `/item/` немає seller-кнопки Eliminar **і** у En venta немає цього href. Інакше **500** `ELIMINAR_FAILED`, CRM не писати.
+
+Після OK: listing `DEACTIVATED`, `external_url` = null. `products.status` **не** змінюється. Знову в чергу — окремо `PUT …/listing` `{ status: "READY_TO_POST" }`.
+
+Dry-run default: `WALLAPOP_ELIMINAR_DRY_RUN !== "false"` (або body `{ "dryRun": true }`) — знайти Eliminar, **не** confirm.
 
 ## Photos (#58)
 

@@ -67,6 +67,7 @@ export function requestHeadersFrom(
 function proxyTimeoutMs(pathname: string): number {
   if (
     pathname.includes("/wallapop-sold") ||
+    pathname.includes("/wallapop-eliminar") ||
     pathname.includes("/publish") ||
     pathname.includes("/connect")
   ) {

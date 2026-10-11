@@ -27,15 +27,22 @@ function MetaRow({
 
 const LISTING_ESTADO: Record<string, string> = {
   RESERVED: "Reservado",
-  DEACTIVATED: "Vendido en Wallapop",
+  DEACTIVATED: "Desactivado",
   READY_TO_POST: "En cola de publicación",
   POSTING: "Publicando…",
   FAILED: "Error al publicar",
 }
 
-function listingEstadoLabel(listing: InventoryListing, posted: boolean) {
+function listingEstadoLabel(
+  listing: InventoryListing,
+  posted: boolean,
+  productSold: boolean,
+) {
   if (listing.status === "RESERVED") return "Reservado"
   if (posted) return "Publicado"
+  if (listing.status === "DEACTIVATED" && productSold) {
+    return "Vendido en Wallapop"
+  }
   return LISTING_ESTADO[listing.status] ?? "Sin publicar"
 }
 
@@ -107,11 +114,13 @@ export function ListingDetailSection({
   listing,
   listingActive,
   shippingIncomplete = false,
+  productSold = false,
 }: {
   productId?: string
   listing: InventoryListing | null
   listingActive?: boolean
   shippingIncomplete?: boolean
+  productSold?: boolean
 }) {
   const itemUrl = wallapopItemUrlOrNull(listing?.externalUrl)
   const junkUrl = Boolean(listing?.externalUrl) && !itemUrl
@@ -144,7 +153,7 @@ export function ListingDetailSection({
           />
         </div>
         <div className="divide-y divide-border px-3">
-          <MetaRow label="Estado">{listingEstadoLabel(listing, posted)}</MetaRow>
+          <MetaRow label="Estado">{listingEstadoLabel(listing, posted, productSold)}</MetaRow>
           <MetaRow label="Enlace">
             <ListingLinkValue itemUrl={itemUrl} junkUrl={junkUrl} />
           </MetaRow>

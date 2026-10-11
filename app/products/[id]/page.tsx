@@ -12,7 +12,15 @@ import {
   DeleteProductButton,
   SoldSyncButton,
 } from "@/components/product-form/product-actions"
+import {
+  EliminarWallapopButton,
+  RequeueListingButton,
+} from "@/components/product-form/listing-actions"
 import { TestPublishButton } from "@/components/product-form/test-publish-button"
+import {
+  canEliminarOnWallapop,
+  canRequeueListing,
+} from "@/lib/inventory/listing-active"
 import { ListingDetailSection } from "@/components/catalog/listing-detail"
 import {
   categoryLabel,
@@ -65,6 +73,7 @@ function ProductDetailAside({ product }: { product: InventoryProduct }) {
         listing={product.listing}
         listingActive={product.listingActive}
         shippingIncomplete={!product.shippingPublishReady}
+        productSold={product.status === "SOLD"}
       />
       {process.env.NODE_ENV === "development" ? (
         <TestPublishButton
@@ -97,6 +106,12 @@ function ProductDetailAside({ product }: { product: InventoryProduct }) {
             disabled={product.status === "SOLD"}
           />
         </div>
+        {canEliminarOnWallapop(product) ? (
+          <EliminarWallapopButton productId={product.id} />
+        ) : null}
+        {canRequeueListing(product) ? (
+          <RequeueListingButton productId={product.id} />
+        ) : null}
         <DeleteProductButton productId={product.id} />
       </div>
     </aside>

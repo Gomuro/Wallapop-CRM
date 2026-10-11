@@ -1,5 +1,5 @@
 import type { InventoryListing, InventoryProduct } from "@/lib/inventory/types"
-import { wallapopItemUrlOrNull } from "./wallapop-item-url"
+import { wallapopEsItemUrlOrNull, wallapopItemUrlOrNull } from "./wallapop-item-url"
 
 /** Live Wallapop listing: en venta or reserved (warehouse still ACTIVE). */
 export function isLiveOnWallapopStatus(
@@ -30,6 +30,19 @@ export function computeListingActive(
     )
   }
   return Boolean(listingActive)
+}
+
+/** «Eliminar en Wallapop»: live listing with a public es /item/ URL, not sold. */
+export function canEliminarOnWallapop(product: InventoryProduct): boolean {
+  if (product.status === "SOLD") return false
+  const listing = product.listing
+  if (!listing || !isLiveOnWallapopStatus(listing.status)) return false
+  return wallapopEsItemUrlOrNull(listing.externalUrl) != null
+}
+
+/** «Poner en cola»: listing taken off Wallapop, product still for sale. */
+export function canRequeueListing(product: InventoryProduct): boolean {
+  return product.status !== "SOLD" && product.listing?.status === "DEACTIVATED"
 }
 
 export function withListingActive(product: InventoryProduct): InventoryProduct {

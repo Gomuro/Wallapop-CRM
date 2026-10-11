@@ -1,13 +1,19 @@
 import { log } from "../log"
 import { closeWallapopUploadTab } from "./tabs"
 
-export type BrowserWorkerSlot = "publish" | "sold" | "monitor" | "session"
+export type BrowserWorkerSlot =
+  | "publish"
+  | "sold"
+  | "eliminar"
+  | "monitor"
+  | "session"
 export type BrowserExclusiveOp = "login" | "logout"
 export type BrowserBusy = "idle" | BrowserWorkerSlot | BrowserExclusiveOp
 
 const WORKER_SLOT_ORDER = [
   "publish",
   "sold",
+  "eliminar",
   "monitor",
   "session",
 ] as const satisfies readonly BrowserWorkerSlot[]
@@ -84,6 +90,10 @@ export function isBrowserPublishBusy(): boolean {
 
 export function isBrowserSoldBusy(): boolean {
   return workerSlots.has("sold")
+}
+
+export function isBrowserEliminarBusy(): boolean {
+  return workerSlots.has("eliminar")
 }
 
 export function isBrowserMonitorBusy(): boolean {

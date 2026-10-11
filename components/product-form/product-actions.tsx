@@ -85,12 +85,12 @@ export function DeleteProductButton({ productId }: { productId: string }) {
         setOpen(next)
         if (!next) setError(null)
       }}
-      triggerLabel="Eliminar"
+      triggerLabel="Eliminar del catálogo"
       triggerClassName="h-12 w-full text-destructive"
       triggerVariant="ghost"
-      title="Eliminar producto"
-      description="Se quitará del catálogo. Esta acción no se puede deshacer en esta sesión."
-      confirmLabel="Eliminar"
+      title="Eliminar del catálogo"
+      description="Se borrará el producto del CRM (fotos, anuncio y cola). No se puede recuperar. Wallapop no se toca: si el anuncio sigue allí, elimínalo antes con «Eliminar en Wallapop»."
+      confirmLabel="Eliminar del todo"
       pendingLabel="Eliminando…"
       confirmVariant="destructive"
       error={error}

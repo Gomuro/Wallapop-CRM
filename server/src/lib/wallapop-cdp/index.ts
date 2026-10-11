@@ -33,6 +33,7 @@ export {
   getBrowserBusy,
   isAnyWorkerSlotBusy,
   isBrowserBusyError,
+  isBrowserEliminarBusy,
   isBrowserMonitorBusy,
   isBrowserPublishBusy,
   isBrowserSessionBusy,

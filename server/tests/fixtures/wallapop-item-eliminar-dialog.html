@@ -1,0 +1,22 @@
+<!DOCTYPE html>
+<html lang="es">
+  <body>
+    <aside>
+      <walla-button aria-label="Highlight Item" text="Destacar"></walla-button>
+      <div class="item-detail-actions-module-scss-module__mqkeBq__ItemDetailSellerButtons d-flex flex-column w-100">
+        <walla-button full-width="" text="Editar"></walla-button>
+        <walla-button full-width="" button-type="secondary" button-subtype="brand" text="Reservar producto"></walla-button>
+        <walla-button full-width="" button-type="secondary" text="Marcar como vendido"></walla-button>
+        <walla-button full-width="" button-type="tertiary" button-subtype="negative" text="Eliminar"></walla-button>
+      </div>
+    </aside>
+    <walla-dialog is-open="" close-on-backdrop-click="" show-close-icon="" accessible-title="¿Quieres borrar el anuncio?">
+      <span slot="sectionTitle">¿Quieres borrar el anuncio?</span>
+      <span slot="sectionBody">Si lo haces, se eliminará el producto permanentemente.</span>
+      <div slot="footer">
+        <walla-button full-width="" button-subtype="neutral" button-type="secondary" text="No, mantenerlo"></walla-button>
+        <walla-button full-width="" button-subtype="negative" button-type="primary" text="Sí, eliminarlo"></walla-button>
+      </div>
+    </walla-dialog>
+  </body>
+</html>

@@ -5,6 +5,7 @@ import request from "supertest"
 import { createApp } from "../src/app"
 import { getPrisma } from "../src/lib/db"
 import { findDefaultAccountId } from "../src/lib/default-account"
+import { deactivateListingAfterEliminar } from "../src/lib/product-eliminar"
 import { syncWallapopIdentityOnActive } from "../src/lib/wallapop-account-identity"
 import {
   activatePostingListing,
@@ -885,6 +886,54 @@ describe("API v1 integration (Express + Postgres)", () => {
       ).find((p) => p.sku === reservedSku)
       expect(item?.listingStatus).toBe("DEACTIVATED")
       expect(item?.listingActive).toBe(false)
+    })
+  })
+
+  describe("wallapop eliminar (CRM side)", () => {
+    it("deactivates the listing, clears the URL, keeps the warehouse, then re-queues", async () => {
+      const categoryId = await findLeafCategoryId(agent)
+      const created = await agent.post("/api/v1/products").send({
+        sku: `API-ELIM-${Date.now()}`,
+        title: "API eliminar listing",
+        description: "Vitest eliminar DEACTIVATED",
+        price: 9.5,
+        currency: "EUR",
+        categoryId,
+        condition: "GOOD",
+        brand: "Acme",
+        weightKg: 1.2,
+      })
+      expect(created.status).toBe(201)
+      const id = created.body.product?.id as string
+      try {
+        const put = await agent.put(`/api/v1/products/${id}/listing`).send({
+          status: "ACTIVE",
+          externalUrl: "https://es.wallapop.com/item/api-eliminar-1234567890",
+        })
+        expect(put.status).toBe(200)
+
+        const count = await deactivateListingAfterEliminar(getPrisma()!, id)
+        expect(count).toBe(1)
+
+        const get = await agent.get(`/api/v1/products/${id}`)
+        expect(get.body.product?.status).toBe("ACTIVE")
+        expect(get.body.product?.listing?.status).toBe("DEACTIVATED")
+        expect(get.body.product?.listing?.externalUrl).toBeNull()
+
+        const again = await agent
+          .post(`/api/v1/products/${id}/wallapop-eliminar`)
+          .send({ dryRun: true })
+        expect(again.status).toBe(409)
+        expect(errorCode(again.body)).toBe("LISTING_NOT_ACTIVE")
+
+        const requeue = await agent
+          .put(`/api/v1/products/${id}/listing`)
+          .send({ status: "READY_TO_POST", externalUrl: null })
+        expect(requeue.status).toBe(200)
+        expect(requeue.body.listing?.status).toBe("READY_TO_POST")
+      } finally {
+        await agent.delete(`/api/v1/products/${id}`)
+      }
     })
   })
 

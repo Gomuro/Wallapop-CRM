@@ -101,6 +101,7 @@ export function OfflineProductDetail({ id }: { id: string }) {
           <ListingDetailSection
             listing={product.listing}
             listingActive={product.listingActive}
+            productSold={product.status === "SOLD"}
           />
           <Separator />
           <p className="whitespace-pre-wrap text-sm leading-relaxed text-muted-foreground">

@@ -20,7 +20,7 @@ alwaysApply: true
 
 ## Кінець роботи
 
-- **Publish / sold / monitor / session:** закрити **своє** вікно. `chrome.exe` гасити, коли **всі** слоти idle (не тримати процес на homepage Google між тіками). Автопост і наступний monitor самі `attachOrLaunch`.
+- **Publish / sold / eliminar / monitor / session:** закрити **своє** вікно. `chrome.exe` гасити, коли **всі** слоти idle (не тримати процес на homepage Google між тіками). Автопост і наступний monitor самі `attachOrLaunch`.
 - **Гонка close ↔ автопост:** гасити лише якщо слоти порожні. Якщо `publish` уже зайнятий — не гасити. Якщо `Browser.close` уже пішов — автопост чекає (`waitForChromeQuit`) і відкриває новий Chrome. 2FA — `keepChromeWarm`, не гасити.
 - **Session:** закрити своє вікно. Після ACTIVE не тримати Chrome теплим «для монітора».
 - Селектори **не вгадувати**. Sold/unpublish — лише живий DOM. Ніколи Destacar / Eliminar / Reservar / Cancelar, якщо це не задача **цього** воркера.
@@ -31,5 +31,6 @@ alwaysApply: true
 2. **Monitor** — En venta: `wallapop-badge[badgetype="reserved"]` → listing `RESERVED` (склад лишається ACTIVE). Бейдж зник, лот ще в En venta → listing `ACTIVE`. Потім `/app/catalog/sold` → новий `/item/` → `markProductSoldTx`. Match лише `external_url`. Власне вікно; після тіка `quitChromeIfNoWorkerSlots`.
 3. **Publish** — 9222 / `ChromeCDP-Persistent`. **Look at the SKU first** (title vs Tu Catálogo). Do not post a duplicate; Follow-up may delete after Yuhu. After Publicar: grab first `tsl-catalog-item` `/item/` href immediately (DOM under Yuhu), then dismiss «Ahora no, gracias». Close the publish window.
 4. **Sold** (C8) — same Chrome, own window. Needs a saved public `/item/…` URL. Live DOM (2026-10-08): `walla-button[text="Marcar como vendido"]` in `[class*="ItemDetailSellerButtons"]` → new tab `tsl-sold-modal` `#markAsSoldButton` → `/app/catalog/sold` first `.CatalogItem__content--sold` href match. Close item + modal tabs after the job.
+5. **Eliminar** — same Chrome, own window (`ensureWorkerWindow("eliminar")`). Needs a saved public `/item/…` URL. Live DOM (2026-10-11): `walla-button[text="Eliminar"]` (tertiary / negative) in `[class*="ItemDetailSellerButtons"]` → same-tab `walla-dialog[is-open]` «¿Quieres borrar el anuncio?» → `walla-button[text="Sí, eliminarlo"]`. Verify: the `/item/` no longer has the seller block, and En venta has no such href. Then listing `DEACTIVATED` + clear `external_url`; warehouse untouched. Re-queue (`READY_TO_POST`) is a separate operator action. Close the window after the job.
 
 Later: AI chat worker.
