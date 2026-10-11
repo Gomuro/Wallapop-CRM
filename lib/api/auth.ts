@@ -10,6 +10,27 @@ export type AuthUser = {
 type MeResponse = { user: AuthUser }
 type LoginResponse = { user: AuthUser }
 
+const KNOWN_EMAIL_HOST =
+  /^(gmail\.com|googlemail\.com|icloud\.com|me\.com|outlook\.com|hotmail\.com|yahoo\.es|yahoo\.com)$/i
+
+/** iOS / Telegram often drop `@` (`flshop935gmail.com`). Put it back for known hosts. */
+export function normalizeLoginEmail(raw: string): string {
+  const trimmed = raw.trim()
+  if (!trimmed || trimmed.includes("@")) return trimmed
+  const match = trimmed.match(
+    /^(.+?)(gmail\.com|googlemail\.com|icloud\.com|me\.com|outlook\.com|hotmail\.com|yahoo\.es|yahoo\.com)$/i,
+  )
+  if (!match) return trimmed
+  const local = match[1]
+  const host = match[2]
+  if (!local || KNOWN_EMAIL_HOST.test(local)) return trimmed
+  return `${local}@${host}`
+}
+
+export function isPlausibleLoginEmail(email: string): boolean {
+  return /^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)
+}
+
 export async function login(email: string, password: string) {
   const data = await apiClientFetch<LoginResponse>("/auth/login", {
     method: "POST",

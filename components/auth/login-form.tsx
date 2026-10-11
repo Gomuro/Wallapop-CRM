@@ -4,7 +4,12 @@ import { useRouter, useSearchParams } from "next/navigation"
 import { useState } from "react"
 import { EyeIcon, EyeOffIcon } from "lucide-react"
 
-import { login, loginErrorMessage } from "@/lib/api/auth"
+import {
+  isPlausibleLoginEmail,
+  login,
+  loginErrorMessage,
+  normalizeLoginEmail,
+} from "@/lib/api/auth"
 import { isApiConfigured } from "@/lib/api/config"
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
@@ -26,9 +31,14 @@ export function LoginForm() {
     event.preventDefault()
     setError(null)
 
-    const trimmedEmail = email.trim()
+    const trimmedEmail = normalizeLoginEmail(email)
+    if (trimmedEmail !== email.trim()) setEmail(trimmedEmail)
     if (!trimmedEmail || !password) {
       setError("Introduce el email y la contraseña.")
+      return
+    }
+    if (!isPlausibleLoginEmail(trimmedEmail)) {
+      setError("Revisa el email. ¿Falta @?")
       return
     }
 
@@ -68,8 +78,12 @@ export function LoginForm() {
             id="email"
             name="email"
             type="email"
-            autoComplete="email"
+            autoComplete="username"
             inputMode="email"
+            autoCapitalize="none"
+            autoCorrect="off"
+            spellCheck={false}
+            enterKeyHint="next"
             className="h-12 text-base md:h-10 md:text-sm"
             value={email}
             onChange={(e) => setEmail(e.target.value)}
@@ -86,6 +100,10 @@ export function LoginForm() {
               name="password"
               type={showPassword ? "text" : "password"}
               autoComplete="current-password"
+              autoCapitalize="none"
+              autoCorrect="off"
+              spellCheck={false}
+              enterKeyHint="go"
               className="h-12 pr-12 text-base md:h-10 md:text-sm"
               value={password}
               onChange={(e) => setPassword(e.target.value)}
