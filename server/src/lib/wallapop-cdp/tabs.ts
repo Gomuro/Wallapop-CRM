@@ -226,8 +226,23 @@ async function retargetHandleAfterUploadClose(
     setWallapopHandle(null)
     return
   }
-  if (await retargetToExistingPage(current, remaining)) return
-  await retargetToNewWallPage(current)
+  if (isKeepChromeWarm() || isAnyWorkerSlotBusy()) {
+    if (await retargetToExistingPage(current, remaining)) return
+    await retargetToNewWallPage(current)
+    return
+  }
+  for (const page of remaining) {
+    if (isClosedPage(page)) continue
+    let url = ""
+    try {
+      url = page.url()
+    } catch {
+      continue
+    }
+    if (isLoginOr2faUrl(url)) continue
+    await page.close().catch(() => {})
+  }
+  setWallapopHandle(null)
 }
 
 /**

@@ -142,7 +142,7 @@ export async function rehydrateWallapopSessionOnBoot(): Promise<WallapopSessionS
       throw error
     }
   }
-  if (state.status !== "ACTIVE" && !state.requires2FA) {
+  if (!state.requires2FA) {
     await quitChromeIfNoWorkerSlots()
   }
   return snapshot()

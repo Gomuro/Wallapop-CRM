@@ -53,8 +53,8 @@ async function runScheduledTick(generation: number): Promise<void> {
 }
 
 /**
- * Session-valid, first monitor tick, then every 5 minutes.
- * Idempotent. Chrome quits after the tick if no other worker slot is busy.
+ * Session probe on boot, En venta/Vendidos every 5 minutes.
+ * First scrape waits the interval — not Iniciar autopost, not API chrome spawn.
  */
 export function startWallapopMonitorLoop(): void {
   if (started) {
@@ -66,7 +66,14 @@ export function startWallapopMonitorLoop(): void {
   log("info", "wallapop_monitor_loop_started", {
     intervalMs: MONITOR_INTERVAL_MS,
   })
-  void ensureSessionThenMonitor()
+  void (async () => {
+    if (getWallapopSession().status === "ACTIVE") return
+    const session = await rehydrateWallapopSessionOnBoot()
+    log("info", "wallapop_session_rehydrate", {
+      status: session.status,
+      requires2FA: session.requires2FA,
+    })
+  })()
     .catch((error) =>
       log("warn", "wallapop_monitor_boot_failed", {
         err: serializeError(error),
