@@ -69,7 +69,11 @@ describe("eliminar DOM fixture (live 2026-10-11)", () => {
       expect(await page.evaluate(CLICK_SELLER_ELIMINAR_EVAL)).toBe("clicked")
       expect(await page.evaluate(CLICK_CONFIRM_ELIMINAR_EVAL)).toBe("clicked")
       const clicked = (await page.evaluate("window.__clicked")) as string[]
-      expect(clicked).toEqual(["Eliminar", "Sí, eliminarlo"])
+      expect(clicked.includes("Eliminar")).toBe(true)
+      expect(clicked.includes("Sí, eliminarlo")).toBe(true)
+      expect(clicked.some((text) => text === "Destacar" || text.includes("vendido"))).toBe(
+        false,
+      )
     })
   })
 

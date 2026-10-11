@@ -2,12 +2,11 @@ import type { Page } from "playwright"
 
 import { dismissWallapopConsent, navigateViaAssign } from "../wallapop-cdp"
 import {
-  clickConfirmEliminar,
   clickSellerEliminarButton,
   findSellerEliminarButton,
   waitForEliminarDialog,
-  waitForEliminarDialogClosed,
 } from "./click"
+import { confirmEliminarKeepingPage } from "./nav"
 import {
   type EliminarStep,
   type EliminarWallapopInput,
@@ -17,6 +16,7 @@ import {
 import { verifyItemEliminated } from "./verify"
 
 const CONFIRM_SETTLE_MS = 2_500
+const DIALOG_HYDRATE_MS = 400
 
 async function gotoItemPage(page: Page, itemUrl: string): Promise<void> {
   await navigateViaAssign(page, itemUrl)
@@ -45,13 +45,14 @@ export async function runEliminarAfterAttach(
     return { dryRun: true, step: "before_confirm", itemUrl: input.itemUrl }
   }
   mark("confirm")
+  await page.bringToFront().catch(() => {})
   await clickSellerEliminarButton(page)
   await waitForEliminarDialog(page)
-  await clickConfirmEliminar(page)
-  await waitForEliminarDialogClosed(page)
-  await page.waitForTimeout(CONFIRM_SETTLE_MS)
+  await page.waitForTimeout(DIALOG_HYDRATE_MS)
+  const jobPage = await confirmEliminarKeepingPage(page)
+  await jobPage.waitForTimeout(CONFIRM_SETTLE_MS)
   mark("verify")
-  await verifyItemEliminated(page, input.itemUrl)
+  await verifyItemEliminated(jobPage, input.itemUrl)
   mark("eliminated")
   return { dryRun: false, step: "eliminated", itemUrl: input.itemUrl }
 }

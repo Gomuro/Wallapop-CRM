@@ -34,7 +34,9 @@ export const CLICK_SELLER_ELIMINAR_EVAL = `(() => {
       ""
     ).trim();
     if (text !== "Eliminar") continue;
-    const target = el.shadowRoot?.querySelector?.("button") || el;
+    const inner = el.shadowRoot?.querySelector?.("button");
+    const target = inner || el;
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }));
     target.click();
     return "clicked";
   }
@@ -61,7 +63,9 @@ export const CLICK_CONFIRM_ELIMINAR_EVAL = `(() => {
       ""
     ).trim();
     if (text !== "Sí, eliminarlo") continue;
-    const target = el.shadowRoot?.querySelector?.("button") || el;
+    const inner = el.shadowRoot?.querySelector?.("button");
+    const target = inner || el;
+    target.dispatchEvent(new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }));
     target.click();
     return "clicked";
   }
@@ -107,14 +111,15 @@ export async function waitForEliminarDialog(page: Page): Promise<void> {
   )
 }
 
-export async function waitForEliminarDialogClosed(page: Page): Promise<void> {
+export async function waitForEliminarDialogClosed(page: Page): Promise<boolean> {
   const deadline = Date.now() + DIALOG_WAIT_MS
   while (Date.now() < deadline) {
     const result = (await page.evaluate(FIND_ELIMINAR_DIALOG_EVAL)) as string
-    if (result !== "found") return
+    if (result !== "found") return true
     await page.waitForTimeout(POLL_MS)
   }
   log("warn", "wallapop_eliminar_dialog_still_open")
+  return false
 }
 
 export async function clickConfirmEliminar(page: Page): Promise<void> {
