@@ -89,9 +89,19 @@ export async function patchProductStatus(req: Request, res: Response) {
   if (!(await assertStatusPatchAllowed(prisma, id, body, res))) return
 
   try {
-    await prisma.product.update({
-      where: { id },
-      data: { status: body.status },
+    await prisma.$transaction(async (tx) => {
+      await tx.product.update({
+        where: { id },
+        data: { status: body.status },
+      })
+      if (body.status !== "INACTIVE") return
+      await tx.productListing.updateMany({
+        where: {
+          productId: id,
+          status: { in: ["READY_TO_POST", "FAILED"] },
+        },
+        data: { status: "DEACTIVATED", externalUrl: null },
+      })
     })
   } catch (error) {
     if (prismaErrorCode(error) === "P2025") {

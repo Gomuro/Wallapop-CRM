@@ -6,7 +6,7 @@ import { ListingStatusBadge } from "@/components/catalog/listing-status-badge"
 import { formatListingPostedAt } from "@/lib/inventory/format"
 import { isLiveOnWallapopStatus } from "@/lib/inventory/listing-active"
 import { SHIPPING_NOT_READY_MESSAGE } from "@/lib/inventory/shipping-for-publish"
-import type { InventoryListing } from "@/lib/inventory/types"
+import type { InventoryListing, InventoryProduct } from "@/lib/inventory/types"
 import { wallapopItemUrlOrNull } from "@/lib/inventory/wallapop-item-url"
 import { typeMeta, typeSection } from "@/lib/ui/type"
 
@@ -37,11 +37,18 @@ function listingEstadoLabel(
   listing: InventoryListing,
   posted: boolean,
   productSold: boolean,
+  warehouseInactive: boolean,
 ) {
   if (listing.status === "RESERVED") return "Reservado"
   if (posted) return "Publicado"
   if (listing.status === "DEACTIVATED" && productSold) {
     return "Vendido en Wallapop"
+  }
+  if (
+    warehouseInactive &&
+    (listing.status === "READY_TO_POST" || listing.status === "FAILED")
+  ) {
+    return "Sin publicar"
   }
   return LISTING_ESTADO[listing.status] ?? "Sin publicar"
 }
@@ -115,12 +122,14 @@ export function ListingDetailSection({
   listingActive,
   shippingIncomplete = false,
   productSold = false,
+  warehouseStatus,
 }: {
   productId?: string
   listing: InventoryListing | null
   listingActive?: boolean
   shippingIncomplete?: boolean
   productSold?: boolean
+  warehouseStatus?: InventoryProduct["status"]
 }) {
   const itemUrl = wallapopItemUrlOrNull(listing?.externalUrl)
   const junkUrl = Boolean(listing?.externalUrl) && !itemUrl
@@ -148,12 +157,23 @@ export function ListingDetailSection({
         <div className="flex items-center justify-between gap-2 bg-muted/50 px-3 py-2.5">
           <span className={typeMeta}>Wallapop</span>
           <ListingStatusBadge
-            product={{ listing, listingActive }}
+            product={{
+              listing,
+              listingActive,
+              status: warehouseStatus ?? "ACTIVE",
+            }}
             className="shrink-0"
           />
         </div>
         <div className="divide-y divide-border px-3">
-          <MetaRow label="Estado">{listingEstadoLabel(listing, posted, productSold)}</MetaRow>
+          <MetaRow label="Estado">
+            {listingEstadoLabel(
+              listing,
+              posted,
+              productSold,
+              warehouseStatus === "INACTIVE",
+            )}
+          </MetaRow>
           <MetaRow label="Enlace">
             <ListingLinkValue itemUrl={itemUrl} junkUrl={junkUrl} />
           </MetaRow>

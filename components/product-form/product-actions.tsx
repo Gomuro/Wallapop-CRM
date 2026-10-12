@@ -93,7 +93,7 @@ export function MarkInactiveButton({ productId }: { productId: string }) {
       triggerClassName="h-12 w-full"
       triggerVariant="secondary"
       title="Marcar como inactivo"
-      description="El producto pasará a Inactivo en el CRM. Wallapop no se toca: esta acción sólo vale si el anuncio no está publicado. El autopost no lo cogerá."
+      description="El producto pasará a Inactivo en el CRM y saldrá de la cola de publicación. Wallapop no se toca: esta acción sólo vale si el anuncio no está publicado."
       confirmLabel="Marcar inactivo"
       pendingLabel="Guardando…"
       error={error}

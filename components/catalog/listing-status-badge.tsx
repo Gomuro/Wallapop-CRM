@@ -10,10 +10,14 @@ export function ListingStatusBadge({
   product,
   className,
 }: {
-  product: Pick<InventoryProduct, "listing" | "listingActive">
+  product: Pick<InventoryProduct, "status" | "listing" | "listingActive">
   className?: string
 }) {
-  const label = listingIndicatorShort(product.listing, product.listingActive)
+  const label = listingIndicatorShort(
+    product.listing,
+    product.listingActive,
+    product.status,
+  )
   if (!label) return null
 
   const variant = listingBadgeVariant(product.listing, product.listingActive)

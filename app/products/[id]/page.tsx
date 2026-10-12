@@ -76,6 +76,7 @@ function ProductDetailAside({ product }: { product: InventoryProduct }) {
         listingActive={product.listingActive}
         shippingIncomplete={!product.shippingPublishReady}
         productSold={product.status === "SOLD"}
+        warehouseStatus={product.status}
       />
       {process.env.NODE_ENV === "development" ? (
         <TestPublishButton

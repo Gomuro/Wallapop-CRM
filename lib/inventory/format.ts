@@ -96,8 +96,15 @@ export function isListingActive(
 export function listingIndicatorShort(
   listing: { status: ListingStatusRead } | null | undefined,
   listingActive?: boolean,
+  warehouseStatus?: ProductStatus,
 ): string | null {
   if (!listing) return null
+  if (
+    warehouseStatus === "INACTIVE" &&
+    (listing.status === "READY_TO_POST" || listing.status === "FAILED")
+  ) {
+    return null
+  }
   if (listing.status === "POSTING") return "Publicando…"
   if (listing.status === "FAILED") return "Error al publicar"
   if (

@@ -57,4 +57,14 @@ describe("ListingStatus.RESERVED", () => {
       ),
     ).toBe("En Wallapop")
   })
+
+  it("does not say Listo para publicar when warehouse is Inactivo", () => {
+    expect(
+      listingIndicatorShort(
+        { ...reservedListing, status: "READY_TO_POST" },
+        false,
+        "INACTIVE",
+      ),
+    ).toBeNull()
+  })
 })
