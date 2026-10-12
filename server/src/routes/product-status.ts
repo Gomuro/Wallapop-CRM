@@ -10,6 +10,7 @@ import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import { listingBlocksWarehouseInactive } from "../../../lib/inventory/listing-active"
 import { markProductSoldTx, type SoldTxResult } from "../lib/product-sold"
+import { dequeueInactiveWarehouseQueue } from "../lib/warehouse-inactive"
 import { prismaErrorCode } from "../lib/prisma-error"
 import { loadProductCard, paramId, sendZod, toProductJson } from "./product-json"
 
@@ -95,13 +96,7 @@ export async function patchProductStatus(req: Request, res: Response) {
         data: { status: body.status },
       })
       if (body.status !== "INACTIVE") return
-      await tx.productListing.updateMany({
-        where: {
-          productId: id,
-          status: { in: ["READY_TO_POST", "FAILED"] },
-        },
-        data: { status: "DEACTIVATED", externalUrl: null },
-      })
+      await dequeueInactiveWarehouseQueue(tx, id)
     })
   } catch (error) {
     if (prismaErrorCode(error) === "P2025") {
