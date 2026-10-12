@@ -29,16 +29,23 @@ export async function dequeueInactiveWarehouseQueue(
   return result.count
 }
 
-export async function dequeueInactiveWarehouseQueueOnBoot(): Promise<void> {
+/** Queue means selected for publish: Inactivo + Listo para publicar → En venta. */
+export async function activateWarehouseForReadyQueueOnBoot(): Promise<void> {
   const prisma = getPrisma()
   if (!prisma) return
   try {
-    const count = await dequeueInactiveWarehouseQueue(prisma)
-    if (count > 0) {
-      log("info", "inactive_queue_cleared", { count })
+    const result = await prisma.product.updateMany({
+      where: {
+        status: "INACTIVE",
+        listings: { some: { status: "READY_TO_POST" } },
+      },
+      data: { status: "ACTIVE" },
+    })
+    if (result.count > 0) {
+      log("info", "ready_queue_activated_warehouse", { count: result.count })
     }
   } catch (error) {
-    log("error", "inactive_queue_clear_failed", {
+    log("error", "ready_queue_activate_failed", {
       error: serializeError(error),
     })
   }

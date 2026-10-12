@@ -220,6 +220,10 @@ export async function putProductListing(req: Request, res: Response) {
     select: listingJsonSelect,
   })
   if (listing.status === "READY_TO_POST") {
+    await prisma.product.updateMany({
+      where: { id: productId, status: { not: "SOLD" } },
+      data: { status: "ACTIVE" },
+    })
     await rescheduleAutopostLoop()
   }
   res.json({ listing: toListingJson(listing) })

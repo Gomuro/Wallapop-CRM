@@ -99,7 +99,7 @@ export function RequeueListingButton({ productId }: { productId: string }) {
       triggerClassName="h-12 w-full"
       triggerVariant="secondary"
       title="Volver a publicar"
-      description="El anuncio pasará a «Listo para publicar». El autopost lo subirá a Wallapop como anuncio nuevo cuando toque."
+      description="El producto pasará a En venta y a «Listo para publicar». El autopost lo subirá a Wallapop como anuncio nuevo cuando toque."
       confirmLabel="Poner en cola"
       pendingLabel="Guardando…"
       error={state.error}
