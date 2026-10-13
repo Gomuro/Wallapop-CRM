@@ -16,7 +16,7 @@ import {
   resolveAutopostIntervalMs,
   toAutopostStatusJson,
 } from "./interval"
-import { logAutopostQueueMiss, pickNextAutopostListing } from "./pick"
+import { pickNextAutopostListing } from "./pick"
 
 export {
   AUTOPOST_INTERVAL_MS_MAX,
@@ -318,7 +318,6 @@ export async function runAutopostTick(
   if (!picked.listing) {
     logAutopostIdlePick(picked)
     if (picked.scanned === 0) {
-      await logAutopostQueueMiss(prisma, accountId)
       log("info", "wallapop_autopost_paused_empty_queue")
       return false
     }
