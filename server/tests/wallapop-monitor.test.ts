@@ -62,6 +62,7 @@ describe("planMonitorUpdates", () => {
     expect(plan.toReserved).toEqual(["l-armario"])
     expect(plan.toActive).toEqual(["l-silla"])
     expect(plan.toSoldProductIds).toEqual([])
+    expect(plan.toDeactivated).toEqual(["l-mesa"])
   })
 
   it("marks sold by /item/ href, not title, and sold wins over reserved", () => {
@@ -71,6 +72,7 @@ describe("planMonitorUpdates", () => {
       listings,
     )
     expect(plan.toSoldProductIds).toEqual(["p-mesa"])
+    expect(plan.toDeactivated).toEqual(["l-armario", "l-silla"])
     expect(plan.toReserved).toEqual([])
     expect(
       planMonitorUpdates(
@@ -93,6 +95,25 @@ describe("planMonitorUpdates", () => {
     expect(plan.toReserved).toEqual([])
     expect(plan.toActive).toEqual([])
     expect(plan.toSoldProductIds).toEqual([])
+    expect(plan.toDeactivated).toEqual([])
+  })
+
+  it("deactivates a live /item/ missing from both catalogs and ignores a row without a URL", () => {
+    const plan = planMonitorUpdates(
+      [{ href: "https://es.wallapop.com/item/otro-1300000001", reserved: false }],
+      [{ href: "https://es.wallapop.com/item/vendido-1300000002", sold: true }],
+      [
+        ...listings,
+        {
+          id: "l-queue",
+          productId: "p-queue",
+          status: "READY_TO_POST",
+          externalUrl: null,
+        },
+      ],
+    )
+    expect(plan.toDeactivated).toEqual(["l-armario", "l-silla", "l-mesa"])
+    expect(plan.toSoldProductIds).toEqual([])
   })
 
   it("logs catalog hrefs that are not in CRM instead of auto-SOLD", () => {
@@ -105,6 +126,7 @@ describe("planMonitorUpdates", () => {
     expect(plan.orphanSold).toHaveLength(1)
     expect(plan.toSoldProductIds).toEqual([])
     expect(plan.toReserved).toEqual([])
+    expect(plan.toDeactivated).toEqual(["l-armario", "l-silla", "l-mesa"])
   })
 })
 

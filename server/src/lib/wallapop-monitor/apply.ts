@@ -32,6 +32,20 @@ export async function applyMonitorPlan(plan: MonitorPlan): Promise<void> {
     })
   }
 
+  if (plan.toDeactivated.length > 0) {
+    const updated = await prisma.productListing.updateMany({
+      where: {
+        id: { in: plan.toDeactivated },
+        status: { in: ["ACTIVE", "RESERVED"] },
+      },
+      data: { status: "DEACTIVATED", externalUrl: null },
+    })
+    log("info", "wallapop_monitor_deactivated", {
+      count: updated.count,
+      ids: plan.toDeactivated,
+    })
+  }
+
   if (plan.toActive.length > 0) {
     const updated = await prisma.productListing.updateMany({
       where: {

@@ -16,6 +16,7 @@ export type MonitorCrmListing = {
 export type MonitorPlan = {
   toReserved: string[]
   toActive: string[]
+  toDeactivated: string[]
   toSoldProductIds: string[]
   orphanPublished: string[]
   orphanSold: string[]
@@ -110,9 +111,25 @@ function reservedAndActive(
   return { toReserved, toActive }
 }
 
+/** Live /item/ missing from both catalogs. Both catalogs empty: leave CRM alone. */
+function missingFromBothCatalogs(
+  byListing: Map<string, MonitorCrmListing>,
+  byPublished: Map<string, PublishedCatalogRow>,
+  soldKeys: Set<string>,
+) {
+  if (byPublished.size === 0 && soldKeys.size === 0) return []
+  const toDeactivated: string[] = []
+  for (const [key, listing] of byListing) {
+    if (listing.status !== "ACTIVE" && listing.status !== "RESERVED") continue
+    if (byPublished.has(key) || soldKeys.has(key)) continue
+    toDeactivated.push(listing.id)
+  }
+  return toDeactivated
+}
+
 /**
  * Match only `/item/` href ↔ listing.externalUrl. Never title.
- * Sold wins over En venta. Unseen rows: no change (do not un-SOLD / un-RESERVED).
+ * Sold wins over En venta. A live /item/ in neither catalog becomes DEACTIVATED.
  */
 export function planMonitorUpdates(
   published: PublishedCatalogRow[],
@@ -131,6 +148,7 @@ export function planMonitorUpdates(
   )
   return {
     ...reserved,
+    toDeactivated: missingFromBothCatalogs(byListing, byPublished, soldKeys),
     toSoldProductIds: soldPlan.toSoldProductIds,
     orphanPublished: orphanHrefs(published, byListing, false),
     orphanSold: orphanHrefs(sold, byListing, true),

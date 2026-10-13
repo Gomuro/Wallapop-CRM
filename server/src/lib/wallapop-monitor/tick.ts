@@ -86,6 +86,7 @@ async function runMonitorAfterAttach(): Promise<void> {
       toReserved: plan.toReserved.length,
       toActive: plan.toActive.length,
       toSold: plan.toSoldProductIds.length,
+      toDeactivated: plan.toDeactivated.length,
       orphanPublished: plan.orphanPublished.length,
       orphanSold: plan.orphanSold.length,
     });
