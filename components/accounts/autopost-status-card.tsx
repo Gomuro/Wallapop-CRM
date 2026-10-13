@@ -192,7 +192,17 @@ export function AutopostStatusCard({ state }: { state: AutopostIntervalState }) 
           Publicando un anuncio…
         </p>
       ) : null}
-      {running && !autopost?.publishing && autopost?.nextTickAt && nextTickLabel ? (
+      {running && !autopost?.publishing && autopost?.readyToPostCount === 0 ? (
+        <p className="mb-4 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
+          Sin anuncios pendientes. El autopost espera hasta que haya algo listo
+          para publicar.
+        </p>
+      ) : null}
+      {running &&
+      !autopost?.publishing &&
+      autopost?.readyToPostCount !== 0 &&
+      autopost?.nextTickAt &&
+      nextTickLabel ? (
         <p
           className="mb-4 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm tabular-nums"
           aria-live="polite"
@@ -201,12 +211,6 @@ export function AutopostStatusCard({ state }: { state: AutopostIntervalState }) 
             Próxima comprobación de la cola:{" "}
           </span>
           <span className="font-medium text-foreground">{nextTickLabel}</span>
-        </p>
-      ) : null}
-      {running && !autopost?.publishing && !autopost?.nextTickAt ? (
-        <p className="mb-4 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
-          Sin anuncios pendientes. El autopost espera hasta que haya algo listo
-          para publicar.
         </p>
       ) : null}
 

@@ -136,10 +136,12 @@ export type ApiAutopostStatus = {
   enabled: boolean
   livePublish: boolean
   lastPublication: { at: string; title: string } | null
-  /** Next queue check (ISO). Null when stopped, publishing, or the queue is empty. */
+  /** Next queue check (ISO). Null when the loop is not waiting. */
   nextTickAt: string | null
-  /** True while the current tick is uploading. Not the empty-queue state. */
+  /** True while the current tick is uploading. */
   publishing: boolean
+  /** Listings in READY_TO_POST on the default account. */
+  readyToPostCount: number
   recentSkips: Array<{
     at: string
     productId: string

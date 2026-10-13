@@ -80,6 +80,9 @@ export async function loadAutopostStatus(prisma: PrismaClient) {
     },
   })
   const enabled = account?.autopostEnabled === true
+  const readyToPostCount = await prisma.productListing.count({
+    where: { status: "READY_TO_POST", account: { isDefault: true } },
+  })
   return toAutopostStatusJson(resolution, {
     enabled,
     lastPublication:
@@ -88,6 +91,7 @@ export async function loadAutopostStatus(prisma: PrismaClient) {
         : null,
     nextTickAt: enabled ? getNextAutopostTickAt() : null,
     publishing: enabled && autopostTickRunning,
+    readyToPostCount,
     recentSkips: getRecentAutopostSkips(),
   })
 }
