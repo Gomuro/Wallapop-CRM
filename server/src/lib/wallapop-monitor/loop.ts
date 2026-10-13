@@ -53,8 +53,7 @@ async function runScheduledTick(generation: number): Promise<void> {
 }
 
 /**
- * Session probe on boot, En venta/Vendidos every 5 minutes.
- * First scrape waits the interval — not Iniciar autopost, not API chrome spawn.
+ * Session probe on boot, then En venta/Vendidos immediately and every 5 minutes.
  */
 export function startWallapopMonitorLoop(): void {
   if (started) {
@@ -80,6 +79,6 @@ export function startWallapopMonitorLoop(): void {
       }),
     )
     .finally(() => {
-      scheduleNext(generation)
+      void runScheduledTick(generation)
     })
 }
