@@ -196,7 +196,13 @@ async function connectOverCdp(cdpUrl: string) {
 export async function connectCdpHandle(): Promise<WallapopBrowserHandle> {
   const browser = await connectOverCdp(CDP_URL)
   const context = browser.contexts()[0] ?? (await browser.newContext())
-  const pages = context.pages()
+  const pages = context.pages().filter((p) => {
+    try {
+      return !p.isClosed() && p.url() !== ""
+    } catch {
+      return false
+    }
+  })
   const preferred =
     pages.find((p) => {
       const url = p.url().toLowerCase()

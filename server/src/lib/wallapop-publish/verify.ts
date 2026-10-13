@@ -19,7 +19,7 @@ export function isWallapopPublishedCatalogUrl(url: string): boolean {
     const parsed = new URL(url);
     const host = parsed.hostname.toLowerCase();
     if (host !== "wallapop.com" && !host.endsWith(".wallapop.com")) return false;
-    return /\/app\/catalog\/published(\/|$)/i.test(parsed.pathname);
+    return /\/app\/catalog\/(?:published|management)(\/|$)/i.test(parsed.pathname);
   } catch {
     return false;
   }
@@ -34,7 +34,7 @@ export function isWallapopUploadFormUrl(url: string): boolean {
   }
 }
 
-/** D9: post exists only on Tu Catálogo published (or rare /item/ redirect). */
+/** D9: posted on Tu Catálogo, the Pro management catalog, or a rare /item/ redirect. */
 export function classifyPublishLanding(input: {
   url: string | null;
   urlReadFailed: boolean;

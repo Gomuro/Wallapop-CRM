@@ -34,7 +34,7 @@ Public import path stays `../lib/wallapop-publish` (folder `index.ts` re-exports
 
 Live DOM (2026-10-08): `tsl-bump-suggestion-modal` / `walla-dialog.BumpSuggestionModal`, title `¡Yuhu! Producto subido`. Dismiss `Ahora no, gracias` (or `button[aria-label="Close"]`). Do not click `Destacar producto` unless asked.
 
-**D11 — `catalog-url.ts`:** poll `tsl-catalog-item a[href*="/item/"]` via `evaluate` (not Playwright visible). The row is in the DOM under Yuhu; waiting for visibility misses it. First row ~98% (Follow-up can delete/shift — grab immediately). Title match is fallback only. Then dismiss Yuhu. Wallapop rewrites titles (CRM «Mesita de cama…» → «Mesa Auxiliar Cama Teqler Regulable»).
+**D11 — `catalog-url.ts`:** after Publicar, `/app/catalog/published` and Pro `/app/catalog/management/…` are both a successful landing. Classic Tu Catálogo: poll `tsl-catalog-item a[href*="/item/"]` and take the first row (it sits under Yuhu; title match is fallback). Pro management: same row host as the monitor, `tr[id^="CatalogItem_"]`, then match that row by CRM title and price — do not take the first Pro row. Then dismiss Yuhu. Wallapop rewrites titles (CRM «Mesita de cama…» → «Mesa Auxiliar Cama Teqler Regulable»).
 
 **Do not live-post until the SKU is checked against Tu Catálogo.** Same product already on Wallapop → Follow-up can delete the new row after Yuhu. Yuhu ≠ the listing will stay. Never pick a READY_TO_POST that is a duplicate of an existing live caseta/title.
 

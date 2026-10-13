@@ -24,6 +24,7 @@ import {
   normalizePublishTitle,
   parseCatalogPriceEur,
   pickUniqueCatalogItemUrl,
+  PRO_CATALOG_ITEMS_EVAL,
   PUBLISHED_CATALOG_ITEMS_EVAL,
   readLandingAfterPublicarClick,
   readUrlAfterPublicarClick,
@@ -139,6 +140,16 @@ describe("classifyPublishLanding", () => {
       }),
     ).toEqual({ ok: true, reason: "published_catalog" })
     expect(isWallapopPublishedCatalogUrl(published)).toBe(true)
+    const management =
+      "https://es.wallapop.com/app/catalog/management/consumergoods"
+    expect(
+      classifyPublishLanding({
+        url: management,
+        urlReadFailed: false,
+        reviewMessage: null,
+      }),
+    ).toEqual({ ok: true, reason: "published_catalog" })
+    expect(isWallapopPublishedCatalogUrl(management)).toBe(true)
   })
 
   it("rejects upload form and Revisa banner", () => {
@@ -266,6 +277,43 @@ describe("pickUniqueCatalogItemUrl", () => {
         { title: helmet.title, price: 209.95 },
       ).reason,
     ).toBe("ambiguous")
+  })
+
+  it("reads the Pro management row by title, not the first item", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><table><tbody>
+        <tr id="CatalogItem_0">
+          <td></td><td></td>
+          <td>Philips 2000 Humidificador</td>
+          <td>29,99 €</td>
+          <td>13/10/2026</td><td>1</td><td>0</td>
+          <td><a href="https://es.wallapop.com/item/philips-2000-1">foto</a></td>
+        </tr>
+        <tr id="CatalogItem_1">
+          <td></td><td></td>
+          <td>Sartén de hierro colado con revestimiento</td>
+          <td>29,99 €</td>
+          <td>13/10/2026</td><td>0</td><td>0</td>
+          <td><a href="https://es.wallapop.com/item/sarten-hierro-2">foto</a></td>
+        </tr>
+      </tbody></table>`)
+      const rows = (await page.evaluate(PRO_CATALOG_ITEMS_EVAL)) as PublishedCatalogItem[]
+      expect(rows[0]?.title).toBe("Philips 2000 Humidificador")
+      expect(rows[1]?.priceText).toBe("29,99 €")
+      expect(
+        pickUniqueCatalogItemUrl(rows, {
+          title: "Sartén de hierro colado con revestimiento",
+          price: 29.99,
+        }),
+      ).toEqual({
+        href: "https://es.wallapop.com/item/sarten-hierro-2",
+        reason: "matched",
+      })
+    } finally {
+      await browser.close()
+    }
   })
 
   it("scrapes the captured tsl-catalog-item HTML like live publish", async () => {

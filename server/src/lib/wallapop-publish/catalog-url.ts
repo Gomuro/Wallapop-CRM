@@ -10,7 +10,53 @@ import {
 } from "./types";
 
 const CATALOG_URL_POLL_MS = 150;
-const CATALOG_URL_TIMEOUT_MS = 3_000;
+const CATALOG_URL_TIMEOUT_MS = 8_000;
+
+/**
+ * Pro catalog rows. Same host as the monitor (`tr[id^="CatalogItem_"]`).
+ * Title is the name cell; price is the cell that contains €.
+ */
+export const PRO_CATALOG_ITEMS_EVAL = `(() => {
+  function walk(root, visit) {
+    if (!root || !root.querySelectorAll) return;
+    root.querySelectorAll("*").forEach((el) => {
+      visit(el);
+      if (el.shadowRoot) walk(el.shadowRoot, visit);
+    });
+  }
+  function text(el) {
+    return String(el.innerText || el.textContent || "").replace(/\\s+/g, " ").trim();
+  }
+  const rows = [];
+  document.querySelectorAll('tr[id^="CatalogItem_"]').forEach((row) => {
+    let href = "";
+    walk(row, (node) => {
+      if (!href && node.tagName === "A" && String(node.href || "").includes("/item/")) {
+        href = String(node.href);
+      }
+    });
+    const bits = [];
+    row.querySelectorAll("td").forEach((td) => {
+      const value = text(td);
+      if (value) bits.push(value);
+    });
+    const priceText = bits.find((value) => /€/.test(value)) || "";
+    let title =
+      bits.find(
+        (value) =>
+          value !== priceText &&
+          !/^\\d{1,2}\\/\\d{1,2}\\/\\d{4}/.test(value) &&
+          !/^\\d+$/.test(value),
+      ) || "";
+    if (!title) {
+      const input = row.querySelector("input[aria-label]");
+      const aria = input ? String(input.getAttribute("aria-label") || "") : "";
+      title = aria.replace(/^Select\\s+/i, "").trim();
+    }
+    rows.push({ title, href, priceText });
+  });
+  return rows;
+})()`;
 
 /** Same scrape as live CDP — used in tests against captured Tu Catálogo HTML. */
 export const PUBLISHED_CATALOG_ITEMS_EVAL = `(() => {
@@ -129,14 +175,13 @@ export function firstCatalogItemUrl(
   return null;
 }
 
-export async function scrapePublishedCatalogItems(
+async function evaluateCatalogRows(
   page: Page,
+  expression: string,
 ): Promise<PublishedCatalogItem[]> {
   try {
     return (
-      ((await page.evaluate(PUBLISHED_CATALOG_ITEMS_EVAL)) as
-        | PublishedCatalogItem[]
-        | null) ?? []
+      ((await page.evaluate(expression)) as PublishedCatalogItem[] | null) ?? []
     );
   } catch (error) {
     log("warn", "wallapop_publish_catalog_scrape_failed", {
@@ -144,6 +189,18 @@ export async function scrapePublishedCatalogItems(
     });
     return [];
   }
+}
+
+export async function scrapePublishedCatalogItems(
+  page: Page,
+): Promise<PublishedCatalogItem[]> {
+  return evaluateCatalogRows(page, PUBLISHED_CATALOG_ITEMS_EVAL);
+}
+
+export async function scrapeProCatalogItems(
+  page: Page,
+): Promise<PublishedCatalogItem[]> {
+  return evaluateCatalogRows(page, PRO_CATALOG_ITEMS_EVAL);
 }
 
 export async function grabCatalogItemUrl(
@@ -156,16 +213,26 @@ export async function grabCatalogItemUrl(
   scanned: number;
 }> {
   const deadline = Date.now() + timeoutMs;
-  let rows: PublishedCatalogItem[] = [];
+  let classic: PublishedCatalogItem[] = [];
+  let pro: PublishedCatalogItem[] = [];
   while (true) {
-    rows = await scrapePublishedCatalogItems(page);
-    const first = firstCatalogItemUrl(rows);
-    if (first) {
-      return { href: first, reason: "first_row", scanned: rows.length };
+    pro = await scrapeProCatalogItems(page);
+    if (pro.length > 0) {
+      const picked = pickUniqueCatalogItemUrl(pro, wanted);
+      if (picked.href) {
+        return { href: picked.href, reason: picked.reason, scanned: pro.length };
+      }
+    } else {
+      classic = await scrapePublishedCatalogItems(page);
+      const first = firstCatalogItemUrl(classic);
+      if (first) {
+        return { href: first, reason: "first_row", scanned: classic.length };
+      }
     }
     if (Date.now() >= deadline) break;
     await page.waitForTimeout(CATALOG_URL_POLL_MS);
   }
+  const rows = pro.length > 0 ? pro : classic;
   const picked = pickUniqueCatalogItemUrl(rows, wanted);
   return { href: picked.href, reason: picked.reason, scanned: rows.length };
 }

@@ -46,6 +46,7 @@ export {
   grabCatalogItemUrl,
   parseCatalogPriceEur,
   pickUniqueCatalogItemUrl,
+  PRO_CATALOG_ITEMS_EVAL,
   PUBLISHED_CATALOG_ITEMS_EVAL,
   resolveItemUrlAfterPublish,
 } from "./catalog-url";
