@@ -16,7 +16,7 @@ import {
   resolveAutopostIntervalMs,
   toAutopostStatusJson,
 } from "./interval"
-import { pickNextAutopostListing } from "./pick"
+import { logAutopostQueueMiss, pickNextAutopostListing } from "./pick"
 
 export {
   AUTOPOST_INTERVAL_MS_MAX,
@@ -49,11 +49,17 @@ let scheduleTimer: ReturnType<typeof setTimeout> | null = null
 let scheduleGeneration = 0
 /** Wall clock when the in-process timer will run `runAutopostTick` (not publish finish). */
 let nextAutopostTickAtMs: number | null = null
+/** True from the moment a tick starts until it finishes, including the Chrome upload. */
+let autopostTickRunning = false
 
 /** ISO timestamp of the next scheduled queue tick, or null if the loop is not scheduling. */
 export function getNextAutopostTickAt(): string | null {
   if (nextAutopostTickAtMs == null) return null
   return new Date(nextAutopostTickAtMs).toISOString()
+}
+
+export function isAutopostTickRunning(): boolean {
+  return autopostTickRunning
 }
 
 export async function loadAutopostStatus(prisma: PrismaClient) {
@@ -81,6 +87,7 @@ export async function loadAutopostStatus(prisma: PrismaClient) {
         ? { at: last.lastPostedAt.toISOString(), title: last.product.title }
         : null,
     nextTickAt: enabled ? getNextAutopostTickAt() : null,
+    publishing: enabled && autopostTickRunning,
     recentSkips: getRecentAutopostSkips(),
   })
 }
@@ -114,6 +121,7 @@ function clearScheduledTick(): void {
 export function resetWallapopAutopostLoopForTests(): void {
   scheduleGeneration += 1
   clearScheduledTick()
+  autopostTickRunning = false
   started = false
   scheduling = false
 }
@@ -184,14 +192,24 @@ async function scheduleNextAsync(): Promise<void> {
     if (generation !== scheduleGeneration) return
     scheduleTimer = null
     nextAutopostTickAtMs = null
+    autopostTickRunning = true
     void runAutopostTick()
-      .then((keepGoing) => {
+      .then(async (keepGoing) => {
         if (keepGoing && generation === scheduleGeneration) {
-          void scheduleNextAsync()
+          await scheduleNextAsync()
+          return
+        }
+        if (!keepGoing && generation === scheduleGeneration) {
+          log("info", "wallapop_autopost_loop_stopped", {
+            reason: "empty_queue",
+          })
         }
       })
       .catch((error) => {
         log("error", "wallapop_autopost_tick_failed", serializeError(error))
+      })
+      .finally(() => {
+        autopostTickRunning = false
       })
   }, delayMs)
 }
@@ -300,6 +318,7 @@ export async function runAutopostTick(
   if (!picked.listing) {
     logAutopostIdlePick(picked)
     if (picked.scanned === 0) {
+      await logAutopostQueueMiss(prisma, accountId)
       log("info", "wallapop_autopost_paused_empty_queue")
       return false
     }

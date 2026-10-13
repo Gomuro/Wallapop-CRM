@@ -234,7 +234,7 @@ export function useAutopostIntervalState(): AutopostIntervalState {
   const nextTickLabel = useAutopostNextTickLabel(autopost?.nextTickAt, running)
 
   useEffect(() => {
-    if (!apiReady || !running || !autopost?.nextTickAt) return
+    if (!apiReady || !running) return
     let cancelled = false
     const timer = window.setInterval(() => {
       void getDefaultAccountAutopost()
@@ -242,12 +242,12 @@ export function useAutopostIntervalState(): AutopostIntervalState {
           if (!cancelled) setAutopost(next.autopost)
         })
         .catch(() => {})
-    }, 15000)
+    }, 5000)
     return () => {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [apiReady, running, autopost?.nextTickAt])
+  }, [apiReady, running])
 
   useEffect(() => {
     if (!saved) return

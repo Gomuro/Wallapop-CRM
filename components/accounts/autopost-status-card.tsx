@@ -184,7 +184,15 @@ export function AutopostStatusCard({ state }: { state: AutopostIntervalState }) 
         Última publicación: {lastLabel}
       </p>
 
-      {running && autopost?.nextTickAt && nextTickLabel ? (
+      {running && autopost?.publishing ? (
+        <p
+          className="mb-4 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm"
+          aria-live="polite"
+        >
+          Publicando un anuncio…
+        </p>
+      ) : null}
+      {running && !autopost?.publishing && autopost?.nextTickAt && nextTickLabel ? (
         <p
           className="mb-4 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm tabular-nums"
           aria-live="polite"
@@ -195,7 +203,7 @@ export function AutopostStatusCard({ state }: { state: AutopostIntervalState }) 
           <span className="font-medium text-foreground">{nextTickLabel}</span>
         </p>
       ) : null}
-      {running && !autopost?.nextTickAt ? (
+      {running && !autopost?.publishing && !autopost?.nextTickAt ? (
         <p className="mb-4 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm">
           Sin anuncios pendientes. El autopost espera hasta que haya algo listo
           para publicar.

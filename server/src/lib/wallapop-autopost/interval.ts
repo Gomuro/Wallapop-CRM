@@ -105,6 +105,7 @@ export function toAutopostStatusJson(
     enabled: boolean
     lastPublication: { at: string; title: string } | null
     nextTickAt: string | null
+    publishing?: boolean
     recentSkips?: ReturnType<typeof getRecentAutopostSkips>
   },
 ) {
@@ -116,6 +117,7 @@ export function toAutopostStatusJson(
     livePublish: isAutopostLivePublishEnabled(),
     lastPublication: extras.lastPublication,
     nextTickAt: extras.nextTickAt,
+    publishing: extras.publishing === true,
     recentSkips: extras.recentSkips ?? getRecentAutopostSkips(),
   }
 }
