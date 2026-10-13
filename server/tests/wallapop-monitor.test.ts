@@ -21,6 +21,7 @@ import {
   planMonitorUpdates,
   PUBLISHED_CATALOG_ROWS_EVAL,
 } from "../src/lib/wallapop-monitor"
+import { parseProPager } from "../src/lib/wallapop-monitor/pro-catalog"
 import { parseSnapshotText } from "../scripts/apply-catalog-url-snapshot"
 
 const ARMARIO = "https://es.wallapop.com/item/armario-escobero-1308052780"
@@ -437,5 +438,17 @@ describe("planTitleUrlLinks", () => {
     expect(plan.skips.every((skip) => skip.reason === "duplicate_crm")).toBe(
       true,
     )
+  })
+})
+
+describe("parseProPager", () => {
+  it("reads the Activos page range", () => {
+    expect(parseProPager("1-40 de 117")).toEqual({
+      from: 1,
+      to: 40,
+      total: 117,
+    })
+    expect(parseProPager("0-0 de 0")).toEqual({ from: 0, to: 0, total: 0 })
+    expect(parseProPager("")).toBeNull()
   })
 })

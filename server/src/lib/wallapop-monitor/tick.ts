@@ -18,6 +18,7 @@ import { getWallapopSession } from "../wallapop-session";
 import { applyMonitorPlan } from "./apply";
 import { CATALOG_PUBLISHED_URL } from "./catalog";
 import { planMonitorUpdates, type MonitorCrmListing } from "./diff";
+import { scrapeProCatalogs, wallapopCatalogKind } from "./pro-catalog";
 import {
   scrapePublishedCatalogRows,
   scrapeVendidosCatalogRows,
@@ -48,6 +49,30 @@ async function scrapeCatalogs(page: Page) {
   await dismissWallapopConsent(page);
   if (isLoginOr2faUrl(page.url())) {
     log("info", "wallapop_monitor_skip_login", { url: page.url() });
+    return null;
+  }
+  const kind = await wallapopCatalogKind(page);
+  if (kind === "pro") {
+    const pro = await scrapeProCatalogs(page);
+    if (!pro) return null;
+    log("info", "wallapop_monitor_published_scanned", {
+      rows: pro.published.length,
+      reserved: pro.published.filter((row) => row.reserved).length,
+      scrolledItems: pro.published.length,
+      url: page.url(),
+      mode: "pro",
+    });
+    log("info", "wallapop_monitor_sold_scanned", {
+      rows: pro.sold.length,
+      sold: pro.sold.length,
+      scrolledItems: pro.sold.length,
+      url: page.url(),
+      mode: "pro",
+    });
+    return pro;
+  }
+  if (kind !== "classic") {
+    log("warn", "wallapop_monitor_catalog_unknown", { url: page.url() });
     return null;
   }
   const publishedCount = await scrollCatalogUntilStable(page);
