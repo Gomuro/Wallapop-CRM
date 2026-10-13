@@ -25,6 +25,7 @@ import {
 } from "./product-listings"
 import { publishProduct } from "./product-publish"
 import { postProductWallapopDevolucion } from "./product-wallapop-devolucion"
+import { postCatalogDelete } from "./product-catalog-delete"
 import { postProductWallapopEliminar } from "./product-wallapop-eliminar"
 import { postProductWallapopSold } from "./product-wallapop-sold"
 import {
@@ -71,6 +72,7 @@ catalog.put("/products/:id/listing", putProductListing)
 catalog.post("/products/:id/publish", publishProduct)
 catalog.post("/products/:id/wallapop-sold", postProductWallapopSold)
 catalog.post("/products/:id/wallapop-eliminar", postProductWallapopEliminar)
+catalog.post("/products/:id/catalog-delete", postCatalogDelete)
 catalog.post("/products/:id/wallapop-devolucion", postProductWallapopDevolucion)
 
 catalog.get("/accounts/default", getDefaultAccount)

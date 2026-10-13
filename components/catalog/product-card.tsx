@@ -1,3 +1,6 @@
+import type { ReactNode } from "react"
+import { CheckIcon } from "lucide-react"
+
 import { CatalogLink } from "@/components/catalog/catalog-link"
 import {
   CATALOG_GRID_SIZES,
@@ -80,22 +83,92 @@ function Price({ price }: { price: number }) {
   )
 }
 
+function SelectMark({ selected }: { selected: boolean }) {
+  return (
+    <span
+      className={cn(
+        "flex size-6 items-center justify-center rounded-sm border-2 bg-background text-xs font-semibold shadow-sm",
+        selected
+          ? "border-primary bg-primary text-primary-foreground"
+          : "border-foreground/40",
+      )}
+      aria-hidden
+    >
+      {selected ? <CheckIcon className="size-4" strokeWidth={2.5} /> : null}
+    </span>
+  )
+}
+
+function ProductCardFrame({
+  productId,
+  selecting,
+  selected,
+  onToggle,
+  onHold,
+  className,
+  children,
+}: {
+  productId: string
+  selecting: boolean
+  selected: boolean
+  onToggle?: () => void
+  onHold?: () => void
+  className: string
+  children: ReactNode
+}) {
+  if (selecting) {
+    return (
+      <button
+        type="button"
+        onClick={onToggle}
+        className={className}
+        aria-pressed={selected}
+      >
+        {children}
+      </button>
+    )
+  }
+  return (
+    <CatalogLink
+      href={`/products/${productId}`}
+      className={className}
+      onHold={onHold}
+    >
+      {children}
+    </CatalogLink>
+  )
+}
+
 export function ProductCard({
   product,
   view,
   priority = false,
+  selecting = false,
+  selected = false,
+  onToggle,
+  onHold,
 }: {
   product: InventoryProduct
   view: "grid" | "list"
   priority?: boolean
+  selecting?: boolean
+  selected?: boolean
+  onToggle?: () => void
+  onHold?: () => void
 }) {
   const cover = product.images[0]
+  const shellClass =
+    "group block w-full touch-manipulation rounded-xl text-left outline-none transition-[box-shadow,transform] hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.99]"
 
   if (view === "list") {
     return (
-      <CatalogLink
-        href={`/products/${product.id}`}
-        className="group block touch-manipulation rounded-xl outline-none transition-[box-shadow,transform] hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.99]"
+      <ProductCardFrame
+        productId={product.id}
+        selecting={selecting}
+        selected={selected}
+        onToggle={onToggle}
+        onHold={onHold}
+        className={shellClass}
       >
         <Card size="sm" className="flex-row items-stretch gap-0 py-0 shadow-none">
           <div className="relative size-24 shrink-0 overflow-hidden bg-muted">
@@ -117,6 +190,11 @@ export function ProductCard({
               status={product.status}
               className="top-1.5 left-1.5"
             />
+            {selecting ? (
+              <span className="absolute top-1.5 right-1.5">
+                <SelectMark selected={selected} />
+              </span>
+            ) : null}
           </div>
           <div className="flex min-w-0 flex-1 flex-col justify-between p-3">
             <div className="min-w-0">
@@ -135,17 +213,53 @@ export function ProductCard({
             ) : null}
           </div>
         </Card>
-      </CatalogLink>
+      </ProductCardFrame>
     )
   }
 
   return (
-    <CatalogLink
-      href={`/products/${product.id}`}
-      className="group flex h-full min-h-0 flex-col touch-manipulation rounded-xl bg-card outline-none ring-1 ring-border transition-[box-shadow,transform] duration-200 hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.99]"
+    <GridProductCard
+      product={product}
+      cover={cover}
+      priority={priority}
+      selecting={selecting}
+      selected={selected}
+      onToggle={onToggle}
+      onHold={onHold}
+    />
+  )
+}
+
+function GridProductCard({
+  product,
+  cover,
+  priority,
+  selecting,
+  selected,
+  onToggle,
+  onHold,
+}: {
+  product: InventoryProduct
+  cover: string | undefined
+  priority: boolean
+  selecting: boolean
+  selected: boolean
+  onToggle?: () => void
+  onHold?: () => void
+}) {
+  const gridClass =
+    "group flex h-full min-h-0 w-full flex-col touch-manipulation rounded-xl bg-card text-left outline-none ring-1 ring-border transition-[box-shadow,transform] duration-200 hover:shadow-md focus-visible:ring-3 focus-visible:ring-ring/50 active:scale-[0.99]"
+  return (
+    <ProductCardFrame
+      productId={product.id}
+      selecting={selecting}
+      selected={selected}
+      onToggle={onToggle}
+      onHold={onHold}
+      className={gridClass}
     >
-      <Card className="h-full gap-0 overflow-hidden py-0 shadow-none ring-0">
-        <div className="relative aspect-square shrink-0 overflow-hidden bg-muted">
+    <Card className="h-full gap-0 overflow-hidden py-0 shadow-none ring-0">
+      <div className="relative aspect-square shrink-0 overflow-hidden bg-muted">
           {cover ? (
             <ProductImage
               src={cover}
@@ -162,6 +276,11 @@ export function ProductCard({
             status={product.status}
             className="top-2 left-2"
           />
+          {selecting ? (
+            <span className="absolute top-2 right-2">
+              <SelectMark selected={selected} />
+            </span>
+          ) : null}
         </div>
         <div className="flex flex-1 flex-col gap-1 p-2.5">
           <Price price={product.price} />
@@ -177,6 +296,6 @@ export function ProductCard({
           ) : null}
         </div>
       </Card>
-    </CatalogLink>
+    </ProductCardFrame>
   )
 }

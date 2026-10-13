@@ -8,7 +8,10 @@ import {
 import { deleteLocalImage } from "../../../lib/uploads/delete-local-image"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
-import { listingBlocksWarehouseInactive } from "../../../lib/inventory/listing-active"
+import {
+  catalogDeleteNeedsWallapop,
+  listingBlocksWarehouseInactive,
+} from "../../../lib/inventory/listing-active"
 import { markProductSoldTx, type SoldTxResult } from "../lib/product-sold"
 import { dequeueInactiveWarehouseQueue } from "../lib/warehouse-inactive"
 import { prismaErrorCode } from "../lib/prisma-error"
@@ -173,6 +176,46 @@ export async function postProductSold(req: Request, res: Response) {
   res.json({ product: toProductJson(product) })
 }
 
+const STILL_ON_WALLAPOP =
+  "El anuncio sigue en Wallapop. Primero hay que eliminarlo allí."
+
+export async function eraseProductIfOffWallapop(
+  prisma: PrismaDb,
+  id: string,
+): Promise<"not_found" | "still_on_wallapop" | "deleted"> {
+  const existing = await prisma.product.findUnique({
+    where: { id },
+    select: {
+      status: true,
+      images: { select: { storageKey: true } },
+      listings: {
+        where: { account: { isDefault: true } },
+        select: { status: true, externalUrl: true },
+        take: 1,
+      },
+    },
+  })
+  if (!existing) return "not_found"
+  if (
+    catalogDeleteNeedsWallapop({
+      status: existing.status,
+      listing: existing.listings[0],
+    })
+  ) {
+    return "still_on_wallapop"
+  }
+  try {
+    await prisma.product.delete({ where: { id } })
+  } catch (error) {
+    if (prismaErrorCode(error) === "P2025") return "not_found"
+    throw error
+  }
+  for (const image of existing.images) {
+    await deleteLocalImage(image.storageKey)
+  }
+  return "deleted"
+}
+
 export async function deleteProduct(req: Request, res: Response) {
   const id = paramId(req)
   if (!id) {
@@ -184,25 +227,14 @@ export async function deleteProduct(req: Request, res: Response) {
     sendError(res, 500, "INTERNAL", "Database is not configured.")
     return
   }
-  const existing = await prisma.product.findUnique({
-    where: { id },
-    select: { images: { select: { storageKey: true } } },
-  })
-  if (!existing) {
+  const result = await eraseProductIfOffWallapop(prisma, id)
+  if (result === "not_found") {
     sendError(res, 404, "NOT_FOUND", "Product not found.")
     return
   }
-  try {
-    await prisma.product.delete({ where: { id } })
-  } catch (error) {
-    if (prismaErrorCode(error) === "P2025") {
-      sendError(res, 404, "NOT_FOUND", "Product not found.")
-      return
-    }
-    throw error
-  }
-  for (const image of existing.images) {
-    await deleteLocalImage(image.storageKey)
+  if (result === "still_on_wallapop") {
+    sendError(res, 409, "STILL_ON_WALLAPOP", STILL_ON_WALLAPOP)
+    return
   }
   res.json({ ok: true })
 }

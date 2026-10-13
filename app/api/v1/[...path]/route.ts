@@ -68,6 +68,7 @@ function proxyTimeoutMs(pathname: string): number {
   if (
     pathname.includes("/wallapop-sold") ||
     pathname.includes("/wallapop-eliminar") ||
+    pathname.includes("/catalog-delete") ||
     pathname.includes("/wallapop-devolucion") ||
     pathname.includes("/publish") ||
     pathname.includes("/connect")

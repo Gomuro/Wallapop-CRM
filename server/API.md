@@ -106,7 +106,8 @@ Postman-колекція: `server/postman/`.
 | POST | `/api/v1/products` | `sku`, `title`, `description`, `price`, `currency` default `EUR`, `categoryId` (листок), `condition` enum, `brand` (обов’язкова), `weightKg?`, `shippingPackageSize?` (`STANDARD` \| `BULKY`), `widthCm?` / `lengthCm?` / `heightCm?`, `typeAttributes?`. Авто listing на default, статус `READY_TO_POST` |
 | GET | `/api/v1/products/:id` | Картка + images + listing |
 | PATCH | `/api/v1/products/:id` | Часткове оновлення складу: `sku`, `title`, `description`, `price`, `currency`, `categoryId`, `condition`, `brand`, `weightKg`, `shippingPackageSize`, `widthCm`, `lengthCm`, `heightCm`, `typeAttributes` (усі опційно). **Strict body:** `status`, `soldAt`, `soldPrice` та невідомі ключі → **400** `VALIDATION_ERROR` (не strip). Статус — лише #57. |
-| DELETE | `/api/v1/products/:id` | |
+| DELETE | `/api/v1/products/:id` | **409** `STILL_ON_WALLAPOP`, якщо оголошення ще на Wallapop: listing `ACTIVE`/`RESERVED` з `/item/`, або склад `SOLD` і URL ще є. Тоді спочатку `POST …/catalog-delete`. |
+| POST | `/api/v1/products/:id/catalog-delete` | Якщо оголошення ще на Wallapop — той самий Eliminar (слот `eliminar`), потім рядок з CRM. Dry-run не стирає CRM. Якщо на Wallapop уже немає — лише `DELETE`. **200** `{ ok, dryRun, deleted, error }`. |
 
 `condition`: `NEW` \| `AS_GOOD_AS_NEW` \| `GOOD` \| `FAIR` \| `HAS_GIVEN_IT_ALL`.  
 Складський `status` на картці: `ACTIVE` \| `SOLD` \| `INACTIVE` (змінюється лише ендпоінтами #57, не загальним PATCH).

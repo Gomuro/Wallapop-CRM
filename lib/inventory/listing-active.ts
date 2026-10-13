@@ -1,6 +1,22 @@
 import type { InventoryListing, InventoryProduct } from "@/lib/inventory/types"
 import { wallapopEsItemUrlOrNull, wallapopItemUrlOrNull } from "./wallapop-item-url"
 
+/**
+ * Catalog delete must take the ad off Wallapop first.
+ * En venta / Reservado, or a sold row that still has a public /item/ URL.
+ */
+export function catalogDeleteNeedsWallapop(input: {
+  status: string
+  listing:
+    | { status: string; externalUrl: string | null }
+    | null
+    | undefined
+}): boolean {
+  if (wallapopEsItemUrlOrNull(input.listing?.externalUrl) == null) return false
+  if (input.status === "SOLD") return true
+  return isLiveOnWallapopStatus(input.listing?.status)
+}
+
 /** Live Wallapop listing: en venta or reserved (warehouse still ACTIVE). */
 export function isLiveOnWallapopStatus(
   status: string | null | undefined,

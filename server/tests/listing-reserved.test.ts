@@ -2,6 +2,7 @@ import { describe, expect, it } from "vitest"
 
 import { listingIndicatorShort, listingStatusLabel } from "../../lib/inventory/format"
 import {
+  catalogDeleteNeedsWallapop,
   computeListingActive,
   isLiveOnWallapopStatus,
 } from "../../lib/inventory/listing-active"
@@ -66,5 +67,45 @@ describe("ListingStatus.RESERVED", () => {
         "INACTIVE",
       ),
     ).toBeNull()
+  })
+})
+
+describe("catalog delete vs Wallapop", () => {
+  const url = "https://es.wallapop.com/item/silla-12345678"
+
+  it("blocks CRM delete while the ad is en venta, reserved, or still sold", () => {
+    expect(
+      catalogDeleteNeedsWallapop({
+        status: "ACTIVE",
+        listing: { status: "ACTIVE", externalUrl: url },
+      }),
+    ).toBe(true)
+    expect(
+      catalogDeleteNeedsWallapop({
+        status: "ACTIVE",
+        listing: { status: "RESERVED", externalUrl: url },
+      }),
+    ).toBe(true)
+    expect(
+      catalogDeleteNeedsWallapop({
+        status: "SOLD",
+        listing: { status: "DEACTIVATED", externalUrl: url },
+      }),
+    ).toBe(true)
+  })
+
+  it("allows CRM delete when Wallapop no longer has the item URL", () => {
+    expect(
+      catalogDeleteNeedsWallapop({
+        status: "SOLD",
+        listing: { status: "DEACTIVATED", externalUrl: null },
+      }),
+    ).toBe(false)
+    expect(
+      catalogDeleteNeedsWallapop({
+        status: "ACTIVE",
+        listing: { status: "READY_TO_POST", externalUrl: null },
+      }),
+    ).toBe(false)
   })
 })

@@ -3,11 +3,12 @@
 import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 
-import {
-  deleteProductAction,
-  markProductInactiveAction,
-} from "@/app/actions/products"
+import { markProductInactiveAction } from "@/app/actions/products"
 import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
+import {
+  catalogDeleteErrorMessage,
+  deleteProductFromCatalog,
+} from "@/lib/api/catalog-delete"
 import {
   markWallapopSold,
   wallapopSoldErrorMessage,
@@ -120,6 +121,7 @@ export function MarkInactiveButton({ productId }: { productId: string }) {
 }
 
 export function DeleteProductButton({ productId }: { productId: string }) {
+  const router = useRouter()
   const [open, setOpen] = useState(false)
   const [error, setError] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
@@ -135,7 +137,7 @@ export function DeleteProductButton({ productId }: { productId: string }) {
       triggerClassName="h-12 w-full text-destructive"
       triggerVariant="ghost"
       title="Eliminar del catálogo"
-      description="Se borrará el producto del CRM (fotos, anuncio y cola). No se puede recuperar. Wallapop no se toca: si el anuncio sigue allí, elimínalo antes con «Eliminar en Wallapop»."
+      description="Se borra el producto del CRM. Si el anuncio sigue en Wallapop (en venta, reservado o vendido), primero se elimina allí."
       confirmLabel="Eliminar del todo"
       pendingLabel="Eliminando…"
       confirmVariant="destructive"
@@ -145,11 +147,15 @@ export function DeleteProductButton({ productId }: { productId: string }) {
         setError(null)
         startTransition(async () => {
           try {
-            const result = await deleteProductAction(productId)
-            if (result?.error) setError(result.error)
+            const result = await deleteProductFromCatalog(productId)
+            if (result.dryRun) {
+              setError(result.error ?? "Prueba: el anuncio sigue en Wallapop.")
+              return
+            }
+            router.push("/")
+            router.refresh()
           } catch (caught) {
-            if (isNextRedirect(caught)) throw caught
-            setError(actionFailureMessage(caught))
+            setError(catalogDeleteErrorMessage(caught))
           }
         })
       }}

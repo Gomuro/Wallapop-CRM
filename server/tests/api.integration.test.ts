@@ -912,6 +912,10 @@ describe("API v1 integration (Express + Postgres)", () => {
         })
         expect(put.status).toBe(200)
 
+        const blocked = await agent.delete(`/api/v1/products/${id}`)
+        expect(blocked.status).toBe(409)
+        expect(errorCode(blocked.body)).toBe("STILL_ON_WALLAPOP")
+
         const count = await deactivateListingAfterEliminar(getPrisma()!, id)
         expect(count).toBe(1)
 
@@ -931,6 +935,10 @@ describe("API v1 integration (Express + Postgres)", () => {
           .send({ status: "READY_TO_POST", externalUrl: null })
         expect(requeue.status).toBe(200)
         expect(requeue.body.listing?.status).toBe("READY_TO_POST")
+
+        const removed = await agent.post(`/api/v1/products/${id}/catalog-delete`).send({})
+        expect(removed.status).toBe(200)
+        expect(removed.body.deleted).toBe(true)
       } finally {
         await agent.delete(`/api/v1/products/${id}`)
       }
