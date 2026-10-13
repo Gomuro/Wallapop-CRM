@@ -45,6 +45,12 @@ export function canRequeueListing(product: InventoryProduct): boolean {
   return product.status !== "SOLD" && product.listing?.status === "DEACTIVATED"
 }
 
+/** «Devolución»: sold SKU comes back (Eliminar on Wallapop if needed, then cola). */
+export function canStartDevolucion(product: InventoryProduct): boolean {
+  if (product.status !== "SOLD") return false
+  return product.listing?.status !== "POSTING"
+}
+
 /** Live /item/ or a publish in flight — warehouse must not flip to Inactivo. */
 export function listingBlocksWarehouseInactive(
   listing:

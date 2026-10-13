@@ -7,6 +7,10 @@ import { updateProductListingAction } from "@/app/actions/listing"
 import { ConfirmAction } from "@/components/confirm-action"
 import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
 import {
+  startWallapopDevolucion,
+  wallapopDevolucionErrorMessage,
+} from "@/lib/api/wallapop-devolucion"
+import {
   eliminarWallapopListing,
   wallapopEliminarErrorMessage,
 } from "@/lib/api/wallapop-eliminar"
@@ -105,6 +109,58 @@ export function RequeueListingButton({ productId }: { productId: string }) {
       error={state.error}
       pending={state.pending}
       onConfirm={confirmRequeue}
+    />
+  )
+}
+
+/** Sold return: Eliminar on Wallapop if the /item/ still exists, then same SKU to cola. */
+export function DevolucionButton({
+  productId,
+  hasItemUrl,
+}: {
+  productId: string
+  hasItemUrl: boolean
+}) {
+  const router = useRouter()
+  const state = useConfirmState()
+
+  function confirmDevolucion() {
+    state.setError(null)
+    state.startTransition(async () => {
+      try {
+        const result = await startWallapopDevolucion(productId)
+        if (result.dryRun) {
+          state.setError(
+            "Prueba: se encontró «Eliminar» en Wallapop y se paró antes de confirmar. El anuncio vendido sigue en Wallapop y el producto no ha vuelto a la cola.",
+          )
+          return
+        }
+        state.setOpen(false)
+        router.refresh()
+      } catch (caught) {
+        state.setError(wallapopDevolucionErrorMessage(caught))
+      }
+    })
+  }
+
+  return (
+    <ConfirmAction
+      open={state.open}
+      onOpenChange={state.onOpenChange}
+      triggerLabel="Devolución"
+      triggerClassName="h-12 w-full"
+      triggerVariant="default"
+      title="Devolución"
+      description={
+        hasItemUrl
+          ? "Se borrará el anuncio vendido en Wallapop (Eliminar) y el mismo producto volverá a En venta y a la cola de publicación. No se crea un producto nuevo."
+          : "El anuncio ya no tiene URL pública. El mismo producto volverá a En venta y a la cola de publicación. No se crea un producto nuevo."
+      }
+      confirmLabel="Confirmar devolución"
+      pendingLabel={hasItemUrl ? "En Wallapop…" : "Guardando…"}
+      error={state.error}
+      pending={state.pending}
+      onConfirm={confirmDevolucion}
     />
   )
 }

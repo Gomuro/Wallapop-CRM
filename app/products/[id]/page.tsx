@@ -14,6 +14,7 @@ import {
   SoldSyncButton,
 } from "@/components/product-form/product-actions"
 import {
+  DevolucionButton,
   EliminarWallapopButton,
   RequeueListingButton,
 } from "@/components/product-form/listing-actions"
@@ -22,7 +23,9 @@ import {
   canEliminarOnWallapop,
   canMarkWarehouseInactive,
   canRequeueListing,
+  canStartDevolucion,
 } from "@/lib/inventory/listing-active"
+import { wallapopEsItemUrlOrNull } from "@/lib/inventory/wallapop-item-url"
 import { ListingDetailSection } from "@/components/catalog/listing-detail"
 import {
   categoryLabel,
@@ -104,10 +107,19 @@ function ProductDetailAside({ product }: { product: InventoryProduct }) {
           Editar producto
         </Button>
         <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:inset-auto md:z-auto md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
-          <SoldSyncButton
-            productId={product.id}
-            disabled={product.status === "SOLD"}
-          />
+          {canStartDevolucion(product) ? (
+            <DevolucionButton
+              productId={product.id}
+              hasItemUrl={
+                wallapopEsItemUrlOrNull(product.listing?.externalUrl) != null
+              }
+            />
+          ) : (
+            <SoldSyncButton
+              productId={product.id}
+              disabled={product.status === "SOLD"}
+            />
+          )}
         </div>
         {canEliminarOnWallapop(product) ? (
           <EliminarWallapopButton productId={product.id} />

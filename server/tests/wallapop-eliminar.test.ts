@@ -8,6 +8,7 @@ import {
   canEliminarOnWallapop,
   canMarkWarehouseInactive,
   canRequeueListing,
+  canStartDevolucion,
 } from "../../lib/inventory/listing-active"
 import type { InventoryProduct } from "../../lib/inventory/types"
 import {
@@ -25,6 +26,7 @@ import {
   cacheBustItemUrl,
   publishedRowsContainItem,
 } from "../src/lib/wallapop-eliminar"
+import { listingForDevolucion } from "../src/routes/product-wallapop-devolucion-prepare"
 import {
   isEliminarDryRun,
   listingForEliminar,
@@ -106,6 +108,35 @@ describe("publishedRowsContainItem", () => {
     expect(publishedRowsContainItem(rows, ASALVO)).toBe(true)
     expect(publishedRowsContainItem(rows.slice(0, 1), ASALVO)).toBe(false)
     expect(publishedRowsContainItem([], ASALVO)).toBe(false)
+  })
+})
+
+describe("listingForDevolucion", () => {
+  it("allows a sold SKU with or without a public /item/ URL", () => {
+    expect(
+      listingForDevolucion({
+        status: "ACTIVE",
+        listings: [{ status: "DEACTIVATED", externalUrl: ASALVO }],
+      }),
+    ).toMatchObject({ code: "NOT_SOLD" })
+    expect(
+      listingForDevolucion({
+        status: "SOLD",
+        listings: [{ status: "POSTING", externalUrl: null }],
+      }),
+    ).toMatchObject({ code: "PUBLISH_IN_PROGRESS" })
+    expect(
+      listingForDevolucion({
+        status: "SOLD",
+        listings: [{ status: "DEACTIVATED", externalUrl: ASALVO }],
+      }),
+    ).toEqual({ itemUrl: ASALVO })
+    expect(
+      listingForDevolucion({
+        status: "SOLD",
+        listings: [{ status: "DEACTIVATED", externalUrl: null }],
+      }),
+    ).toEqual({ itemUrl: null })
   })
 })
 
@@ -213,6 +244,14 @@ describe("card buttons", () => {
     expect(canEliminarOnWallapop(product("SOLD", { status: "ACTIVE", externalUrl: ASALVO }))).toBe(false)
     expect(canEliminarOnWallapop(product("ACTIVE", { status: "READY_TO_POST", externalUrl: null }))).toBe(false)
     expect(canEliminarOnWallapop(product("ACTIVE", null))).toBe(false)
+  })
+
+  it("shows Devolución only for a sold product that is not posting", () => {
+    expect(canStartDevolucion(product("SOLD", { status: "DEACTIVATED", externalUrl: ASALVO }))).toBe(true)
+    expect(canStartDevolucion(product("SOLD", { status: "DEACTIVATED", externalUrl: null }))).toBe(true)
+    expect(canStartDevolucion(product("SOLD", null))).toBe(true)
+    expect(canStartDevolucion(product("SOLD", { status: "POSTING", externalUrl: null }))).toBe(false)
+    expect(canStartDevolucion(product("ACTIVE", { status: "DEACTIVATED", externalUrl: null }))).toBe(false)
   })
 
   it("shows Poner en cola only for DEACTIVATED on an unsold product", () => {

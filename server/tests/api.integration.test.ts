@@ -937,6 +937,113 @@ describe("API v1 integration (Express + Postgres)", () => {
     })
   })
 
+  describe("wallapop devolución", () => {
+    it("keeps warehouse SOLD after eliminar CRM, then requeues the same SKU", async () => {
+      const categoryId = await findLeafCategoryId(agent)
+      const sku = `API-DEVOL-${Date.now()}`
+      const created = await agent.post("/api/v1/products").send({
+        sku,
+        title: "API devolución listing",
+        description: "Vitest devolución READY_TO_POST",
+        price: 11,
+        currency: "EUR",
+        categoryId,
+        condition: "GOOD",
+        brand: "Acme",
+        weightKg: 1.2,
+      })
+      expect(created.status).toBe(201)
+      const id = created.body.product?.id as string
+      try {
+        const put = await agent.put(`/api/v1/products/${id}/listing`).send({
+          status: "ACTIVE",
+          externalUrl: "https://es.wallapop.com/item/api-devolucion-1234567890",
+        })
+        expect(put.status).toBe(200)
+
+        const sold = await agent.post(`/api/v1/products/${id}/sold`)
+        expect(sold.status).toBe(200)
+        expect(sold.body.product?.status).toBe("SOLD")
+        expect(sold.body.product?.listing?.status).toBe("DEACTIVATED")
+        expect(sold.body.product?.listing?.externalUrl).toBe(
+          "https://es.wallapop.com/item/api-devolucion-1234567890",
+        )
+
+        const blocked = await agent
+          .post(`/api/v1/products/${id}/wallapop-eliminar`)
+          .send({ dryRun: true })
+        expect(blocked.status).toBe(409)
+        expect(errorCode(blocked.body)).toBe("ALREADY_SOLD")
+
+        const count = await deactivateListingAfterEliminar(getPrisma()!, id)
+        expect(count).toBe(1)
+        const afterEliminar = await agent.get(`/api/v1/products/${id}`)
+        expect(afterEliminar.body.product?.status).toBe("SOLD")
+        expect(afterEliminar.body.product?.listing?.status).toBe("DEACTIVATED")
+        expect(afterEliminar.body.product?.listing?.externalUrl).toBeNull()
+
+        const listingPut = await agent
+          .put(`/api/v1/products/${id}/listing`)
+          .send({ status: "READY_TO_POST", externalUrl: null })
+        expect(listingPut.status).toBe(200)
+        expect(listingPut.body.listing?.status).toBe("READY_TO_POST")
+        const stillSold = await agent.get(`/api/v1/products/${id}`)
+        expect(stillSold.body.product?.status).toBe("SOLD")
+
+        const devolucion = await agent
+          .post(`/api/v1/products/${id}/wallapop-devolucion`)
+          .send({})
+        expect(devolucion.status).toBe(200)
+        expect(devolucion.body.step).toBe("requeued")
+        expect(devolucion.body.eliminated).toBe(false)
+        expect(devolucion.body.product?.status).toBe("ACTIVE")
+        expect(devolucion.body.product?.soldAt).toBeNull()
+        expect(devolucion.body.product?.listing?.status).toBe("READY_TO_POST")
+        expect(devolucion.body.product?.sku).toBe(sku)
+      } finally {
+        await agent.delete(`/api/v1/products/${id}`)
+      }
+    })
+
+    it("POST devolución without /item/ URL returns the same SKU to cola", async () => {
+      const categoryId = await findLeafCategoryId(agent)
+      const created = await agent.post("/api/v1/products").send({
+        sku: `API-DEVOL2-${Date.now()}`,
+        title: "API devolución cola",
+        description: "Vitest devolución HTTP",
+        price: 8,
+        currency: "EUR",
+        categoryId,
+        condition: "GOOD",
+        brand: "Acme",
+        weightKg: 0.8,
+      })
+      expect(created.status).toBe(201)
+      const id = created.body.product?.id as string
+      try {
+        const sold = await agent.post(`/api/v1/products/${id}/sold`)
+        expect(sold.status).toBe(200)
+        expect(sold.body.product?.status).toBe("SOLD")
+
+        const devolucion = await agent
+          .post(`/api/v1/products/${id}/wallapop-devolucion`)
+          .send({})
+        expect(devolucion.status).toBe(200)
+        expect(devolucion.body.ok).toBe(true)
+        expect(devolucion.body.dryRun).toBe(false)
+        expect(devolucion.body.step).toBe("requeued")
+        expect(devolucion.body.eliminated).toBe(false)
+        expect(devolucion.body.product?.status).toBe("ACTIVE")
+        expect(devolucion.body.product?.soldAt).toBeNull()
+        expect(devolucion.body.product?.listing?.status).toBe("READY_TO_POST")
+        expect(devolucion.body.product?.listing?.externalUrl).toBeNull()
+        expect(devolucion.body.product?.sku).toBe(created.body.product?.sku)
+      } finally {
+        await agent.delete(`/api/v1/products/${id}`)
+      }
+    })
+  })
+
   describe("wallapop identity reset", () => {
     let id: string
     let previousEmail: string | null = null
