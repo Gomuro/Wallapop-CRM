@@ -24,7 +24,7 @@ import {
 import { listingStatusLabel, formatListingPostedAt } from "@/lib/inventory/format"
 import { computeListingActive } from "@/lib/inventory/listing-active"
 import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
-import type { InventoryListing } from "@/lib/inventory/types"
+import type { InventoryListing, InventoryProduct } from "@/lib/inventory/types"
 import { wallapopItemUrlOrNull } from "@/lib/inventory/wallapop-item-url"
 import type { ListingStatus } from "@/lib/validations"
 import { typeMeta, typeSection } from "@/lib/ui/type"
@@ -301,9 +301,11 @@ export function ListingFormBody({
 export function ListingFields({
   productId,
   listing,
+  warehouseStatus,
 }: {
   productId: string
   listing: InventoryListing | null
+  warehouseStatus: InventoryProduct["status"]
 }) {
   const router = useRouter()
   const boundAction = updateProductListingAction.bind(null, productId)
@@ -375,6 +377,7 @@ export function ListingFields({
         </div>
         <ListingStatusBadge
           product={{
+            status: warehouseStatus,
             listing,
             listingActive: computeListingActive(listing),
           }}

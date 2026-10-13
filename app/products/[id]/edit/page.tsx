@@ -75,7 +75,11 @@ export default async function EditProductPage({
           submitLabel="Guardar"
         />
         <div className="px-4 pb-8 md:px-8 lg:mx-auto lg:max-w-xl lg:px-0">
-          <ListingFields productId={product.id} listing={product.listing} />
+          <ListingFields
+            productId={product.id}
+            listing={product.listing}
+            warehouseStatus={product.status}
+          />
         </div>
       </div>
     </>

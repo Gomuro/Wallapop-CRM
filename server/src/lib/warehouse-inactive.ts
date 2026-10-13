@@ -1,3 +1,5 @@
+import type { Prisma } from "../../generated/prisma/client"
+
 import { getPrisma } from "./db"
 import { log, serializeError } from "./log"
 
@@ -6,7 +8,7 @@ const QUEUE_STATUSES = ["READY_TO_POST", "FAILED"] as const
 type ListingClient = {
   productListing: {
     updateMany: (args: {
-      where: unknown
+      where: Prisma.ProductListingWhereInput
       data: { status: "DEACTIVATED"; externalUrl: null }
     }) => Promise<{ count: number }>
   }
