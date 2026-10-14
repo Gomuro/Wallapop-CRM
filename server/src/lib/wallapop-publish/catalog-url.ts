@@ -11,6 +11,23 @@ import {
 
 const CATALOG_URL_POLL_MS = 150;
 const CATALOG_URL_TIMEOUT_MS = 8_000;
+const PRO_PAGE_CAP = 20;
+const PRO_PAGE_WAIT_MS = 8_000;
+
+const PRO_PAGER_EVAL = `(() => {
+  const info = document.querySelector("tsl-pagination-actions .PaginationActions__info");
+  return info ? String(info.textContent || "").replace(/\\s+/g, " ").trim() : "";
+})()`;
+
+const PRO_NEXT_EVAL = `(() => {
+  const host = document.querySelector("tsl-pagination-actions");
+  if (!host) return false;
+  const icons = [...host.querySelectorAll("walla-icon.PaginationActions__action")];
+  const next = icons[icons.length - 1];
+  if (!next || next.classList.contains("PaginationActions__action--disabled")) return false;
+  next.click();
+  return true;
+})()`;
 
 /**
  * Pro catalog rows. Same host as the monitor (`tr[id^="CatalogItem_"]`).
@@ -203,6 +220,60 @@ export async function scrapeProCatalogItems(
   return evaluateCatalogRows(page, PRO_CATALOG_ITEMS_EVAL);
 }
 
+function proPagerHasMore(text: string): boolean {
+  const match = text.replace(/\s+/g, " ").trim().match(/(\d+)\s*-\s*(\d+)\s*de\s*(\d+)/i);
+  if (!match) return false;
+  return Number(match[2]) < Number(match[3]);
+}
+
+async function readProPager(page: Page): Promise<string> {
+  try {
+    return String((await page.evaluate(PRO_PAGER_EVAL)) ?? "");
+  } catch {
+    return "";
+  }
+}
+
+/** Current Pro page is only ~40 rows. Walk the pager until the title can be matched. */
+async function collectProCatalogPages(page: Page): Promise<PublishedCatalogItem[]> {
+  const seen = new Map<string, PublishedCatalogItem>();
+  let previousPager = "";
+  for (let pageIndex = 0; pageIndex < PRO_PAGE_CAP; pageIndex += 1) {
+    const rows = await scrapeProCatalogItems(page);
+    for (const row of rows) {
+      const href = wallapopItemUrlOrNull(row.href);
+      if (!href || seen.has(href)) continue;
+      seen.set(href, row);
+    }
+    const pager = await readProPager(page);
+    if (pageIndex > 0 && pager && pager === previousPager) break;
+    previousPager = pager;
+    let moved = false;
+    try {
+      moved = Boolean(await page.evaluate(PRO_NEXT_EVAL));
+    } catch {
+      break;
+    }
+    if (!moved) break;
+    await page
+      .waitForFunction(
+        (prev) => {
+          const info = document.querySelector(
+            "tsl-pagination-actions .PaginationActions__info",
+          );
+          const text = info
+            ? String(info.textContent || "").replace(/\s+/g, " ").trim()
+            : "";
+          return Boolean(text) && text !== prev;
+        },
+        pager,
+        { timeout: PRO_PAGE_WAIT_MS },
+      )
+      .catch(() => {});
+  }
+  return [...seen.values()];
+}
+
 export async function grabCatalogItemUrl(
   page: Page,
   wanted: { title: string; price: number },
@@ -222,6 +293,7 @@ export async function grabCatalogItemUrl(
       if (picked.href) {
         return { href: picked.href, reason: picked.reason, scanned: pro.length };
       }
+      if (proPagerHasMore(await readProPager(page))) break;
     } else {
       classic = await scrapePublishedCatalogItems(page);
       const first = firstCatalogItemUrl(classic);
@@ -232,9 +304,13 @@ export async function grabCatalogItemUrl(
     if (Date.now() >= deadline) break;
     await page.waitForTimeout(CATALOG_URL_POLL_MS);
   }
-  const rows = pro.length > 0 ? pro : classic;
-  const picked = pickUniqueCatalogItemUrl(rows, wanted);
-  return { href: picked.href, reason: picked.reason, scanned: rows.length };
+  if (pro.length > 0) {
+    const all = await collectProCatalogPages(page);
+    const picked = pickUniqueCatalogItemUrl(all, wanted);
+    return { href: picked.href, reason: picked.reason, scanned: all.length };
+  }
+  const picked = pickUniqueCatalogItemUrl(classic, wanted);
+  return { href: picked.href, reason: picked.reason, scanned: classic.length };
 }
 
 export async function dismissYuhuModal(page: Page): Promise<void> {

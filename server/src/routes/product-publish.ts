@@ -7,6 +7,8 @@ import {
   type RunProductPublishOptions,
   type RunProductPublishResult,
 } from "./product-publish-prepare"
+import { adoptAlreadyLiveBeforePublish } from "../lib/wallapop-already-live"
+import { log } from "../lib/log"
 import { claimLivePublish, executeLivePublish } from "./product-publish-run"
 
 export {
@@ -34,6 +36,17 @@ export async function runProductPublish(
 ): Promise<RunProductPublishResult> {
   const prepared = await prepareProductPublish(productId, options)
   if (!prepared.ok) return prepared
+  const listing = prepared.product.listings[0]
+  if (!prepared.dryRun && listing) {
+    const adopted = await adoptAlreadyLiveBeforePublish(prepared.prisma, listing.id)
+    if (adopted) {
+      log("info", "wallapop_publish_skipped_already_live", {
+        productId,
+        externalUrl: adopted.externalUrl,
+      })
+      return { ok: true, dryRun: false, listing: adopted, step: "already_live" }
+    }
+  }
   const claim = await claimLivePublish(
     prepared.prisma,
     productId,

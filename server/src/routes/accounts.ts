@@ -9,6 +9,8 @@ import {
 } from "../../../lib/validations/account"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
+import { log, serializeError } from "../lib/log"
+import { linkQueuedListingsAlreadyLive } from "../lib/wallapop-already-live"
 import {
   loadAutopostStatus,
   pauseAutopostSchedule,
@@ -176,6 +178,11 @@ export async function startDefaultAccountAutopost(
     return
   }
 
+  try {
+    await linkQueuedListingsAlreadyLive(prisma)
+  } catch (error) {
+    log("warn", "wallapop_already_live_sweep_failed", serializeError(error))
+  }
   await rescheduleAutopostLoop()
   await jsonDefaultAutopost(res)
 }

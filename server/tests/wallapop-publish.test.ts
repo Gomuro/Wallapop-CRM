@@ -316,6 +316,49 @@ describe("pickUniqueCatalogItemUrl", () => {
     }
   })
 
+  it("walks the next Pro page when the new row is not on the first one", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><body>
+        <table><tbody id="rows">
+          <tr id="CatalogItem_0">
+            <td>Otro producto</td>
+            <td>10,00 €</td>
+            <td><a href="https://es.wallapop.com/item/otro-1">foto</a></td>
+          </tr>
+        </tbody></table>
+        <tsl-pagination-actions>
+          <span class="PaginationActions__info">1 - 1 de 2</span>
+          <walla-icon class="PaginationActions__action" id="next"></walla-icon>
+        </tsl-pagination-actions>
+      </body>`)
+      await page.evaluate(() => {
+        document.getElementById("next")?.addEventListener("click", () => {
+          const rows = document.getElementById("rows")
+          if (rows) {
+            rows.innerHTML =
+              '<tr id="CatalogItem_1"><td>Colchón para cunas KUO Baby</td><td>19,95 €</td><td><a href="https://es.wallapop.com/item/colchon-para-cunas-kuo-baby-1312859930">foto</a></td></tr>'
+          }
+          const info = document.querySelector(".PaginationActions__info")
+          if (info) info.textContent = "2 - 2 de 2"
+          document.getElementById("next")?.classList.add("PaginationActions__action--disabled")
+        })
+      })
+      const grabbed = await grabCatalogItemUrl(page, {
+        title: "Colchón para cunas KUO Baby",
+        price: 19.95,
+      })
+      expect(grabbed).toMatchObject({
+        href: "https://es.wallapop.com/item/colchon-para-cunas-kuo-baby-1312859930",
+        reason: "matched",
+        scanned: 2,
+      })
+    } finally {
+      await browser.close()
+    }
+  })
+
   it("scrapes the captured tsl-catalog-item HTML like live publish", async () => {
     const html = fs.readFileSync(
       path.join(__dirname, "fixtures/wallapop-tsl-catalog-item.html"),

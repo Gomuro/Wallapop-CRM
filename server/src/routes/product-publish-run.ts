@@ -11,6 +11,7 @@ import {
 } from "../../../lib/inventory/category-upload-fields"
 import { wallapopBrandFromProduct } from "../../../lib/inventory/wallapop-brand"
 import { wallapopItemUrlOrNull } from "../../../lib/inventory/wallapop-item-url"
+import { liveHrefForListing } from "../lib/wallapop-already-live"
 import {
   ALREADY_POSTED_MESSAGE,
   decimalToNumber,
@@ -184,11 +185,19 @@ async function verifyProductPublish(
   if (result.dryRun) {
     return { ok: true, dryRun: true, listing: null, step: result.step }
   }
+  let externalUrl = wallapopItemUrlOrNull(result.externalUrl)
+  const listingId = ready.product.listings[0]?.id
+  if (!externalUrl && listingId) {
+    externalUrl = await liveHrefForListing(ready.prisma, listingId)
+    if (externalUrl) {
+      log("info", "wallapop_publish_item_url_from_profile", { externalUrl })
+    }
+  }
   const published = await activatePostingListing(
     ready.prisma,
     ready.product.id,
     ready.accountId,
-    { externalUrl: result.externalUrl, shippingEnabled: ready.shippingEnabled },
+    { externalUrl, shippingEnabled: ready.shippingEnabled },
   )
   if (!published) {
     return publishFail(500, "PUBLISH_FAILED", LIVE_SUCCESS_LISTING_STALE_MESSAGE)

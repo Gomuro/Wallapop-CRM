@@ -1,0 +1,198 @@
+import type { ListingStatus, PrismaClient } from "../../generated/prisma/client"
+
+import { wallapopItemUrlOrNull } from "../../../lib/inventory/wallapop-item-url"
+import { log } from "./log"
+import { listingJsonSelect, toListingJson } from "./listing-json"
+import {
+  fetchSellerPublishedItems,
+  sellerUserIdFromItemHtml,
+  type LiveCatalogItem,
+} from "./wallapop-live-catalog"
+import { planLiveMarks, type CrmLiveRow, type LiveMark } from "./wallapop-live-mark"
+
+const QUEUE_STATUSES = new Set(["READY_TO_POST", "FAILED"])
+const TRUTH_FROM = new Set([
+  "READY_TO_POST",
+  "FAILED",
+  "DEACTIVATED",
+  "ACTIVE",
+  "RESERVED",
+])
+
+let cachedSellerUserId: string | null = null
+
+export function resetSellerUserIdCacheForTests(): void {
+  cachedSellerUserId = null
+}
+
+export async function loadCrmLiveRows(prisma: PrismaClient): Promise<CrmLiveRow[]> {
+  const rows = await prisma.productListing.findMany({
+    where: { account: { isDefault: true } },
+    select: {
+      id: true,
+      status: true,
+      externalUrl: true,
+      product: { select: { sku: true, title: true, price: true, status: true } },
+    },
+  })
+  return rows.map((row) => ({
+    listingId: row.id,
+    sku: row.product.sku,
+    title: row.product.title,
+    price: Number(row.product.price.toString()),
+    productStatus: row.product.status,
+    listingStatus: row.status,
+    externalUrl: row.externalUrl,
+  }))
+}
+
+async function resolveSellerUserId(
+  prisma: PrismaClient,
+  fetchImpl: typeof fetch,
+): Promise<string | null> {
+  if (cachedSellerUserId) return cachedSellerUserId
+  const row = await prisma.productListing.findFirst({
+    where: {
+      account: { isDefault: true },
+      externalUrl: { contains: "/item/" },
+    },
+    select: { externalUrl: true },
+    orderBy: { lastPostedAt: "desc" },
+  })
+  const href = wallapopItemUrlOrNull(row?.externalUrl)
+  if (!href) return null
+  const response = await fetchImpl(href, {
+    headers: { Accept: "text/html", "User-Agent": "Mozilla/5.0" },
+    signal: AbortSignal.timeout(20_000),
+  })
+  if (!response.ok) return null
+  const userId = sellerUserIdFromItemHtml(await response.text())
+  if (userId) cachedSellerUserId = userId
+  return userId
+}
+
+async function loadDefaultSellerCatalog(
+  prisma: PrismaClient,
+): Promise<LiveCatalogItem[] | null> {
+  try {
+    const userId = await resolveSellerUserId(prisma, fetch)
+    if (!userId) {
+      log("warn", "wallapop_live_catalog_no_seller")
+      return null
+    }
+    const items = await fetchSellerPublishedItems(userId)
+    log("info", "wallapop_live_catalog", { count: items.length })
+    return items
+  } catch (error) {
+    log("warn", "wallapop_live_catalog_failed", {
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
+}
+
+async function writeLiveMark(
+  prisma: PrismaClient,
+  row: CrmLiveRow,
+  mark: LiveMark,
+): Promise<boolean> {
+  if (mark.action === "leave") return false
+  const data =
+    mark.action === "hanging"
+      ? {
+          status: mark.status,
+          externalUrl: mark.externalUrl,
+          lastPublishError: null,
+          postingAttempts: 0,
+          ...(row.listingStatus === "ACTIVE" || row.listingStatus === "RESERVED"
+            ? {}
+            : { lastPostedAt: new Date() }),
+        }
+      : { status: "DEACTIVATED" as const, externalUrl: null }
+  const result = await prisma.productListing.updateMany({
+    where: { id: row.listingId, status: row.listingStatus as ListingStatus },
+    data,
+  })
+  return result.count > 0
+}
+
+function shouldWrite(mark: LiveMark, row: CrmLiveRow, clearMissing: boolean): boolean {
+  if (mark.action === "hanging") {
+    const allowed = clearMissing ? TRUTH_FROM : QUEUE_STATUSES
+    return allowed.has(row.listingStatus)
+  }
+  return clearMissing && mark.action === "not_hanging"
+}
+
+export async function syncListingsWithLiveCatalog(
+  prisma: PrismaClient,
+  options: { clearMissing: boolean },
+): Promise<{ hanging: number; notHanging: number; ambiguous: string[] }> {
+  const items = await loadDefaultSellerCatalog(prisma)
+  if (!items) return { hanging: 0, notHanging: 0, ambiguous: [] }
+  const rows = await loadCrmLiveRows(prisma)
+  const byId = new Map(rows.map((row) => [row.listingId, row]))
+  const summary = { hanging: 0, notHanging: 0, ambiguous: [] as string[] }
+  for (const mark of planLiveMarks(rows, items)) {
+    if (mark.action === "leave" && mark.reason === "ambiguous") {
+      summary.ambiguous.push(mark.sku)
+    }
+    const row = byId.get(mark.listingId)
+    if (!row || !shouldWrite(mark, row, options.clearMissing)) continue
+    const wrote = await writeLiveMark(prisma, row, mark)
+    if (!wrote) continue
+    if (mark.action === "hanging") {
+      summary.hanging += 1
+      log("info", "wallapop_already_live", {
+        sku: mark.sku,
+        status: mark.status,
+        externalUrl: mark.externalUrl,
+        reason: mark.reason,
+      })
+    } else if (mark.action === "not_hanging") {
+      summary.notHanging += 1
+      log("info", "wallapop_not_hanging", { sku: mark.sku })
+    }
+  }
+  return summary
+}
+
+/** Public profile href for this listing, including one still in POSTING. */
+export async function liveHrefForListing(
+  prisma: PrismaClient,
+  listingId: string,
+): Promise<string | null> {
+  const items = await loadDefaultSellerCatalog(prisma)
+  if (!items) return null
+  const rows = await loadCrmLiveRows(prisma)
+  const planned = rows.map((row) =>
+    row.listingId === listingId
+      ? { ...row, listingStatus: "READY_TO_POST", productStatus: "ACTIVE" }
+      : row,
+  )
+  const mark = planLiveMarks(planned, items).find((entry) => entry.listingId === listingId)
+  return mark?.action === "hanging" ? mark.externalUrl : null
+}
+
+/** READY / FAILED rows that are already on the public profile become En Wallapop. */
+export async function linkQueuedListingsAlreadyLive(
+  prisma: PrismaClient,
+): Promise<number> {
+  const summary = await syncListingsWithLiveCatalog(prisma, { clearMissing: false })
+  return summary.hanging
+}
+
+export async function adoptAlreadyLiveBeforePublish(
+  prisma: PrismaClient,
+  listingId: string,
+) {
+  await linkQueuedListingsAlreadyLive(prisma)
+  const row = await prisma.productListing.findUnique({
+    where: { id: listingId },
+    select: listingJsonSelect,
+  })
+  if (!row) return null
+  if (row.status !== "ACTIVE" && row.status !== "RESERVED") return null
+  if (!wallapopItemUrlOrNull(row.externalUrl)) return null
+  return toListingJson(row)
+}
