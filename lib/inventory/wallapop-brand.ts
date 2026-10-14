@@ -43,7 +43,7 @@ export function brandFromDescription(
   description: string | null | undefined,
 ): string | null {
   if (!description) return null
-  const match = description.match(/^Marca\s*[:.]?\s*(.+)$/im)
+  const match = description.match(/^Marca\b\s*[:.]?\s*(.+)$/im)
   const line = match?.[1]?.split(/\r?\n/)[0]?.trim()
   if (line && line.length <= 80) return line
   const first = description.trim().split(/\s+/)[0] ?? ""

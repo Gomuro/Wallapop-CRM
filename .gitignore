@@ -76,6 +76,7 @@ server/scripts/seed-product-once.ts
 backups/
 *.pgdump
 server/ops/run-backup.cmd
+server/ops/ssh-tunnel.py
 
 # Uploaded product photos (keep folder)
 public/uploads/*

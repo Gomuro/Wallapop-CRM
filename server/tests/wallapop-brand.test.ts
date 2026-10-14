@@ -36,6 +36,16 @@ describe("wallapopBrandFromProduct", () => {
     ).toBe("QUIRUMED")
   })
 
+  it("does not treat a brand that starts with Marca as a Marca label", () => {
+    expect(
+      wallapopBrandFromProduct({
+        brand: null,
+        description:
+          "MARCATO Bigoli - Accesorio\n\nMarca MARCATO\nColor Cromado",
+      }),
+    ).toBe("MARCATO")
+  })
+
   it("reads a leading ALLCAPS token when there is no Marca line", () => {
     expect(
       wallapopBrandFromProduct({
