@@ -153,10 +153,10 @@ export type ApiAutopostStatus = {
 }
 
 export type ApiWorkerJob = {
-  kind: "sold" | "devolucion" | "publish"
+  kind: "sold" | "devolucion" | "eliminar" | "publish"
   productId: string
   title: string
-  state: "queued" | "running" | "failed"
+  state: "queued" | "running" | "done" | "failed"
   message: string | null
 }
 

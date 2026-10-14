@@ -26,6 +26,7 @@ export function SoldSyncButton({
   const [open, setOpen] = useState(false)
   const [sold, setSold] = useState(false)
   const [error, setError] = useState<string | null>(null)
+  const [notice, setNotice] = useState<string | null>(null)
   const [pending, startTransition] = useTransition()
   const isSold = disabled || sold
 
@@ -50,8 +51,10 @@ export function SoldSyncButton({
           return
         }
         if (result.queued) {
+          setNotice(
+            "Marcando como vendido en Wallapop. Puedes seguir en el catálogo; el estado está en Cuenta.",
+          )
           setOpen(false)
-          router.refresh()
           return
         }
         setSold(true)
@@ -64,6 +67,12 @@ export function SoldSyncButton({
   }
 
   return (
+    <>
+      {notice ? (
+        <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm" aria-live="polite">
+          {notice}
+        </p>
+      ) : null}
     <ConfirmAction
       open={open}
       onOpenChange={handleOpenChange}
@@ -79,6 +88,7 @@ export function SoldSyncButton({
       pending={pending}
       onConfirm={confirmSold}
     />
+    </>
   )
 }
 

@@ -1,32 +1,39 @@
 import { log, serializeError } from "./log"
 import { isBrowserPublishBusy } from "./wallapop-cdp/busy"
 
-export type WorkerJobKind = "sold" | "devolucion"
+export type WorkerJobKind = "sold" | "devolucion" | "eliminar"
+
+type WorkerLane = "sold" | "listing"
 
 export type WorkerJobView = {
   kind: WorkerJobKind | "publish"
   productId: string
   title: string
-  state: "queued" | "running" | "failed"
+  state: "queued" | "running" | "done" | "failed"
   message: string | null
 }
 
 type WorkerJob = WorkerJobView & {
   id: string
   kind: WorkerJobKind
-  run: () => Promise<void>
+  run: (() => Promise<void>) | null
 }
 
 const FAILED_CAP = 5
+const DONE_CAP = 5
 const jobs: WorkerJob[] = []
-const pumping: Record<WorkerJobKind, boolean> = {
+const pumping: Record<WorkerLane, boolean> = {
   sold: false,
-  devolucion: false,
+  listing: false,
 }
 
-function trimFailed() {
-  const failed = jobs.filter((job) => job.state === "failed")
-  for (const job of failed.slice(0, Math.max(0, failed.length - FAILED_CAP))) {
+function laneOf(kind: WorkerJobKind): WorkerLane {
+  return kind === "sold" ? "sold" : "listing"
+}
+
+function trimState(state: "failed" | "done", cap: number) {
+  const rows = jobs.filter((job) => job.state === state)
+  for (const job of rows.slice(0, Math.max(0, rows.length - cap))) {
     drop(job.id)
   }
 }
@@ -36,30 +43,35 @@ function drop(id: string) {
   if (index >= 0) jobs.splice(index, 1)
 }
 
-async function pump(kind: WorkerJobKind) {
-  if (pumping[kind]) return
-  pumping[kind] = true
+async function pump(lane: WorkerLane) {
+  if (pumping[lane]) return
+  pumping[lane] = true
   try {
     for (;;) {
-      const job = jobs.find((row) => row.kind === kind && row.state === "queued")
+      const job = jobs.find(
+        (row) => row.state === "queued" && laneOf(row.kind) === lane,
+      )
       if (!job) break
       job.state = "running"
       try {
-        await job.run()
-        drop(job.id)
+        await job.run?.()
+        job.state = "done"
+        job.run = null
+        trimState("done", DONE_CAP)
       } catch (error) {
         job.state = "failed"
+        job.run = null
         job.message = error instanceof Error ? error.message : "Error"
-        trimFailed()
+        trimState("failed", FAILED_CAP)
         log("error", "wallapop_worker_job_failed", {
-          kind,
+          kind: job.kind,
           productId: job.productId,
           err: serializeError(error),
         })
       }
     }
   } finally {
-    pumping[kind] = false
+    pumping[lane] = false
   }
 }
 
@@ -73,7 +85,7 @@ export function enqueueWorkerJob(input: {
     (job) =>
       job.kind === input.kind &&
       job.productId === input.productId &&
-      job.state !== "failed",
+      (job.state === "queued" || job.state === "running"),
   )
   if (busy) {
     return { ok: false, message: "Este producto ya está en curso." }
@@ -82,7 +94,7 @@ export function enqueueWorkerJob(input: {
     (row) =>
       row.kind === input.kind &&
       row.productId === input.productId &&
-      row.state === "failed",
+      (row.state === "failed" || row.state === "done"),
   )) {
     drop(job.id)
   }
@@ -95,7 +107,7 @@ export function enqueueWorkerJob(input: {
     message: null,
     run: input.run,
   })
-  void pump(input.kind)
+  void pump(laneOf(input.kind))
   return { ok: true }
 }
 
@@ -122,5 +134,5 @@ export function listWorkerJobs(): WorkerJobView[] {
 export function resetWorkerJobsForTests() {
   jobs.splice(0, jobs.length)
   pumping.sold = false
-  pumping.devolucion = false
+  pumping.listing = false
 }

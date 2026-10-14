@@ -4,6 +4,13 @@ import { useCallback, useEffect, useState } from "react"
 import { LoaderCircleIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
+import {
+  Card,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card"
 import { isApiConfigured } from "@/lib/api/config"
 import {
   downloadDatabaseBackup,
@@ -104,13 +111,14 @@ export function DatabaseBackupCard() {
   const latest = files[0]
 
   return (
-    <div className="mx-auto mt-10 w-full max-w-md">
-      <h2 className="text-lg font-semibold tracking-tight">Copia de seguridad</h2>
-      <p className="mt-1 text-sm text-muted-foreground">
-        Descarga la base de datos a tu ordenador y guárdala fuera de este
-        servidor. El CRM guarda una copia al día (no en cada arranque). Si
-        alguien borra el VPS, solo te quedará el archivo que hayas copiado tú.
-      </p>
+    <Card className="mx-auto w-full max-w-md">
+      <CardHeader className="border-b">
+        <CardTitle>Copia de seguridad</CardTitle>
+        <CardDescription>
+          Una copia al día. Descárgala y guárdala fuera del servidor.
+        </CardDescription>
+      </CardHeader>
+      <CardContent>
       {!apiReady ? (
         <p className="mt-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm">
           La API no está configurada; no se pueden crear copias.
@@ -142,6 +150,7 @@ export function DatabaseBackupCard() {
           onDownload={onDownload}
         />
       )}
-    </div>
+      </CardContent>
+    </Card>
   )
 }

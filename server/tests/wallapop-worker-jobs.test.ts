@@ -49,7 +49,7 @@ describe("worker jobs", () => {
       const rows = listWorkerJobs()
       expect(rows.find((job) => job.productId === "a")?.state).toBe("running")
       expect(rows.find((job) => job.productId === "b")?.state).toBe("queued")
-      expect(rows.some((job) => job.productId === "c")).toBe(false)
+      expect(rows.find((job) => job.productId === "c")?.state).toBe("done")
     })
 
     const duplicate = enqueueWorkerJob({
@@ -62,7 +62,8 @@ describe("worker jobs", () => {
 
     releaseSold()
     await vi.waitFor(() => {
-      expect(listWorkerJobs().some((job) => job.kind === "sold")).toBe(false)
+      const sales = listWorkerJobs().filter((job) => job.kind === "sold")
+      expect(sales.map((job) => job.state).sort()).toEqual(["done", "done"])
     })
     expect(seen).toEqual(["a-start", "c", "a-end", "b"])
   })

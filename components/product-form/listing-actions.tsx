@@ -30,6 +30,7 @@ function useConfirmState() {
 export function EliminarWallapopButton({ productId }: { productId: string }) {
   const router = useRouter()
   const state = useConfirmState()
+  const [notice, setNotice] = useState<string | null>(null)
 
   function confirmEliminar() {
     state.setError(null)
@@ -42,6 +43,13 @@ export function EliminarWallapopButton({ productId }: { productId: string }) {
           )
           return
         }
+        if (result.queued) {
+          setNotice(
+            "Eliminando el anuncio en Wallapop. El producto se queda desactivado. Puedes seguir en el catálogo; el estado está en Cuenta.",
+          )
+          state.setOpen(false)
+          return
+        }
         state.setOpen(false)
         router.refresh()
       } catch (caught) {
@@ -51,6 +59,12 @@ export function EliminarWallapopButton({ productId }: { productId: string }) {
   }
 
   return (
+    <>
+      {notice ? (
+        <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm" aria-live="polite">
+          {notice}
+        </p>
+      ) : null}
     <ConfirmAction
       open={state.open}
       onOpenChange={state.onOpenChange}
@@ -66,6 +80,7 @@ export function EliminarWallapopButton({ productId }: { productId: string }) {
       pending={state.pending}
       onConfirm={confirmEliminar}
     />
+    </>
   )
 }
 
@@ -123,6 +138,7 @@ export function DevolucionButton({
 }) {
   const router = useRouter()
   const state = useConfirmState()
+  const [notice, setNotice] = useState<string | null>(null)
 
   function confirmDevolucion() {
     state.setError(null)
@@ -135,6 +151,13 @@ export function DevolucionButton({
           )
           return
         }
+        if (result.queued) {
+          setNotice(
+            "Eliminando el anuncio en Wallapop. El producto vuelve a la cola. Puedes seguir en el catálogo; el estado está en Cuenta.",
+          )
+          state.setOpen(false)
+          return
+        }
         state.setOpen(false)
         router.refresh()
       } catch (caught) {
@@ -144,6 +167,12 @@ export function DevolucionButton({
   }
 
   return (
+    <>
+      {notice ? (
+        <p className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm" aria-live="polite">
+          {notice}
+        </p>
+      ) : null}
     <ConfirmAction
       open={state.open}
       onOpenChange={state.onOpenChange}
@@ -162,5 +191,6 @@ export function DevolucionButton({
       pending={state.pending}
       onConfirm={confirmDevolucion}
     />
+    </>
   )
 }

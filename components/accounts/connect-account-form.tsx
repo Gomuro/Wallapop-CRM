@@ -7,6 +7,14 @@ import {
 import { useConnectAccountSession } from "@/components/accounts/connect-account-session";
 import { ConnectLoginForm } from "@/components/accounts/connect-login-form";
 import { Badge } from "@/components/ui/badge";
+import {
+  Card,
+  CardAction,
+  CardContent,
+  CardDescription,
+  CardHeader,
+  CardTitle,
+} from "@/components/ui/card";
 import { type WallapopConnectionStatus } from "@/lib/api/wallapop-account";
 
 const STATUS_LABEL: Record<WallapopConnectionStatus, string> = {
@@ -38,20 +46,17 @@ export function ConnectAccountForm() {
   } = session;
 
   return (
-    <div className="mx-auto w-full max-w-md">
-      <div className="mb-6 flex items-start justify-between gap-3">
-        <div>
-          <h1 className="text-lg font-semibold tracking-tight">
-            Cuenta Wallapop
-          </h1>
-          <p className="mt-1 text-sm text-muted-foreground">
-            Conecta el email de Wallapop (Chrome + login automático).
-          </p>
-        </div>
-        <Badge variant={statusBadgeVariant(account.status)}>
-          {statusLoading ? "…" : STATUS_LABEL[account.status]}
-        </Badge>
-      </div>
+    <Card className="mx-auto w-full max-w-md">
+      <CardHeader className="border-b">
+        <CardTitle>Cuenta Wallapop</CardTitle>
+        <CardDescription>Login en Chrome.</CardDescription>
+        <CardAction>
+          <Badge variant={statusBadgeVariant(account.status)}>
+            {statusLoading ? "…" : STATUS_LABEL[account.status]}
+          </Badge>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">
 
       {!apiReady ? (
         <p className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
@@ -104,6 +109,7 @@ export function ConnectAccountForm() {
       <ConnectLoginForm session={session} />
       <ConnectResetDialog session={session} />
       <ConnectTwoFaDialog session={session} />
-    </div>
+      </CardContent>
+    </Card>
   );
 }

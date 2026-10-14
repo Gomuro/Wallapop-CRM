@@ -3,6 +3,7 @@ import type { Request, Response } from "express"
 import { sendError } from "../lib/http-error"
 import { log, serializeError } from "../lib/log"
 import { deactivateListingAfterEliminar } from "../lib/product-eliminar"
+import { enqueueWorkerJob } from "../lib/wallapop-worker-jobs"
 import { isBrowserBusyError } from "../lib/wallapop-cdp"
 import {
   eliminarWallapopInBrowser,
@@ -63,6 +64,21 @@ async function persistCrmEliminar(
   })
 }
 
+export async function runWallapopEliminarJob(
+  ready: WallapopEliminarReady,
+): Promise<void> {
+  try {
+    const browser = await eliminarWallapopInBrowser({
+      itemUrl: ready.itemUrl,
+      dryRun: ready.dryRun,
+    })
+    if (browser.dryRun) return
+    await deactivateListingAfterEliminar(ready.prisma, ready.productId)
+  } catch (error) {
+    throw new Error(mapEliminarBrowserError(error).message)
+  }
+}
+
 async function runPreparedEliminar(
   prepared: WallapopEliminarReady,
   res: Response,
@@ -98,5 +114,30 @@ export async function postProductWallapopEliminar(req: Request, res: Response) {
     sendPrepareErr(res, prepared)
     return
   }
-  await runPreparedEliminar(prepared, res)
+  if (prepared.dryRun) {
+    await runPreparedEliminar(prepared, res)
+    return
+  }
+  const titled = await prepared.prisma.product.findUnique({
+    where: { id: prepared.productId },
+    select: { title: true },
+  })
+  const queued = enqueueWorkerJob({
+    kind: "eliminar",
+    productId: prepared.productId,
+    title: titled?.title ?? "Producto",
+    run: () => runWallapopEliminarJob(prepared),
+  })
+  if (!queued.ok) {
+    sendError(res, 409, "ALREADY_QUEUED", queued.message)
+    return
+  }
+  res.json({
+    ok: true,
+    queued: true,
+    dryRun: false,
+    step: "queued",
+    product: null,
+    error: null,
+  })
 }

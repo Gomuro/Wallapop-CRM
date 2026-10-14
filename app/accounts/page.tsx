@@ -7,12 +7,12 @@ import { ThemeToggle } from "@/components/theme/theme-toggle"
 export default function AccountsPage() {
   return (
     <PageContainer className="py-4 md:py-8">
-      <div className="mx-auto mb-6 w-full max-w-md border-b border-border pb-6">
+      <div className="mx-auto flex w-full max-w-md flex-col gap-4">
         <ThemeToggle variant="row" />
+        <ConnectAccountForm />
+        <AutopostIntervalForm />
+        <DatabaseBackupCard />
       </div>
-      <ConnectAccountForm />
-      <AutopostIntervalForm />
-      <DatabaseBackupCard />
     </PageContainer>
   )
 }

@@ -6,6 +6,7 @@ const ELIMINAR_TIMEOUT_MS = 120_000
 export type WallapopEliminarResult = {
   ok: boolean
   dryRun: boolean
+  queued?: boolean
   step: string
   product: unknown
   error: string | null
