@@ -10,6 +10,7 @@ import { OfflineBanner } from "@/components/offline/offline-banner"
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
 import { Separator } from "@/components/ui/separator"
+import { canMarkSoldOnWallapop } from "@/lib/inventory/listing-active"
 import { deleteOfflineProduct, markOfflineProductSold } from "@/lib/offline/cache"
 import { useOfflineProduct } from "@/lib/offline/use-offline-cache"
 import {
@@ -115,16 +116,16 @@ export function OfflineProductDetail({ id }: { id: string }) {
             >
               Editar producto
             </Button>
-            <Button
-              className="h-12 w-full"
-              variant={product.status === "SOLD" ? "secondary" : "default"}
-              disabled={product.status === "SOLD"}
-              onClick={() => {
-                markOfflineProductSold(product.id)
-              }}
-            >
-              {product.status === "SOLD" ? "Vendido" : "Marcar como vendido"}
-            </Button>
+            {canMarkSoldOnWallapop(product) ? (
+              <Button
+                className="h-12 w-full"
+                onClick={() => {
+                  markOfflineProductSold(product.id)
+                }}
+              >
+                Marcar como vendido
+              </Button>
+            ) : null}
             <Button
               className="h-12 w-full text-destructive"
               variant="ghost"

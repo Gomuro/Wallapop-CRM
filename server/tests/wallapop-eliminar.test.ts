@@ -6,6 +6,7 @@ import { afterEach, describe, expect, it } from "vitest"
 
 import {
   canEliminarOnWallapop,
+  canMarkSoldOnWallapop,
   canMarkWarehouseInactive,
   canRequeueListing,
   canStartDevolucion,
@@ -237,6 +238,16 @@ function product(
 }
 
 describe("card buttons", () => {
+  it("shows Marcar como vendido only for a live En venta /item/", () => {
+    expect(canMarkSoldOnWallapop(product("ACTIVE", { status: "ACTIVE", externalUrl: ASALVO }))).toBe(true)
+    expect(canMarkSoldOnWallapop(product("ACTIVE", { status: "READY_TO_POST", externalUrl: null }))).toBe(false)
+    expect(canMarkSoldOnWallapop(product("ACTIVE", { status: "POSTING", externalUrl: null }))).toBe(false)
+    expect(canMarkSoldOnWallapop(product("ACTIVE", { status: "RESERVED", externalUrl: ASALVO }))).toBe(false)
+    expect(canMarkSoldOnWallapop(product("ACTIVE", { status: "ACTIVE", externalUrl: null }))).toBe(false)
+    expect(canMarkSoldOnWallapop(product("SOLD", { status: "ACTIVE", externalUrl: ASALVO }))).toBe(false)
+    expect(canMarkSoldOnWallapop(product("ACTIVE", null))).toBe(false)
+  })
+
   it("shows Eliminar en Wallapop only for a live /item/ on an unsold product", () => {
     expect(canEliminarOnWallapop(product("ACTIVE", { status: "ACTIVE", externalUrl: ASALVO }))).toBe(true)
     expect(canEliminarOnWallapop(product("ACTIVE", { status: "RESERVED", externalUrl: ASALVO }))).toBe(true)

@@ -48,6 +48,17 @@ export function computeListingActive(
   return Boolean(listingActive)
 }
 
+/**
+ * «Marcar como vendido»: the ad is En venta on Wallapop and has a public es /item/ URL.
+ * Queue, Publicando, Reservado and a warehouse-only product have nothing to mark sold.
+ */
+export function canMarkSoldOnWallapop(product: InventoryProduct): boolean {
+  if (product.status !== "ACTIVE") return false
+  const listing = product.listing
+  if (!listing || listing.status !== "ACTIVE") return false
+  return wallapopEsItemUrlOrNull(listing.externalUrl) != null
+}
+
 /** «Eliminar en Wallapop»: live listing with a public es /item/ URL, not sold. */
 export function canEliminarOnWallapop(product: InventoryProduct): boolean {
   if (product.status === "SOLD") return false

@@ -21,6 +21,7 @@ import {
 import { TestPublishButton } from "@/components/product-form/test-publish-button"
 import {
   canEliminarOnWallapop,
+  canMarkSoldOnWallapop,
   canMarkWarehouseInactive,
   canRequeueListing,
   canStartDevolucion,
@@ -106,21 +107,20 @@ function ProductDetailAside({ product }: { product: InventoryProduct }) {
         >
           Editar producto
         </Button>
-        <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:inset-auto md:z-auto md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
-          {canStartDevolucion(product) ? (
-            <DevolucionButton
-              productId={product.id}
-              hasItemUrl={
-                wallapopEsItemUrlOrNull(product.listing?.externalUrl) != null
-              }
-            />
-          ) : (
-            <SoldSyncButton
-              productId={product.id}
-              disabled={product.status === "SOLD"}
-            />
-          )}
-        </div>
+        {canStartDevolucion(product) || canMarkSoldOnWallapop(product) ? (
+          <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:inset-auto md:z-auto md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
+            {canStartDevolucion(product) ? (
+              <DevolucionButton
+                productId={product.id}
+                hasItemUrl={
+                  wallapopEsItemUrlOrNull(product.listing?.externalUrl) != null
+                }
+              />
+            ) : (
+              <SoldSyncButton productId={product.id} />
+            )}
+          </div>
+        ) : null}
         {canEliminarOnWallapop(product) ? (
           <EliminarWallapopButton productId={product.id} />
         ) : null}
