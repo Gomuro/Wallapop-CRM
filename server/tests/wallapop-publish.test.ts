@@ -316,6 +316,51 @@ describe("pickUniqueCatalogItemUrl", () => {
     }
   })
 
+  it("waits on the first Pro page until the new row appears", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><body>
+        <table><tbody id="rows">
+          <tr id="CatalogItem_0">
+            <td>Otro producto</td>
+            <td>10,00 €</td>
+            <td><a href="https://es.wallapop.com/item/otro-1">foto</a></td>
+          </tr>
+        </tbody></table>
+        <tsl-pagination-actions>
+          <span class="PaginationActions__info">1 - 40 de 128</span>
+          <walla-icon class="PaginationActions__action" id="next"></walla-icon>
+        </tsl-pagination-actions>
+      </body>`)
+      await page.evaluate(() => {
+        window.setTimeout(() => {
+          const rows = document.getElementById("rows")
+          if (!rows) return
+          rows.insertAdjacentHTML(
+            "afterbegin",
+            '<tr id="CatalogItem_new"><td>Einhell Carro esparcidor manual</td><td>19,95 €</td><td><a href="https://es.wallapop.com/item/einhell-carro-esparcidor-manual-1312904303">foto</a></td></tr>',
+          )
+        }, 350)
+        document.getElementById("next")?.addEventListener("click", () => {
+          document.body.dataset.paged = "1"
+        })
+      })
+      const grabbed = await grabCatalogItemUrl(
+        page,
+        { title: "Einhell Carro esparcidor manual", price: 19.95 },
+        2_000,
+      )
+      expect(grabbed).toMatchObject({
+        href: "https://es.wallapop.com/item/einhell-carro-esparcidor-manual-1312904303",
+        reason: "matched",
+      })
+      expect(await page.evaluate(() => document.body.dataset.paged ?? "")).toBe("")
+    } finally {
+      await browser.close()
+    }
+  })
+
   it("walks the next Pro page when the new row is not on the first one", async () => {
     const browser = await chromium.launch({ headless: true })
     try {
@@ -345,10 +390,14 @@ describe("pickUniqueCatalogItemUrl", () => {
           document.getElementById("next")?.classList.add("PaginationActions__action--disabled")
         })
       })
-      const grabbed = await grabCatalogItemUrl(page, {
-        title: "Colchón para cunas KUO Baby",
-        price: 19.95,
-      })
+      const grabbed = await grabCatalogItemUrl(
+        page,
+        {
+          title: "Colchón para cunas KUO Baby",
+          price: 19.95,
+        },
+        400,
+      )
       expect(grabbed).toMatchObject({
         href: "https://es.wallapop.com/item/colchon-para-cunas-kuo-baby-1312859930",
         reason: "matched",

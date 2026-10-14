@@ -293,7 +293,6 @@ export async function grabCatalogItemUrl(
       if (picked.href) {
         return { href: picked.href, reason: picked.reason, scanned: pro.length };
       }
-      if (proPagerHasMore(await readProPager(page))) break;
     } else {
       classic = await scrapePublishedCatalogItems(page);
       const first = firstCatalogItemUrl(classic);
@@ -304,10 +303,14 @@ export async function grabCatalogItemUrl(
     if (Date.now() >= deadline) break;
     await page.waitForTimeout(CATALOG_URL_POLL_MS);
   }
-  if (pro.length > 0) {
+  if (pro.length > 0 && proPagerHasMore(await readProPager(page))) {
     const all = await collectProCatalogPages(page);
     const picked = pickUniqueCatalogItemUrl(all, wanted);
     return { href: picked.href, reason: picked.reason, scanned: all.length };
+  }
+  if (pro.length > 0) {
+    const picked = pickUniqueCatalogItemUrl(pro, wanted);
+    return { href: picked.href, reason: picked.reason, scanned: pro.length };
   }
   const picked = pickUniqueCatalogItemUrl(classic, wanted);
   return { href: picked.href, reason: picked.reason, scanned: classic.length };
