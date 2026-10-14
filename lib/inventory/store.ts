@@ -96,6 +96,7 @@ export async function listProductPage(
     status: query.status ?? "ALL",
     q: query.q,
     categoryId: query.categoryId,
+    listing: query.listing,
   })
   return {
     products: response.products.map((row) => mapListItemToInventory(row)),

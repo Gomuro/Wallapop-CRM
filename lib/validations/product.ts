@@ -178,6 +178,14 @@ export const productListStatusFilterSchema = z.enum([
   "INACTIVE",
 ])
 
+export const catalogListingFilterSchema = z.enum([
+  "wallapop",
+  "reserved",
+  "queue",
+  "error",
+  "nolink",
+])
+
 export const productListQuerySchema = z.object({
   page: z.coerce.number().int().min(1).default(1),
   pageSize: z.coerce.number().int().min(1).max(100).default(20),
@@ -188,6 +196,7 @@ export const productListQuerySchema = z.object({
     .optional()
     .transform((value) => (value && value.length > 0 ? value : undefined)),
   categoryId: z.string().trim().min(1).optional(),
+  listing: catalogListingFilterSchema.optional(),
 })
 
 export const warehouseProductCreateWithLeafSchema =

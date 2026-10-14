@@ -8,9 +8,14 @@ import { Button } from "@/components/ui/button"
 import Link from "next/link"
 import { apiUnavailableReason } from "@/lib/api/availability"
 import { isApiConfigured } from "@/lib/api/config"
-import { countProductsByStatus, listProducts } from "@/lib/inventory/store"
-import type { InventoryProduct, StatusCounts } from "@/lib/inventory/types"
-import type { ProductStatus } from "@/lib/validations"
+import { countProductsByStatus, listProductPage } from "@/lib/inventory/store"
+import {
+  CATALOG_PAGE_SIZE,
+  type CatalogListingFilter,
+  type InventoryProduct,
+  type StatusCounts,
+} from "@/lib/inventory/types"
+import { catalogListingFilterSchema, type ProductStatus } from "@/lib/validations"
 
 function firstParam(value: string | string[] | undefined) {
   return Array.isArray(value) ? value[0] : value
@@ -19,7 +24,12 @@ function firstParam(value: string | string[] | undefined) {
 export default async function CatalogPage({
   searchParams,
 }: {
-  searchParams: Promise<{ q?: string; status?: string; view?: string }>
+  searchParams: Promise<{
+    q?: string
+    status?: string
+    view?: string
+    listing?: string
+  }>
 }) {
   const params = await searchParams
   const q = (firstParam(params.q) ?? "").trim()
@@ -30,6 +40,12 @@ export default async function CatalogPage({
     statusParam === "INACTIVE"
       ? statusParam
       : "ALL"
+  const listingParsed = catalogListingFilterSchema.safeParse(
+    firstParam(params.listing),
+  )
+  const listing: CatalogListingFilter | undefined = listingParsed.success
+    ? listingParsed.data
+    : undefined
   const view = firstParam(params.view) === "list" ? "list" : "grid"
 
   if (!isApiConfigured()) {
@@ -37,25 +53,32 @@ export default async function CatalogPage({
   }
 
   let products: InventoryProduct[]
+  let total = 0
   let counts: StatusCounts
   try {
-    ;[products, counts] = await Promise.all([
-      listProducts({
+    const [pageResult, statusCounts] = await Promise.all([
+      listProductPage({
         q,
         status: status as ProductStatus | "ALL",
+        listing,
+        page: 1,
+        pageSize: CATALOG_PAGE_SIZE,
       }),
       countProductsByStatus(q),
     ])
+    products = pageResult.products
+    total = pageResult.total
+    counts = statusCounts
   } catch (error) {
     const reason = apiUnavailableReason(error) ?? "unreachable"
     return <ApiUnavailable reason={reason} />
   }
 
   const filteredEmpty =
-    products.length === 0 && (q.length > 0 || status !== "ALL")
+    products.length === 0 && (q.length > 0 || status !== "ALL" || listing != null)
 
   return (
-    <CatalogView q={q} status={status} view={view} counts={counts}>
+    <CatalogView q={q} status={status} listing={listing} view={view} counts={counts}>
       {products.length === 0 ? (
         filteredEmpty ? (
           <CatalogEmpty view={view} />
@@ -73,11 +96,12 @@ export default async function CatalogPage({
         )
       ) : (
         <CatalogProductList
-          key={`${q}|${status}`}
+          key={`${q}|${status}|${listing ?? ""}`}
           initialProducts={products}
-          total={counts[status]}
+          total={total}
           q={q}
           status={status}
+          listing={listing}
           view={view}
         />
       )}

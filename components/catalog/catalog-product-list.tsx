@@ -8,7 +8,7 @@ import { ProductCard } from "@/components/catalog/product-card"
 import { CatalogDeletePack } from "@/components/catalog/catalog-delete-pack"
 import { rememberOfflineProducts } from "@/lib/offline/cache"
 import { CATALOG_PAGE_SIZE } from "@/lib/inventory/types"
-import type { InventoryProduct } from "@/lib/inventory/types"
+import type { CatalogListingFilter, InventoryProduct } from "@/lib/inventory/types"
 import type { ProductStatus } from "@/lib/validations"
 
 function mergeUnique(
@@ -119,6 +119,7 @@ export function CatalogProductList({
   total,
   q,
   status,
+  listing,
   view,
   extraProducts = [],
 }: {
@@ -126,6 +127,7 @@ export function CatalogProductList({
   total: number
   q: string
   status: "ALL" | ProductStatus
+  listing?: CatalogListingFilter
   view: "grid" | "list"
   extraProducts?: InventoryProduct[]
 }) {
@@ -159,7 +161,7 @@ export function CatalogProductList({
         const gen = generation.current
         inFlight.current = true
         setLoading(true)
-        void loadCatalogPage({ page: nextPage, q, status })
+        void loadCatalogPage({ page: nextPage, q, status, listing })
           .then((result) => {
             if (gen !== generation.current) return
             inFlight.current = false
@@ -197,7 +199,7 @@ export function CatalogProductList({
     )
     observer.observe(node)
     return () => observer.disconnect()
-  }, [hasMore, loading, error, page, q, status])
+  }, [hasMore, loading, error, page, q, status, listing])
 
   return (
     <CatalogDeletePack

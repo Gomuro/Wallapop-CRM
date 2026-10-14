@@ -58,6 +58,7 @@ export type {
 export {
   PRODUCT_IMAGE_MAX,
   PRODUCT_IMAGE_MIN,
+  catalogListingFilterSchema,
   parseWarehouseProductCreate,
   productBrandSchema,
   productConditionSchema,

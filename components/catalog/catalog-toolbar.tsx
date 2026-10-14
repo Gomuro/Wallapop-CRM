@@ -6,7 +6,7 @@ import { LayoutGridIcon, ListIcon, SearchIcon, XIcon } from "lucide-react"
 
 import { Button } from "@/components/ui/button"
 import { Input } from "@/components/ui/input"
-import type { StatusCounts } from "@/lib/inventory/types"
+import type { CatalogListingFilter, StatusCounts } from "@/lib/inventory/types"
 import type { ProductStatus } from "@/lib/validations"
 import { typeMeta } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
@@ -18,14 +18,24 @@ const STATUS_FILTERS: { value: "ALL" | ProductStatus; label: string }[] = [
   { value: "INACTIVE", label: "Inactivos" },
 ]
 
+const LISTING_FILTERS: { value: CatalogListingFilter; label: string }[] = [
+  { value: "wallapop", label: "En Wallapop" },
+  { value: "reserved", label: "Reservado" },
+  { value: "queue", label: "Listo para publicar" },
+  { value: "error", label: "Error al publicar" },
+  { value: "nolink", label: "Sin enlace" },
+]
+
 function catalogHref(next: {
   q: string
   status: string
   view: "grid" | "list"
+  listing?: CatalogListingFilter
 }) {
   const params = new URLSearchParams()
   if (next.q.trim()) params.set("q", next.q.trim())
   if (next.status && next.status !== "ALL") params.set("status", next.status)
+  if (next.listing) params.set("listing", next.listing)
   if (next.view === "list") params.set("view", "list")
   const query = params.toString()
   return query ? `/?${query}` : "/"
@@ -79,11 +89,13 @@ function CatalogStatusFilters({
 function useCatalogToolbarNav({
   q,
   status,
+  listing,
   view,
   startTransition,
 }: {
   q: string
   status: "ALL" | ProductStatus
+  listing?: CatalogListingFilter
   view: "grid" | "list"
   startTransition: TransitionStartFunction
 }) {
@@ -104,22 +116,29 @@ function useCatalogToolbarNav({
       if (nextQ === q) return
       setRequestedQ(nextQ)
       startTransition(() => {
-        router.replace(catalogHref({ q: nextQ, status, view }))
+        router.replace(catalogHref({ q: nextQ, status, view, listing }))
       })
     }, 250)
     return () => window.clearTimeout(handle)
-  }, [draft, q, router, startTransition, status, view])
+  }, [draft, listing, q, router, startTransition, status, view])
 
-  function go(next: { q?: string; status?: string; view?: "grid" | "list" }) {
+  function go(next: {
+    q?: string
+    status?: string
+    view?: "grid" | "list"
+    listing?: CatalogListingFilter | null
+  }) {
     const nextQ = (next.q ?? draft).trim()
     if (next.q !== undefined && draft !== nextQ) setDraft(nextQ)
     setRequestedQ(nextQ)
+    const nextListing = next.listing === null ? undefined : (next.listing ?? listing)
     startTransition(() => {
       router.replace(
         catalogHref({
           q: nextQ,
           status: next.status ?? status,
           view: next.view ?? view,
+          listing: nextListing,
         }),
       )
     })
@@ -133,9 +152,43 @@ function useCatalogToolbarNav({
   return { draft, setDraft, go, clearSearch }
 }
 
+function CatalogListingFilters({
+  listing,
+  onSelect,
+}: {
+  listing?: CatalogListingFilter
+  onSelect: (value: CatalogListingFilter) => void
+}) {
+  return (
+    <div className="flex min-w-0 gap-1.5 overflow-x-auto scrollbar-none">
+      {LISTING_FILTERS.map((filter) => {
+        const active = listing === filter.value
+        return (
+          <button
+            key={filter.value}
+            type="button"
+            onClick={() => onSelect(filter.value)}
+            aria-pressed={active}
+            className={cn(
+              typeMeta,
+              "inline-flex h-11 shrink-0 items-center rounded-full px-3 font-semibold transition-colors focus-visible:ring-3 focus-visible:ring-ring/50",
+              active
+                ? "bg-primary text-primary-foreground"
+                : "text-foreground ring-1 ring-border hover:bg-accent",
+            )}
+          >
+            {filter.label}
+          </button>
+        )
+      })}
+    </div>
+  )
+}
+
 export function CatalogToolbar({
   q,
   status,
+  listing,
   view,
   counts,
   pending,
@@ -143,6 +196,7 @@ export function CatalogToolbar({
 }: {
   q: string
   status: "ALL" | ProductStatus
+  listing?: CatalogListingFilter
   view: "grid" | "list"
   counts: StatusCounts
   pending: boolean
@@ -151,6 +205,7 @@ export function CatalogToolbar({
   const { draft, setDraft, go, clearSearch } = useCatalogToolbarNav({
     q,
     status,
+    listing,
     view,
     startTransition,
   })
@@ -214,6 +269,12 @@ export function CatalogToolbar({
             </Button>
           </div>
         </div>
+      </div>
+      <div className="mt-2">
+        <CatalogListingFilters
+          listing={listing}
+          onSelect={(value) => go({ listing: listing === value ? null : value })}
+        />
       </div>
       {pending ? (
         <div

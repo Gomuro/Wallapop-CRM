@@ -63,12 +63,20 @@ export type InventoryProduct = InventoryProductIdentity &
   InventoryProductWarehouse &
   InventoryProductMedia
 
+export type CatalogListingFilter =
+  | "wallapop"
+  | "reserved"
+  | "queue"
+  | "error"
+  | "nolink"
+
 export type ProductListQuery = {
   q?: string
   status?: ProductStatus | "ALL"
   page?: number
   pageSize?: number
   categoryId?: string
+  listing?: CatalogListingFilter
 }
 
 /** First screen + each infinite-scroll chunk on the catalog. */

@@ -17,6 +17,7 @@ import {
 } from "@/lib/inventory/store"
 import {
   CATALOG_PAGE_SIZE,
+  type CatalogListingFilter,
   type InventoryProduct,
 } from "@/lib/inventory/types"
 import { apiGetCategory } from "@/lib/api/categories"
@@ -292,6 +293,7 @@ export async function loadCatalogPage(input: {
   page: number
   q?: string
   status?: "ALL" | ProductStatus
+  listing?: CatalogListingFilter
 }): Promise<
   | { ok: true; products: InventoryProduct[]; total: number; page: number }
   | { ok: false; error: string }
@@ -309,6 +311,7 @@ export async function loadCatalogPage(input: {
       pageSize: CATALOG_PAGE_SIZE,
       q: input.q?.trim() || undefined,
       status,
+      listing: input.listing,
     })
     return {
       ok: true,

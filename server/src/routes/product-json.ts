@@ -3,7 +3,10 @@ import type { Request, Response } from "express"
 import { ZodError } from "zod"
 
 import { isShippingPublishReady } from "../../../lib/inventory/shipping-for-publish"
-import { wallapopItemUrlOrNull } from "../../../lib/inventory/wallapop-item-url"
+import {
+  listingWithoutPublicItemUrlWhere,
+  wallapopItemUrlOrNull,
+} from "../../../lib/inventory/wallapop-item-url"
 import { productListQuerySchema } from "../../../lib/validations/product"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
@@ -187,6 +190,7 @@ export function parseListQuery(req: Request) {
     status: firstQueryParam(req.query.status),
     q: firstQueryParam(req.query.q),
     categoryId: firstQueryParam(req.query.categoryId),
+    listing: firstQueryParam(req.query.listing),
   })
 }
 
@@ -206,7 +210,36 @@ export function buildListWhere(
       { sku: { contains: query.q, mode: "insensitive" } },
     ]
   }
+  const listing = listingListWhere(query.listing)
+  if (listing) where.listings = listing
   return where
+}
+
+function listingListWhere(
+  listing: ReturnType<typeof productListQuerySchema.parse>["listing"],
+): Prisma.ProductWhereInput["listings"] {
+  if (!listing) return undefined
+  const account = { isDefault: true }
+  const onWallapop = { externalUrl: { contains: "/item/" } }
+  if (listing === "wallapop") {
+    return { some: { account, status: "ACTIVE", ...onWallapop } }
+  }
+  if (listing === "reserved") {
+    return { some: { account, status: "RESERVED", ...onWallapop } }
+  }
+  if (listing === "queue") {
+    return { some: { account, status: "READY_TO_POST" } }
+  }
+  if (listing === "error") {
+    return { some: { account, status: "FAILED" } }
+  }
+  return {
+    some: {
+      account,
+      status: { in: ["ACTIVE", "RESERVED"] },
+      ...listingWithoutPublicItemUrlWhere,
+    },
+  }
 }
 
 type ProductListItemIdentity = {

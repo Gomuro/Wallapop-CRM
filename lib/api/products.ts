@@ -32,6 +32,7 @@ export async function apiListProducts(
     status: query.status ?? "ALL",
     q: query.q,
     categoryId: query.categoryId,
+    listing: query.listing,
   })
   const response = await apiServerFetch<Partial<ApiProductListResponse>>(
     `/products${qs}`,
