@@ -4,7 +4,7 @@ import { LoaderCircleIcon } from "lucide-react"
 
 import { Badge } from "@/components/ui/badge"
 import { Button } from "@/components/ui/button"
-import type { ApiAutopostStatus } from "@/lib/api/types"
+import type { ApiAutopostStatus, ApiWorkerJob } from "@/lib/api/types"
 import {
   msToAutopostIntervalInput,
   type AutopostIntervalUnit,
@@ -56,6 +56,41 @@ export function AutopostRecentSkips({
         ))}
       </ul>
     </div>
+  )
+}
+
+const WORKER_KIND: Record<ApiWorkerJob["kind"], string> = {
+  publish: "Publicación",
+  sold: "Venta",
+  devolucion: "Devolución",
+}
+
+function workerStateLabel(state: ApiWorkerJob["state"]): string {
+  if (state === "queued") return "en cola"
+  if (state === "failed") return "error"
+  return "en curso"
+}
+
+function AccountWorkers({ workers }: { workers: ApiWorkerJob[] }) {
+  if (workers.length === 0) return null
+  return (
+    <ul className="mb-4 space-y-2" aria-live="polite">
+      {workers.map((job) => (
+        <li
+          key={`${job.kind}-${job.productId}-${job.state}`}
+          className="rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm"
+        >
+          <span className="font-medium">{WORKER_KIND[job.kind]}</span>
+          {job.kind === "publish" ? null : (
+            <span className="text-muted-foreground"> · {job.title}</span>
+          )}
+          <span> · {workerStateLabel(job.state)}</span>
+          {job.state === "failed" && job.message ? (
+            <span className="mt-0.5 block text-xs text-destructive">{job.message}</span>
+          ) : null}
+        </li>
+      ))}
+    </ul>
   )
 }
 
@@ -153,6 +188,7 @@ export function AutopostStatusCard({ state }: { state: AutopostIntervalState }) 
   const {
     apiReady,
     autopost,
+    workers,
     running,
     nextTickLabel,
     lastLabel,
@@ -180,11 +216,13 @@ export function AutopostStatusCard({ state }: { state: AutopostIntervalState }) 
 
       {autopost ? <AutopostBadges autopost={autopost} running={running} /> : null}
 
+      <AccountWorkers workers={workers} />
+
       <p className="mb-4 text-sm text-muted-foreground">
         Última publicación: {lastLabel}
       </p>
 
-      {running && autopost?.publishing ? (
+      {running && autopost?.publishing && !workers.some((job) => job.kind === "publish") ? (
         <p
           className="mb-4 rounded-lg border border-border bg-muted/30 px-3 py-2 text-sm"
           aria-live="polite"

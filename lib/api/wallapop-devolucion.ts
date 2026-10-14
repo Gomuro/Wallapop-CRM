@@ -6,6 +6,7 @@ const DEVOLUCION_TIMEOUT_MS = 120_000
 export type WallapopDevolucionResult = {
   ok: boolean
   dryRun: boolean
+  queued?: boolean
   step: string
   eliminated: boolean
   product: unknown

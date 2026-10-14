@@ -25,6 +25,7 @@ import {
   type WallapopSessionSnapshot,
 } from "../lib/wallapop-session"
 import { isBrowserBusyError, abortInFlightPublish } from "../lib/wallapop-cdp"
+import { listWorkerJobs } from "../lib/wallapop-worker-jobs"
 
 function toAccountJson(row: {
   id: string
@@ -80,6 +81,7 @@ export async function getDefaultAccount(_req: Request, res: Response) {
   res.json({
     account: toAccountJson(account),
     autopost,
+    workers: listWorkerJobs(),
   })
 }
 
@@ -126,6 +128,7 @@ export async function patchDefaultAccountAutopost(req: Request, res: Response) {
   res.json({
     account: toAccountJson(updated),
     autopost,
+    workers: listWorkerJobs(),
   })
 }
 
@@ -145,6 +148,7 @@ async function jsonDefaultAutopost(res: Response) {
   res.json({
     account: toAccountJson(account),
     autopost: await loadAutopostStatus(prisma),
+    workers: listWorkerJobs(),
   })
 }
 

@@ -6,6 +6,7 @@ const SOLD_TIMEOUT_MS = 120_000
 export type WallapopSoldResult = {
   ok: boolean
   dryRun: boolean
+  queued?: boolean
   step: string
   product: unknown
   error: string | null

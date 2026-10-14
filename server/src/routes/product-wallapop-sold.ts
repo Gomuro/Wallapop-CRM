@@ -6,6 +6,7 @@ import { sendError } from "../lib/http-error"
 import { isBrowserBusyError } from "../lib/wallapop-cdp"
 import { markProductSoldTx } from "../lib/product-sold"
 import { markWallapopSoldInBrowser, WallapopSoldError } from "../lib/wallapop-sold"
+import { enqueueWorkerJob } from "../lib/wallapop-worker-jobs"
 import { log, serializeError } from "../lib/log"
 import { loadProductCard, paramId, sendZod, toProductJson } from "./product-json"
 import {
@@ -26,15 +27,27 @@ function sendPrepareErr(res: Response, err: RunWallapopSoldErr): void {
   sendError(res, err.httpStatus, err.code, err.message)
 }
 
-async function persistCrmSold(ready: WallapopSoldReady, res: Response) {
+async function applyCrmSold(ready: WallapopSoldReady): Promise<void> {
   const txResult = await markProductSoldTx(ready.prisma, ready.productId, {
     soldPrice: ready.soldPrice,
   })
   if (txResult.kind === "not_found") {
-    sendError(res, 404, "NOT_FOUND", "Product not found.")
-    return
+    throw new Error("Producto no encontrado.")
   }
   if (txResult.kind === "already_sold") {
+    throw new Error("Product is already sold.")
+  }
+}
+
+async function persistCrmSold(ready: WallapopSoldReady, res: Response) {
+  try {
+    await applyCrmSold(ready)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Error"
+    if (message === "Producto no encontrado.") {
+      sendError(res, 404, "NOT_FOUND", "Product not found.")
+      return
+    }
     sendError(res, 409, "ALREADY_SOLD", "Product is already sold.")
     return
   }
@@ -73,6 +86,23 @@ function mapSoldBrowserError(error: unknown): RunWallapopSoldErr {
     httpStatus: 500,
     code: "SOLD_FAILED",
     message: `${step}: ${message}`,
+  }
+}
+
+export async function runWallapopSoldJob(ready: WallapopSoldReady): Promise<void> {
+  try {
+    const browser = await markWallapopSoldInBrowser({
+      itemUrl: ready.itemUrl,
+      dryRun: ready.dryRun,
+    })
+    if (browser.dryRun) return
+    await applyCrmSold(ready)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ""
+    if (message === "Producto no encontrado." || message === "Product is already sold.") {
+      throw error
+    }
+    throw new Error(mapSoldBrowserError(error).message)
   }
 }
 
@@ -122,5 +152,30 @@ export async function postProductWallapopSold(req: Request, res: Response) {
     sendPrepareErr(res, prepared)
     return
   }
-  await runPreparedSold(prepared, res)
+  if (prepared.dryRun) {
+    await runPreparedSold(prepared, res)
+    return
+  }
+  const titled = await prepared.prisma.product.findUnique({
+    where: { id: prepared.productId },
+    select: { title: true },
+  })
+  const queued = enqueueWorkerJob({
+    kind: "sold",
+    productId: prepared.productId,
+    title: titled?.title ?? "Producto",
+    run: () => runWallapopSoldJob(prepared),
+  })
+  if (!queued.ok) {
+    sendError(res, 409, "ALREADY_QUEUED", queued.message)
+    return
+  }
+  res.json({
+    ok: true,
+    queued: true,
+    dryRun: false,
+    step: "queued",
+    product: null,
+    error: null,
+  })
 }

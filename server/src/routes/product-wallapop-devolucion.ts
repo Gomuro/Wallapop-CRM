@@ -5,6 +5,7 @@ import { log, serializeError } from "../lib/log"
 import { deactivateListingAfterEliminar } from "../lib/product-eliminar"
 import { requeueSoldProductAfterReturn } from "../lib/product-sold"
 import { rescheduleAutopostLoop } from "../lib/wallapop-autopost"
+import { enqueueWorkerJob } from "../lib/wallapop-worker-jobs"
 import { isBrowserBusyError } from "../lib/wallapop-cdp"
 import {
   eliminarWallapopInBrowser,
@@ -41,25 +42,40 @@ function mapEliminarBrowserError(error: unknown): RunWallapopDevolucionErr {
   }
 }
 
+async function applyDevolucionRequeue(ready: WallapopDevolucionReady): Promise<void> {
+  const txResult = await requeueSoldProductAfterReturn(ready.prisma, ready.productId)
+  if (txResult.kind === "not_found") {
+    throw new Error("Producto no encontrado.")
+  }
+  if (txResult.kind === "not_sold") {
+    throw new Error("El producto no está vendido.")
+  }
+  if (txResult.kind === "no_default_account") {
+    throw new Error("La cuenta predeterminada no está configurada.")
+  }
+  await rescheduleAutopostLoop()
+}
+
 async function persistDevolucionRequeue(
   ready: WallapopDevolucionReady,
   res: Response,
   eliminated: boolean,
 ): Promise<void> {
-  const txResult = await requeueSoldProductAfterReturn(ready.prisma, ready.productId)
-  if (txResult.kind === "not_found") {
+  try {
+    await applyDevolucionRequeue(ready)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : "Error"
+    if (message === "El producto no está vendido.") {
+      sendError(res, 409, "NOT_SOLD", message)
+      return
+    }
+    if (message === "La cuenta predeterminada no está configurada.") {
+      sendError(res, 404, "NOT_FOUND", message)
+      return
+    }
     sendError(res, 404, "NOT_FOUND", "Producto no encontrado.")
     return
   }
-  if (txResult.kind === "not_sold") {
-    sendError(res, 409, "NOT_SOLD", "El producto no está vendido.")
-    return
-  }
-  if (txResult.kind === "no_default_account") {
-    sendError(res, 404, "NOT_FOUND", "La cuenta predeterminada no está configurada.")
-    return
-  }
-  await rescheduleAutopostLoop()
   const product = await loadProductCard(ready.prisma, ready.productId)
   if (!product) {
     sendError(
@@ -78,6 +94,34 @@ async function persistDevolucionRequeue(
     product: toProductJson(product),
     error: null,
   })
+}
+
+export async function runWallapopDevolucionJob(
+  ready: WallapopDevolucionReady,
+): Promise<void> {
+  try {
+    if (!ready.itemUrl) {
+      await applyDevolucionRequeue(ready)
+      return
+    }
+    const browser = await eliminarWallapopInBrowser({
+      itemUrl: ready.itemUrl,
+      dryRun: ready.dryRun,
+    })
+    if (browser.dryRun) return
+    await deactivateListingAfterEliminar(ready.prisma, ready.productId)
+    await applyDevolucionRequeue(ready)
+  } catch (error) {
+    const message = error instanceof Error ? error.message : ""
+    if (
+      message === "Producto no encontrado." ||
+      message === "El producto no está vendido." ||
+      message === "La cuenta predeterminada no está configurada."
+    ) {
+      throw error
+    }
+    throw new Error(mapEliminarBrowserError(error).message)
+  }
 }
 
 async function runPreparedDevolucion(
@@ -127,5 +171,31 @@ export async function postProductWallapopDevolucion(req: Request, res: Response)
     sendPrepareErr(res, prepared)
     return
   }
-  await runPreparedDevolucion(prepared, res)
+  if (prepared.dryRun || !prepared.itemUrl) {
+    await runPreparedDevolucion(prepared, res)
+    return
+  }
+  const titled = await prepared.prisma.product.findUnique({
+    where: { id: prepared.productId },
+    select: { title: true },
+  })
+  const queued = enqueueWorkerJob({
+    kind: "devolucion",
+    productId: prepared.productId,
+    title: titled?.title ?? "Producto",
+    run: () => runWallapopDevolucionJob(prepared),
+  })
+  if (!queued.ok) {
+    sendError(res, 409, "ALREADY_QUEUED", queued.message)
+    return
+  }
+  res.json({
+    ok: true,
+    queued: true,
+    dryRun: false,
+    step: "queued",
+    eliminated: false,
+    product: null,
+    error: null,
+  })
 }

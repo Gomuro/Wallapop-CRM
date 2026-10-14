@@ -3,7 +3,7 @@
 import { useEffect, useState, useSyncExternalStore } from "react"
 
 import { isApiConfigured } from "@/lib/api/config"
-import type { ApiAutopostStatus } from "@/lib/api/types"
+import type { ApiAutopostStatus, ApiWorkerJob } from "@/lib/api/types"
 import {
   getDefaultAccountAutopost,
   getWallapopAccountStatus,
@@ -65,6 +65,7 @@ export type AutopostSetters = {
   setValue: (value: string) => void
   setUnit: (unit: AutopostIntervalUnit) => void
   setAutopost: (autopost: ApiAutopostStatus | null) => void
+  setWorkers: (workers: ApiWorkerJob[]) => void
   setSessionStatus: (status: WallapopConnectionStatus) => void
   setLoading: (loading: boolean) => void
   setSaving: (saving: boolean) => void
@@ -89,6 +90,7 @@ function subscribeAutopostLoad(setters: AutopostSetters) {
       setters.setValue(String(parsed.value))
       setters.setUnit(parsed.unit)
       setters.setAutopost(next.autopost)
+      setters.setWorkers(next.workers ?? [])
       if (session) setters.setSessionStatus(session.status)
       setters.setError(null)
     } catch (err) {
@@ -131,6 +133,7 @@ export async function saveAutopostInterval(ctx: {
     ctx.setters.setValue(String(shown.value))
     ctx.setters.setUnit(shown.unit)
     ctx.setters.setAutopost(next.autopost)
+    ctx.setters.setWorkers(next.workers ?? [])
     ctx.setters.setSaved(true)
   } catch (err) {
     ctx.setters.setError(wallapopAccountErrorMessage(err))
@@ -146,6 +149,7 @@ export async function startAutopostRun(setters: AutopostSetters) {
   try {
     const next = await startAutopost()
     setters.setAutopost(next.autopost)
+    setters.setWorkers(next.workers ?? [])
   } catch (err) {
     setters.setError(wallapopAccountErrorMessage(err))
   } finally {
@@ -159,6 +163,7 @@ export async function stopAutopostRun(setters: AutopostSetters) {
   try {
     const next = await stopAutopost()
     setters.setAutopost(next.autopost)
+    setters.setWorkers(next.workers ?? [])
   } catch (err) {
     setters.setError(wallapopAccountErrorMessage(err))
   } finally {
@@ -171,6 +176,7 @@ export type AutopostIntervalValues = {
   value: string
   unit: AutopostIntervalUnit
   autopost: ApiAutopostStatus | null
+  workers: ApiWorkerJob[]
   running: boolean
   nextTickLabel: string | null
   sessionActive: boolean
@@ -202,6 +208,7 @@ export function useAutopostIntervalState(): AutopostIntervalState {
   const [value, setValue] = useState("15")
   const [unit, setUnit] = useState<AutopostIntervalUnit>("minutes")
   const [autopost, setAutopost] = useState<ApiAutopostStatus | null>(null)
+  const [workers, setWorkers] = useState<ApiWorkerJob[]>([])
   const [sessionStatus, setSessionStatus] =
     useState<WallapopConnectionStatus>("DISCONNECTED")
   const [loading, setLoading] = useState(apiReady)
@@ -215,6 +222,7 @@ export function useAutopostIntervalState(): AutopostIntervalState {
     setValue,
     setUnit,
     setAutopost,
+    setWorkers,
     setSessionStatus,
     setLoading,
     setSaving,
@@ -234,12 +242,14 @@ export function useAutopostIntervalState(): AutopostIntervalState {
   const nextTickLabel = useAutopostNextTickLabel(autopost?.nextTickAt, running)
 
   useEffect(() => {
-    if (!apiReady || !running) return
+    if (!apiReady) return
     let cancelled = false
     const timer = window.setInterval(() => {
       void getDefaultAccountAutopost()
         .then((next) => {
-          if (!cancelled) setAutopost(next.autopost)
+          if (cancelled) return
+          setAutopost(next.autopost)
+          setWorkers(next.workers ?? [])
         })
         .catch(() => {})
     }, 5000)
@@ -247,7 +257,7 @@ export function useAutopostIntervalState(): AutopostIntervalState {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [apiReady, running])
+  }, [apiReady])
 
   useEffect(() => {
     if (!saved) return
@@ -266,6 +276,7 @@ export function useAutopostIntervalState(): AutopostIntervalState {
     value,
     unit,
     autopost,
+    workers,
     loading,
     saving,
     toggling,

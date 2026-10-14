@@ -49,6 +49,11 @@ export function SoldSyncButton({
           )
           return
         }
+        if (result.queued) {
+          setOpen(false)
+          router.refresh()
+          return
+        }
         setSold(true)
         setOpen(false)
         router.refresh()
@@ -67,7 +72,7 @@ export function SoldSyncButton({
       triggerVariant={isSold ? "secondary" : "default"}
       triggerDisabled={isSold}
       title="Marcar como vendido"
-      description="Se marcará vendido en Wallapop (ventana aparte) y el producto pasará a Vendido en el CRM. Si el comprador lo devuelve, usa Devolución: se elimina el anuncio en Wallapop y el mismo producto vuelve a la cola."
+      description="Se marcará vendido en Wallapop (ventana aparte) y el producto pasará a Vendido en el CRM. Puedes seguir en el catálogo: el trabajo sigue en la cuenta. Si el comprador lo devuelve, usa Devolución."
       confirmLabel="Confirmar"
       pendingLabel="En Wallapop…"
       error={error}

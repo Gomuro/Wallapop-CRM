@@ -153,7 +153,7 @@ export function DevolucionButton({
       title="Devolución"
       description={
         hasItemUrl
-          ? "Se borrará el anuncio vendido en Wallapop (Eliminar) y el mismo producto volverá a En venta y a la cola de publicación. No se crea un producto nuevo."
+          ? "Se borrará el anuncio vendido en Wallapop (Eliminar) y el mismo producto volverá a En venta y a la cola de publicación. Puedes seguir en el catálogo: el trabajo sigue en la cuenta. No se crea un producto nuevo."
           : "El anuncio ya no tiene URL pública. El mismo producto volverá a En venta y a la cola de publicación. No se crea un producto nuevo."
       }
       confirmLabel="Confirmar devolución"

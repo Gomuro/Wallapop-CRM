@@ -152,7 +152,16 @@ export type ApiAutopostStatus = {
   }>
 }
 
+export type ApiWorkerJob = {
+  kind: "sold" | "devolucion" | "publish"
+  productId: string
+  title: string
+  state: "queued" | "running" | "failed"
+  message: string | null
+}
+
 export type ApiDefaultAccountResponse = {
   account: ApiDefaultAccount
   autopost: ApiAutopostStatus
+  workers?: ApiWorkerJob[]
 }
