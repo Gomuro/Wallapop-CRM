@@ -120,15 +120,8 @@ async function applyReconcileToState(): Promise<void> {
   await applyReconcileResult(await reconcileWallapopBrowserState())
 }
 
-/**
- * In-memory snapshot, rehydrated from Chrome CDP when RAM was wiped (API restart)
- * but MFA / logged-in UI is still open.
- */
+/** In-memory view. The 5-minute session worker updates it. Status reads do not open Chrome. */
 export async function getWallapopSessionSnapshot(): Promise<WallapopSessionSnapshot> {
-  if (state.requires2FA || state.status === "ACTIVE") {
-    return snapshot()
-  }
-  await applyReconcileToState()
   return snapshot()
 }
 

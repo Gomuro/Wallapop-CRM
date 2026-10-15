@@ -1,5 +1,5 @@
 import { log, serializeError } from "../log"
-import { getWallapopSession, rehydrateWallapopSessionOnBoot } from "../wallapop-session"
+import { rehydrateWallapopSessionOnBoot } from "../wallapop-session"
 import { runWallapopMonitorTick } from "./tick"
 
 export const MONITOR_INTERVAL_MS = 5 * 60 * 1000
@@ -49,9 +49,7 @@ async function runScheduledTick(generation: number): Promise<void> {
   scheduleNext(generation)
 }
 
-/**
- * Session probe on boot, then En venta/Vendidos immediately and every 5 minutes.
- */
+/** One session probe, then the catalog tick. The next probe is five minutes later. */
 export function startWallapopMonitorLoop(): void {
   if (started) {
     log("info", "wallapop_monitor_already_started")
@@ -62,20 +60,5 @@ export function startWallapopMonitorLoop(): void {
   log("info", "wallapop_monitor_loop_started", {
     intervalMs: MONITOR_INTERVAL_MS,
   })
-  void (async () => {
-    if (getWallapopSession().status === "ACTIVE") return
-    const session = await rehydrateWallapopSessionOnBoot()
-    log("info", "wallapop_session_rehydrate", {
-      status: session.status,
-      requires2FA: session.requires2FA,
-    })
-  })()
-    .catch((error) =>
-      log("warn", "wallapop_monitor_boot_failed", {
-        err: serializeError(error),
-      }),
-    )
-    .finally(() => {
-      void runScheduledTick(generation)
-    })
+  void runScheduledTick(generation)
 }
