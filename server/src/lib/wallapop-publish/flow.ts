@@ -20,7 +20,6 @@ import { logPublishStep, snapshotPublishForm } from "./debug";
 import { fillPublishForm } from "./form";
 import {
   clickEnabledContinuar,
-  clickExactButtonText,
   dismissSearchOverlay,
   readAllVisibleButtonLabels,
   visibleButtonLabels,
@@ -48,27 +47,49 @@ export async function gotoUpload(
   await dismissSearchOverlay(page);
 }
 
+const CONSUMER_GOODS_LABEL = "Algo que ya no necesito";
+const CONSUMER_GOODS_WAIT_MS = 15_000;
+
+function consumerGoodsButton(page: Page) {
+  return page
+    .locator(`walla-button[text="${CONSUMER_GOODS_LABEL}"]`)
+    .or(page.getByRole("button", { name: CONSUMER_GOODS_LABEL, exact: true }));
+}
+
+/** Skeleton first, then either the choice or the summary field. */
+async function waitForConsumerGoods(
+  page: Page,
+): Promise<"ready" | "logged_out" | "missing"> {
+  const deadline = Date.now() + CONSUMER_GOODS_WAIT_MS;
+  const summary = page.locator(PUBLISH_SELECTORS.summary.join(",")).first();
+  while (Date.now() < deadline) {
+    throwIfPublishAborted();
+    if (isWallapopLoggedOutUrl(page.url())) return "logged_out";
+    if (page.url().includes("consumer-goods")) return "ready";
+    const button = consumerGoodsButton(page).first();
+    if (await button.isVisible().catch(() => false)) {
+      await button.click({ force: true });
+      await page.waitForTimeout(2_500);
+      return "ready";
+    }
+    if (await summary.isVisible().catch(() => false)) return "ready";
+    await page.waitForTimeout(400);
+  }
+  return "missing";
+}
+
 export async function selectConsumerGoods(
   page: Page,
   mark: SetPublishStep,
 ): Promise<void> {
   mark("consumer_goods");
   logPublishStep("consumer_goods", page, { phase: "consumer_goods_check" });
-  if (isWallapopLoggedOutUrl(page.url())) {
+  const choice = await waitForConsumerGoods(page);
+  if (choice === "logged_out") {
     await markWallapopSessionLoggedOut();
     throw new WallapopPublishError("consumer_goods", WALLAPOP_LOGGED_OUT_MESSAGE);
   }
-  if (page.url().includes("consumer-goods")) return;
-  if (await clickExactButtonText(page, "Algo que ya no necesito")) return;
-  const byRole = page.getByRole("button", {
-    name: "Algo que ya no necesito",
-    exact: true,
-  });
-  if (await byRole.isVisible().catch(() => false)) {
-    await byRole.click({ force: true });
-    await page.waitForTimeout(2_500);
-    return;
-  }
+  if (choice === "ready") return;
   throw new WallapopPublishError(
     "consumer_goods",
     'No se encontró "Algo que ya no necesito".',
