@@ -18,10 +18,12 @@ import { rescheduleAutopostLoop } from "../lib/wallapop-autopost"
 import {
   buildListWhere,
   loadProductCard,
+  loadProductDetail,
   paramId,
   parseListQuery,
   productListInclude,
   sendZod,
+  toProductDetailJson,
   toProductJson,
   toProductListItemJson,
 } from "./product-json"
@@ -212,12 +214,12 @@ export async function getProduct(req: Request, res: Response) {
     sendError(res, 500, "INTERNAL", "Database is not configured.")
     return
   }
-  const product = await loadProductCard(prisma, id)
+  const product = await loadProductDetail(prisma, id)
   if (!product) {
     sendError(res, 404, "NOT_FOUND", "Product not found.")
     return
   }
-  res.json({ product: toProductJson(product) })
+  res.json({ product: toProductDetailJson(product) })
 }
 
 type UpdateProductBody = ReturnType<typeof updateBodySchema.parse>

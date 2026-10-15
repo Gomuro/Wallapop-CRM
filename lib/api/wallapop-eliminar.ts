@@ -15,12 +15,13 @@ export type WallapopEliminarResult = {
 /** Live vs dry-run follows `WALLAPOP_ELIMINAR_DRY_RUN` on the API. */
 export async function eliminarWallapopListing(
   productId: string,
+  accountId?: string,
 ): Promise<WallapopEliminarResult> {
   return apiClientFetch<WallapopEliminarResult>(
     `/products/${encodeURIComponent(productId)}/wallapop-eliminar`,
     {
       method: "POST",
-      body: JSON.stringify({}),
+      body: JSON.stringify(accountId ? { accountId } : {}),
       timeoutMs: ELIMINAR_TIMEOUT_MS,
     },
   )

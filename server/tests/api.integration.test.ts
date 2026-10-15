@@ -1318,6 +1318,113 @@ describe("API v1 integration (Express + Postgres)", () => {
     })
   })
 
+  describe("account cards", () => {
+    it("creates an account row and no publication queue", async () => {
+      const prisma = getPrisma()
+      expect(prisma).toBeTruthy()
+      if (!prisma) return
+      const before = await prisma.productListing.count()
+      const created = await agent.post("/api/v1/accounts").send({
+        name: `Sur pantalla ${Date.now()}`,
+        isDefault: true,
+      })
+      const id = created.body.account?.id as string | undefined
+      try {
+        expect(created.status).toBe(201)
+        expect(created.body.account?.isDefault).toBe(false)
+        expect(await prisma.productListing.count()).toBe(before)
+        const listed = await agent.get("/api/v1/accounts")
+        expect(listed.status).toBe(200)
+        const row = (
+          listed.body.accounts as { id: string; isDefault: boolean }[]
+        ).find((account) => account.id === id)
+        expect(row?.isDefault).toBe(false)
+      } finally {
+        if (id) {
+          await prisma.account.delete({ where: { id } }).catch(() => undefined)
+        }
+      }
+    })
+
+    it("returns every stored listing on the product", async () => {
+      const prisma = getPrisma()
+      expect(prisma).toBeTruthy()
+      if (!prisma) return
+      const sellerId = await findDefaultAccountId(prisma)
+      expect(sellerId).toBeTruthy()
+      const categoryId = await findLeafCategoryId(agent)
+      const created = await agent.post("/api/v1/products").send({
+        sku: `API-LISTINGS-${Date.now()}`,
+        title: "Listing blocks",
+        description: "One SKU, one row per account",
+        price: 11,
+        currency: "EUR",
+        categoryId,
+        condition: "GOOD",
+        brand: "Acme",
+      })
+      expect(created.status).toBe(201)
+      const id = created.body.product?.id as string
+      const neighbor = await prisma.account.create({
+        data: { name: "Sur bloque", isDefault: false },
+        select: { id: true },
+      })
+      try {
+        await prisma.productListing.create({
+          data: {
+            productId: id,
+            accountId: neighbor.id,
+            status: "ACTIVE",
+            externalUrl: "https://es.wallapop.com/item/sur-bloque",
+          },
+        })
+        const loaded = await agent.get(`/api/v1/products/${id}`)
+        expect(loaded.status).toBe(200)
+        expect(loaded.body.product?.listing?.accountId).toBe(sellerId)
+        const listings = loaded.body.product?.listings as {
+          accountId: string
+          accountName: string
+        }[]
+        expect(listings).toHaveLength(2)
+        expect(listings[0]?.accountId).toBe(sellerId)
+        expect(listings.some((row) => row.accountId === neighbor.id)).toBe(true)
+        expect(
+          listings.find((row) => row.accountId === neighbor.id)?.accountName,
+        ).toBe("Sur bloque")
+      } finally {
+        await prisma.product.delete({ where: { id } }).catch(() => undefined)
+        await prisma.account
+          .delete({ where: { id: neighbor.id } })
+          .catch(() => undefined)
+      }
+    })
+
+    it("stops sold, eliminar and devolución for another account before Chrome", async () => {
+      const prisma = getPrisma()
+      expect(prisma).toBeTruthy()
+      if (!prisma) return
+      const neighbor = await prisma.account.create({
+        data: { name: "Sur chrome", isDefault: false },
+        select: { id: true },
+      })
+      try {
+        for (const path of [
+          "/api/v1/products/missing-product/wallapop-sold",
+          "/api/v1/products/missing-product/wallapop-eliminar",
+          "/api/v1/products/missing-product/wallapop-devolucion",
+        ]) {
+          const res = await agent.post(path).send({ accountId: neighbor.id })
+          expect(res.status).toBe(409)
+          expect(errorCode(res.body)).toBe("FOREIGN_CHROME")
+        }
+      } finally {
+        await prisma.account
+          .delete({ where: { id: neighbor.id } })
+          .catch(() => undefined)
+      }
+    })
+  })
+
   afterAll(async () => {
     if (!productId || !agent) return
     await agent.delete(`/api/v1/products/${productId}`)

@@ -11,23 +11,10 @@ import { Separator } from "@/components/ui/separator"
 import {
   DeleteProductButton,
   MarkInactiveButton,
-  SoldSyncButton,
 } from "@/components/product-form/product-actions"
-import {
-  DevolucionButton,
-  EliminarWallapopButton,
-  RequeueListingButton,
-} from "@/components/product-form/listing-actions"
 import { TestPublishButton } from "@/components/product-form/test-publish-button"
-import {
-  canEliminarOnWallapop,
-  canMarkSoldOnWallapop,
-  canMarkWarehouseInactive,
-  canRequeueListing,
-  canStartDevolucion,
-} from "@/lib/inventory/listing-active"
-import { wallapopEsItemUrlOrNull } from "@/lib/inventory/wallapop-item-url"
-import { ListingDetailSection } from "@/components/catalog/listing-detail"
+import { canMarkWarehouseInactive } from "@/lib/inventory/listing-active"
+import { ProductListingBlocks } from "@/components/catalog/product-listing-blocks"
 import {
   categoryLabel,
   conditionLabel,
@@ -44,7 +31,7 @@ import { cn } from "@/lib/utils"
 
 function ProductDetailAside({ product }: { product: InventoryProduct }) {
   return (
-    <aside className="space-y-4 px-4 pt-4 pb-[calc(9rem+env(safe-area-inset-bottom))] md:px-8 md:pb-8 lg:sticky lg:top-28 lg:col-span-6 lg:self-start lg:px-0 lg:pt-0 lg:pb-0">
+    <aside className="space-y-4 px-4 pt-4 pb-[calc(5.5rem+env(safe-area-inset-bottom))] md:px-8 md:pb-8 lg:sticky lg:top-28 lg:col-span-6 lg:self-start lg:px-0 lg:pt-0 lg:pb-0">
       <div>
         <p className={cn(typePrice, "text-primary-text")}>
           {formatEuro(product.price)}
@@ -74,14 +61,7 @@ function ProductDetailAside({ product }: { product: InventoryProduct }) {
           <Badge variant="secondary">{product.weight} kg</Badge>
         ) : null}
       </div>
-      <ListingDetailSection
-        productId={product.id}
-        listing={product.listing}
-        listingActive={product.listingActive}
-        shippingIncomplete={!product.shippingPublishReady}
-        productSold={product.status === "SOLD"}
-        warehouseStatus={product.status}
-      />
+      <ProductListingBlocks product={product} />
       {process.env.NODE_ENV === "development" ? (
         <TestPublishButton
           productId={product.id}
@@ -107,26 +87,6 @@ function ProductDetailAside({ product }: { product: InventoryProduct }) {
         >
           Editar producto
         </Button>
-        {canStartDevolucion(product) || canMarkSoldOnWallapop(product) ? (
-          <div className="fixed inset-x-0 bottom-[calc(4rem+env(safe-area-inset-bottom))] z-30 border-t bg-background/95 px-4 py-3 backdrop-blur-sm md:static md:inset-auto md:z-auto md:border-0 md:bg-transparent md:p-0 md:backdrop-blur-none">
-            {canStartDevolucion(product) ? (
-              <DevolucionButton
-                productId={product.id}
-                hasItemUrl={
-                  wallapopEsItemUrlOrNull(product.listing?.externalUrl) != null
-                }
-              />
-            ) : (
-              <SoldSyncButton productId={product.id} />
-            )}
-          </div>
-        ) : null}
-        {canEliminarOnWallapop(product) ? (
-          <EliminarWallapopButton productId={product.id} />
-        ) : null}
-        {canRequeueListing(product) ? (
-          <RequeueListingButton productId={product.id} />
-        ) : null}
         {canMarkWarehouseInactive(product) ? (
           <MarkInactiveButton productId={product.id} />
         ) : null}

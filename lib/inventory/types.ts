@@ -14,6 +14,7 @@ export type InventoryListing = {
   id: string
   accountId: string
   accountName?: string
+  isDefault?: boolean
   externalUrl: string | null
   status: ListingStatusRead
   lastPostedAt: string | null
@@ -52,6 +53,9 @@ export type InventoryProductMedia = {
   productImages: InventoryProductImage[]
   externalLinks: string[]
   listing: InventoryListing | null
+  /** Every ProductListing row already stored. Absent on catalog cards. */
+  listings?: InventoryListing[]
+  soldAccountId?: string | null
   typeAttributes: Record<string, unknown>
   /** From GET /products list when full listing is omitted. */
   listingActive?: boolean

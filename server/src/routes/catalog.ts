@@ -7,9 +7,11 @@ import {
 import {
   connectAccount,
   connectAccount2fa,
+  createAccount,
   disconnectAccount,
   getAccountConnectionStatus,
   getDefaultAccount,
+  listAccounts,
   patchDefaultAccountAutopost,
   startDefaultAccountAutopost,
   stopDefaultAccountAutopost,
@@ -75,6 +77,8 @@ catalog.post("/products/:id/wallapop-eliminar", postProductWallapopEliminar)
 catalog.post("/products/:id/catalog-delete", postCatalogDelete)
 catalog.post("/products/:id/wallapop-devolucion", postProductWallapopDevolucion)
 
+catalog.get("/accounts", listAccounts)
+catalog.post("/accounts", createAccount)
 catalog.get("/accounts/default", getDefaultAccount)
 catalog.patch("/accounts/default/autopost", patchDefaultAccountAutopost)
 catalog.post("/accounts/default/autopost/start", startDefaultAccountAutopost)

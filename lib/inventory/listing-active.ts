@@ -52,19 +52,33 @@ export function computeListingActive(
  * «Marcar como vendido»: the ad is En venta on Wallapop and has a public es /item/ URL.
  * Queue, Publicando, Reservado and a warehouse-only product have nothing to mark sold.
  */
-export function canMarkSoldOnWallapop(product: InventoryProduct): boolean {
-  if (product.status !== "ACTIVE") return false
-  const listing = product.listing
-  if (!listing || listing.status !== "ACTIVE") return false
+export function canMarkSoldOnListing(
+  warehouseStatus: string,
+  listing: Pick<InventoryListing, "status" | "externalUrl">,
+): boolean {
+  if (warehouseStatus !== "ACTIVE") return false
+  if (listing.status !== "ACTIVE") return false
   return wallapopEsItemUrlOrNull(listing.externalUrl) != null
 }
 
+export function canMarkSoldOnWallapop(product: InventoryProduct): boolean {
+  if (!product.listing) return false
+  return canMarkSoldOnListing(product.status, product.listing)
+}
+
 /** «Eliminar en Wallapop»: live listing with a public es /item/ URL, not sold. */
-export function canEliminarOnWallapop(product: InventoryProduct): boolean {
-  if (product.status === "SOLD") return false
-  const listing = product.listing
-  if (!listing || !isLiveOnWallapopStatus(listing.status)) return false
+export function canEliminarOnListing(
+  warehouseStatus: string,
+  listing: Pick<InventoryListing, "status" | "externalUrl">,
+): boolean {
+  if (warehouseStatus === "SOLD") return false
+  if (!isLiveOnWallapopStatus(listing.status)) return false
   return wallapopEsItemUrlOrNull(listing.externalUrl) != null
+}
+
+export function canEliminarOnWallapop(product: InventoryProduct): boolean {
+  if (!product.listing) return false
+  return canEliminarOnListing(product.status, product.listing)
 }
 
 /** «Poner en cola»: listing taken off Wallapop, product still for sale. */
@@ -73,6 +87,23 @@ export function canRequeueListing(product: InventoryProduct): boolean {
 }
 
 /** «Devolución»: sold SKU comes back (Eliminar on Wallapop if needed, then cola). */
+export function canStartDevolucionOnListing(
+  product: {
+    status: string
+    soldAccountId?: string | null
+    listing?: { accountId: string } | null
+  },
+  listing: Pick<InventoryListing, "status" | "accountId">,
+): boolean {
+  if (product.status !== "SOLD") return false
+  if (listing.status === "POSTING") return false
+  if (product.soldAccountId) return listing.accountId === product.soldAccountId
+  if (product.listing?.accountId) {
+    return listing.accountId === product.listing.accountId
+  }
+  return true
+}
+
 export function canStartDevolucion(product: InventoryProduct): boolean {
   if (product.status !== "SOLD") return false
   return product.listing?.status !== "POSTING"

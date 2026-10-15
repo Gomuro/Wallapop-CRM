@@ -101,10 +101,15 @@ export function mapApiListing(
   if (!listing || typeof listing !== "object") return null
   const id = asString(listing.id)
   if (!id) return null
+  const named =
+    typeof listing.accountName === "string" && listing.accountName.trim()
+      ? listing.accountName.trim()
+      : accountName
   return {
     id,
     accountId: asString(listing.accountId),
-    accountName,
+    accountName: named,
+    isDefault: listing.isDefault === true,
     externalUrl:
       typeof listing.externalUrl === "string" && listing.externalUrl.trim()
         ? listing.externalUrl
@@ -211,6 +216,19 @@ type InventoryProductSource = {
   conditionCode: ProductCondition
 }
 
+function mapStoredListings(
+  product: ApiProduct,
+  listing: InventoryListing | null,
+): InventoryListing[] {
+  if (!Array.isArray(product.listings) || product.listings.length === 0) {
+    return listing ? [listing] : []
+  }
+  const rows = product.listings
+    .map((row) => mapApiListing(row, listing?.accountName ?? ""))
+    .filter((row): row is InventoryListing => row != null)
+  return rows.length > 0 ? rows : listing ? [listing] : []
+}
+
 function inventoryListingMeta(
   product: ApiProduct,
   listing: InventoryListing | null,
@@ -218,6 +236,9 @@ function inventoryListingMeta(
   const weightKg = asNullableNumber(product?.weightKg)
   return {
     listing,
+    listings: mapStoredListings(product, listing),
+    soldAccountId:
+      typeof product.soldAccountId === "string" ? product.soldAccountId : null,
     typeAttributes:
       product.typeAttributes && typeof product.typeAttributes === "object"
         ? product.typeAttributes

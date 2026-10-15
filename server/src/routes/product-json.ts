@@ -163,6 +163,56 @@ export function toProductJson(row: ProductJsonRow) {
   }
 }
 
+const productDetailListingSelect = {
+  ...listingJsonSelect,
+  account: { select: { name: true, isDefault: true } },
+} as const
+
+export async function loadProductDetail(
+  prisma: NonNullable<ReturnType<typeof getPrisma>>,
+  id: string,
+) {
+  return prisma.product.findUnique({
+    where: { id },
+    include: {
+      images: { orderBy: { sortOrder: "asc" as const } },
+      listings: {
+        orderBy: { createdAt: "asc" as const },
+        select: productDetailListingSelect,
+      },
+    },
+  })
+}
+
+type ProductDetailListing = ProductJsonListing & {
+  account: { name: string; isDefault: boolean }
+}
+
+type ProductDetailRow = ProductJsonRow & {
+  soldAccountId?: string | null
+  listings: ProductDetailListing[]
+}
+
+/** `listing` stays the default-account row. `listings` is every row that already exists. */
+export function toProductDetailJson(row: ProductDetailRow) {
+  const ordered = [...row.listings].sort(
+    (a, b) => Number(b.account.isDefault) - Number(a.account.isDefault),
+  )
+  const defaultListing = ordered.find((item) => item.account.isDefault) ?? null
+  return {
+    ...toProductJson({
+      ...row,
+      listings: defaultListing ? [defaultListing] : [],
+    }),
+    soldAccountId: row.soldAccountId ?? null,
+    listings: ordered.map((item) => ({
+      ...toListingJson(item),
+      accountName: item.account.name,
+      isDefault: item.account.isDefault,
+    })),
+  }
+}
+
 export function paramId(req: Request) {
   const id = req.params.id
   return typeof id === "string" ? id : Array.isArray(id) ? id[0] : ""

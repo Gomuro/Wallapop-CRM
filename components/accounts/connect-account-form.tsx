@@ -31,7 +31,7 @@ function statusBadgeVariant(
   return "outline";
 }
 
-export function ConnectAccountForm() {
+export function ConnectAccountForm({ embedded = false }: { embedded?: boolean }) {
   const session = useConnectAccountSession();
   const {
     apiReady,
@@ -45,18 +45,8 @@ export function ConnectAccountForm() {
     showConnectHint,
   } = session;
 
-  return (
-    <Card className="mx-auto w-full max-w-md">
-      <CardHeader className="border-b">
-        <CardTitle>Cuenta Wallapop</CardTitle>
-        <CardDescription>Login en Chrome.</CardDescription>
-        <CardAction>
-          <Badge variant={statusBadgeVariant(account.status)}>
-            {statusLoading ? "…" : STATUS_LABEL[account.status]}
-          </Badge>
-        </CardAction>
-      </CardHeader>
-      <CardContent className="flex flex-col gap-4">
+  const fields = (
+    <>
 
       {!apiReady ? (
         <p className="mb-4 rounded-lg border border-amber-500/40 bg-amber-500/10 px-3 py-2 text-sm text-amber-950 dark:text-amber-100">
@@ -109,7 +99,35 @@ export function ConnectAccountForm() {
       <ConnectLoginForm session={session} />
       <ConnectResetDialog session={session} />
       <ConnectTwoFaDialog session={session} />
-      </CardContent>
+    </>
+  );
+
+  if (embedded) {
+    return (
+      <div className="flex flex-col gap-4 border-t px-4 py-4">
+        <div className="flex items-center justify-between gap-3">
+          <p className="text-sm font-medium">Login</p>
+          <Badge variant={statusBadgeVariant(account.status)}>
+            {statusLoading ? "…" : STATUS_LABEL[account.status]}
+          </Badge>
+        </div>
+        {fields}
+      </div>
+    );
+  }
+
+  return (
+    <Card className="mx-auto w-full max-w-md">
+      <CardHeader className="border-b">
+        <CardTitle>Cuenta Wallapop</CardTitle>
+        <CardDescription>Login en Chrome.</CardDescription>
+        <CardAction>
+          <Badge variant={statusBadgeVariant(account.status)}>
+            {statusLoading ? "…" : STATUS_LABEL[account.status]}
+          </Badge>
+        </CardAction>
+      </CardHeader>
+      <CardContent className="flex flex-col gap-4">{fields}</CardContent>
     </Card>
   );
 }

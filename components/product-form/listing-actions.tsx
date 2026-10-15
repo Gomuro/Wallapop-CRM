@@ -26,8 +26,21 @@ function useConfirmState() {
   return { open, setOpen, error, setError, pending, startTransition, onOpenChange }
 }
 
+function withAccount(label: string, accountLabel?: string) {
+  const name = accountLabel?.trim()
+  return name ? `${label} · ${name}` : label
+}
+
 /** Removes the listing on Wallapop only; the product stays in the CRM as Desactivado. */
-export function EliminarWallapopButton({ productId }: { productId: string }) {
+export function EliminarWallapopButton({
+  productId,
+  accountId,
+  accountLabel,
+}: {
+  productId: string
+  accountId?: string
+  accountLabel?: string
+}) {
   const router = useRouter()
   const state = useConfirmState()
   const [notice, setNotice] = useState<string | null>(null)
@@ -36,7 +49,7 @@ export function EliminarWallapopButton({ productId }: { productId: string }) {
     state.setError(null)
     state.startTransition(async () => {
       try {
-        const result = await eliminarWallapopListing(productId)
+        const result = await eliminarWallapopListing(productId, accountId)
         if (result.dryRun) {
           state.setError(
             "Prueba: se encontró «Eliminar» en Wallapop y se paró antes de confirmar. El anuncio sigue publicado.",
@@ -68,12 +81,12 @@ export function EliminarWallapopButton({ productId }: { productId: string }) {
     <ConfirmAction
       open={state.open}
       onOpenChange={state.onOpenChange}
-      triggerLabel="Eliminar en Wallapop"
+      triggerLabel={withAccount("Eliminar en Wallapop", accountLabel)}
       triggerClassName="h-12 w-full"
       triggerVariant="secondary"
-      title="Eliminar en Wallapop"
+      title={withAccount("Eliminar en Wallapop", accountLabel)}
       description="Se borrará el anuncio en Wallapop (ventana aparte). El producto se queda en el CRM como Desactivado, con su stock. Para volver a publicarlo, ponlo después en cola: saldrá como anuncio nuevo."
-      confirmLabel="Eliminar en Wallapop"
+      confirmLabel={withAccount("Eliminar en Wallapop", accountLabel)}
       pendingLabel="En Wallapop…"
       confirmVariant="destructive"
       error={state.error}
@@ -132,9 +145,13 @@ export function RequeueListingButton({ productId }: { productId: string }) {
 export function DevolucionButton({
   productId,
   hasItemUrl,
+  accountId,
+  accountLabel,
 }: {
   productId: string
   hasItemUrl: boolean
+  accountId?: string
+  accountLabel?: string
 }) {
   const router = useRouter()
   const state = useConfirmState()
@@ -144,7 +161,7 @@ export function DevolucionButton({
     state.setError(null)
     state.startTransition(async () => {
       try {
-        const result = await startWallapopDevolucion(productId)
+        const result = await startWallapopDevolucion(productId, accountId)
         if (result.dryRun) {
           state.setError(
             "Prueba: se encontró «Eliminar» en Wallapop y se paró antes de confirmar. El anuncio vendido sigue en Wallapop y el producto no ha vuelto a la cola.",
@@ -176,10 +193,10 @@ export function DevolucionButton({
     <ConfirmAction
       open={state.open}
       onOpenChange={state.onOpenChange}
-      triggerLabel="Devolución"
+      triggerLabel={withAccount("Devolución", accountLabel)}
       triggerClassName="h-12 w-full"
       triggerVariant="default"
-      title="Devolución"
+      title={withAccount("Devolución", accountLabel)}
       description={
         hasItemUrl
           ? "Se borrará el anuncio vendido en Wallapop (Eliminar) y el mismo producto volverá a En venta y a la cola de publicación. Puedes seguir en el catálogo: el trabajo sigue en la cuenta. No se crea un producto nuevo."

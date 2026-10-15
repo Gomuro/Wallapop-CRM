@@ -13,21 +13,42 @@ const listingSelect = {
   lastEditedAt: true,
 } as const
 
-const productInclude = {
+// VPS still has no sold_account_id. This copy does not migrate that schema.
+const productSelect = {
+  id: true,
+  sku: true,
+  title: true,
+  description: true,
+  price: true,
+  currency: true,
+  categoryId: true,
+  condition: true,
+  brand: true,
+  weightKg: true,
+  shippingPackageSize: true,
+  widthCm: true,
+  lengthCm: true,
+  heightCm: true,
+  status: true,
+  typeAttributes: true,
+  soldAt: true,
+  soldPrice: true,
+  createdAt: true,
+  updatedAt: true,
   category: { select: { wallapopId: true } },
   images: { orderBy: { sortOrder: "asc" as const } },
   listings: { select: listingSelect },
-} satisfies Prisma.ProductInclude
+} satisfies Prisma.ProductSelect
 
 export type WarehouseProduct = Prisma.ProductGetPayload<{
-  include: typeof productInclude
+  select: typeof productSelect
 }>
 
 export async function loadWarehouse(
   prisma: PrismaClient,
 ): Promise<WarehouseProduct[]> {
   return prisma.product.findMany({
-    include: productInclude,
+    select: productSelect,
     orderBy: { sku: "asc" },
   })
 }

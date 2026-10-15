@@ -1,5 +1,6 @@
 import type { Request, Response } from "express"
 
+import { stopForeignChrome } from "../lib/foreign-chrome"
 import { sendError } from "../lib/http-error"
 import { log, serializeError } from "../lib/log"
 import { deactivateListingAfterEliminar } from "../lib/product-eliminar"
@@ -161,6 +162,7 @@ export async function postProductWallapopDevolucion(req: Request, res: Response)
     sendError(res, 404, "NOT_FOUND", "Producto no encontrado.")
     return
   }
+  if (await stopForeignChrome(res, req.body)) return
   const raw: unknown = req.body ?? {}
   const dryRun =
     typeof raw === "object" &&

@@ -2,6 +2,7 @@ import type { Request, Response } from "express"
 import { ZodError } from "zod"
 
 import {
+  accountCreateSchema,
   autopostIntervalPatchSchema,
   autopostIntervalToMs,
   wallapop2faSchema,
@@ -35,6 +36,8 @@ function toAccountJson(row: {
   city: string | null
   postalCode: string | null
   autopostIntervalMs: number | null
+  autopostEnabled: boolean
+  wallapopEmail: string | null
   createdAt: Date
   updatedAt: Date
 }) {
@@ -46,9 +49,59 @@ function toAccountJson(row: {
     city: row.city,
     postalCode: row.postalCode,
     autopostIntervalMs: row.autopostIntervalMs,
+    autopostEnabled: row.autopostEnabled,
+    wallapopEmail: row.wallapopEmail,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }
+}
+
+export async function listAccounts(_req: Request, res: Response) {
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+  const accounts = await prisma.account.findMany({
+    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+  })
+  res.json({ accounts: accounts.map(toAccountJson) })
+}
+
+/** CRM row only. Does not open Chrome and does not write ProductListing. */
+export async function createAccount(req: Request, res: Response) {
+  let body: ReturnType<typeof accountCreateSchema.parse>
+  try {
+    body = accountCreateSchema.parse(req.body)
+  } catch (error) {
+    if (error instanceof ZodError) {
+      sendError(
+        res,
+        400,
+        "VALIDATION_ERROR",
+        error.issues[0]?.message ?? "Invalid body.",
+      )
+      return
+    }
+    throw error
+  }
+
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+
+  const created = await prisma.account.create({
+    data: {
+      name: body.name,
+      status: body.status,
+      isDefault: false,
+      city: body.city ?? null,
+      postalCode: body.postalCode ?? null,
+    },
+  })
+  res.status(201).json({ account: toAccountJson(created) })
 }
 
 function toSessionJson(session: WallapopSessionSnapshot) {

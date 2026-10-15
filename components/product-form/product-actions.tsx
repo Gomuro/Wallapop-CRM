@@ -15,11 +15,20 @@ import {
 } from "@/lib/api/wallapop-sold"
 import { ConfirmAction } from "@/components/confirm-action"
 
+function withAccount(label: string, accountLabel?: string) {
+  const name = accountLabel?.trim()
+  return name ? `${label} · ${name}` : label
+}
+
 export function SoldSyncButton({
   productId,
+  accountId,
+  accountLabel,
   disabled,
 }: {
   productId: string
+  accountId?: string
+  accountLabel?: string
   disabled?: boolean
 }) {
   const router = useRouter()
@@ -43,7 +52,7 @@ export function SoldSyncButton({
     setError(null)
     startTransition(async () => {
       try {
-        const result = await markWallapopSold(productId)
+        const result = await markWallapopSold(productId, accountId)
         if (result.dryRun) {
           setError(
             "Prueba: se encontró «Marcar como vendido» en Wallapop y se paró antes de confirmar. El anuncio no se ha vendido.",
@@ -76,11 +85,11 @@ export function SoldSyncButton({
     <ConfirmAction
       open={open}
       onOpenChange={handleOpenChange}
-      triggerLabel={isSold ? "Vendido" : "Marcar como vendido"}
+      triggerLabel={isSold ? "Vendido" : withAccount("Marcar como vendido", accountLabel)}
       triggerClassName="h-12 w-full"
       triggerVariant={isSold ? "secondary" : "default"}
       triggerDisabled={isSold}
-      title="Marcar como vendido"
+      title={withAccount("Marcar como vendido", accountLabel)}
       description="Se marcará vendido en Wallapop (ventana aparte) y el producto pasará a Vendido en el CRM. Puedes seguir en el catálogo: el trabajo sigue en la cuenta. Si el comprador lo devuelve, usa Devolución."
       confirmLabel="Confirmar"
       pendingLabel="En Wallapop…"

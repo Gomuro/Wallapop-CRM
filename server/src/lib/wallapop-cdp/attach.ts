@@ -12,11 +12,18 @@ import {
   type Page,
 } from "playwright"
 
+import {
+  FIRST_ACCOUNT_CDP_PORT,
+  FIRST_ACCOUNT_PROFILE_NAME,
+} from "../../../../lib/accounts/chrome-place"
 import { log } from "../log"
 import { waitForChromeQuit } from "./busy"
 
-export const CDP_URL = process.env.WALLAPOP_CDP_URL ?? "http://127.0.0.1:9222"
-export const CDP_PORT = Number(process.env.WALLAPOP_CDP_PORT ?? "9222")
+export const CDP_URL =
+  process.env.WALLAPOP_CDP_URL ?? `http://127.0.0.1:${FIRST_ACCOUNT_CDP_PORT}`
+export const CDP_PORT = Number(
+  process.env.WALLAPOP_CDP_PORT ?? FIRST_ACCOUNT_CDP_PORT,
+)
 export const NAV_TIMEOUT_MS = 45_000
 export const ACTION_TIMEOUT_MS = 20_000
 export const WALLAPOP_WALL_URL = "https://es.wallapop.com/wall"
@@ -24,7 +31,7 @@ const CDP_READY_TIMEOUT_MS = 30_000
 
 const PROFILE_DIR =
   process.env.WALLAPOP_CHROME_USER_DATA_DIR?.trim() ||
-  path.resolve(process.env.USERPROFILE ?? "", "ChromeCDP-Persistent")
+  path.resolve(process.env.USERPROFILE ?? "", FIRST_ACCOUNT_PROFILE_NAME)
 
 const CHROME_LAUNCH_EXTRA_ARGS = [
   "--disable-background-timer-throttling",

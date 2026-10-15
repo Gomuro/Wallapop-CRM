@@ -15,12 +15,13 @@ export type WallapopSoldResult = {
 /** Live vs dry-run follows `WALLAPOP_SOLD_DRY_RUN` on the API. */
 export async function markWallapopSold(
   productId: string,
+  accountId?: string,
 ): Promise<WallapopSoldResult> {
   return apiClientFetch<WallapopSoldResult>(
     `/products/${encodeURIComponent(productId)}/wallapop-sold`,
     {
       method: "POST",
-      body: JSON.stringify({}),
+      body: JSON.stringify(accountId ? { accountId } : {}),
       timeoutMs: SOLD_TIMEOUT_MS,
     },
   )

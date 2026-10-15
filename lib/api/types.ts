@@ -37,6 +37,8 @@ export type ApiListing = {
   shippingEnabled: boolean
   shippingUpToKg: number | null
   accountId: string
+  accountName?: string
+  isDefault?: boolean
   lastPostedAt: string | null
 }
 
@@ -72,6 +74,8 @@ export type ApiProductWarehouse = {
 export type ApiProductMedia = {
   images: ApiProductImage[]
   listing: ApiListing | null
+  listings?: ApiListing[]
+  soldAccountId?: string | null
 }
 
 export type ApiProduct = ApiProductIdentity &
@@ -123,6 +127,8 @@ export type ApiDefaultAccount = {
   city: string | null
   postalCode: string | null
   autopostIntervalMs: number | null
+  autopostEnabled?: boolean
+  wallapopEmail?: string | null
   createdAt: string
   updatedAt: string
 }

@@ -2,6 +2,7 @@ import type { Request, Response } from "express"
 import { ZodError } from "zod"
 
 import { productSoldBodySchema } from "../../../lib/validations/product"
+import { stopForeignChrome } from "../lib/foreign-chrome"
 import { sendError } from "../lib/http-error"
 import { isBrowserBusyError } from "../lib/wallapop-cdp"
 import { markProductSoldTx } from "../lib/product-sold"
@@ -138,6 +139,7 @@ export async function postProductWallapopSold(req: Request, res: Response) {
     sendError(res, 404, "NOT_FOUND", "Producto no encontrado.")
     return
   }
+  if (await stopForeignChrome(res, req.body)) return
   let body: { dryRun: boolean; soldPrice?: number }
   try {
     body = parseWallapopSoldBody(req)

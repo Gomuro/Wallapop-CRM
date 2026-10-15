@@ -123,6 +123,7 @@ export function ListingDetailSection({
   shippingIncomplete = false,
   productSold = false,
   warehouseStatus,
+  heading = "Anuncio en Wallapop",
 }: {
   productId?: string
   listing: InventoryListing | null
@@ -130,6 +131,7 @@ export function ListingDetailSection({
   shippingIncomplete?: boolean
   productSold?: boolean
   warehouseStatus?: InventoryProduct["status"]
+  heading?: string
 }) {
   const itemUrl = wallapopItemUrlOrNull(listing?.externalUrl)
   const junkUrl = Boolean(listing?.externalUrl) && !itemUrl
@@ -142,7 +144,7 @@ export function ListingDetailSection({
   if (!listing) {
     return (
       <section>
-        <p className={typeSection}>Anuncio en Wallapop</p>
+        <p className={typeSection}>{heading}</p>
         <p className="mt-1 text-sm text-muted-foreground">
           Aún no está en Wallapop.
         </p>
@@ -152,7 +154,7 @@ export function ListingDetailSection({
 
   return (
     <section>
-      <p className={typeSection}>Anuncio en Wallapop</p>
+      <p className={typeSection}>{heading}</p>
       <div className="mt-2 overflow-hidden rounded-xl ring-1 ring-border">
         <div className="flex items-center justify-between gap-2 bg-muted/50 px-3 py-2.5">
           <span className={typeMeta}>Wallapop</span>

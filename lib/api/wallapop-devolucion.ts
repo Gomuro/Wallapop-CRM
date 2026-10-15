@@ -15,12 +15,13 @@ export type WallapopDevolucionResult = {
 
 export async function startWallapopDevolucion(
   productId: string,
+  accountId?: string,
 ): Promise<WallapopDevolucionResult> {
   return apiClientFetch<WallapopDevolucionResult>(
     `/products/${encodeURIComponent(productId)}/wallapop-devolucion`,
     {
       method: "POST",
-      body: JSON.stringify({}),
+      body: JSON.stringify(accountId ? { accountId } : {}),
       timeoutMs: DEVOLUCION_TIMEOUT_MS,
     },
   )
