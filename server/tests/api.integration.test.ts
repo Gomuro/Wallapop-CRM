@@ -6,6 +6,10 @@ import { createApp } from "../src/app"
 import { getPrisma } from "../src/lib/db"
 import { findDefaultAccountId } from "../src/lib/default-account"
 import { deactivateListingAfterEliminar } from "../src/lib/product-eliminar"
+import {
+  markProductSoldTx,
+  requeueSoldProductAfterReturn,
+} from "../src/lib/product-sold"
 import { syncWallapopIdentityOnActive } from "../src/lib/wallapop-account-identity"
 import {
   activatePostingListing,
@@ -1122,6 +1126,195 @@ describe("API v1 integration (Express + Postgres)", () => {
       })
       expect(account?.autopostEnabled).toBe(false)
       expect(account?.wallapopEmail).toBe("second-identity@example.com")
+    })
+  })
+
+  describe("sold keeps other accounts", () => {
+    it("deactivates only the default listing and stores who sold", async () => {
+      const prisma = getPrisma()
+      expect(prisma).toBeTruthy()
+      if (!prisma) return
+      const sellerId = await findDefaultAccountId(prisma)
+      expect(sellerId).toBeTruthy()
+      const categoryId = await findLeafCategoryId(agent)
+      const sku = `API-SOLD-ACCT-${Date.now()}`
+      const created = await agent.post("/api/v1/products").send({
+        sku,
+        title: "Sold account scope",
+        description: "Neighbor listings stay live",
+        price: 12,
+        currency: "EUR",
+        categoryId,
+        condition: "GOOD",
+        brand: "Acme",
+      })
+      expect(created.status).toBe(201)
+      const id = created.body.product?.id as string
+      const neighborIds: string[] = []
+      try {
+        const put = await agent.put(`/api/v1/products/${id}/listing`).send({
+          status: "ACTIVE",
+          externalUrl: "https://es.wallapop.com/item/sold-account-seller",
+        })
+        expect(put.status).toBe(200)
+
+        const neighbors = [
+          {
+            name: `Norte ${sku}`,
+            status: "ACTIVE" as const,
+            externalUrl: "https://es.wallapop.com/item/sold-account-norte",
+          },
+          {
+            name: `Sur ${sku}`,
+            status: "RESERVED" as const,
+            externalUrl: "https://es.wallapop.com/item/sold-account-sur",
+          },
+          {
+            name: `Este ${sku}`,
+            status: "POSTING" as const,
+            externalUrl: null,
+          },
+        ]
+        for (const neighbor of neighbors) {
+          const account = await prisma.account.create({
+            data: { name: neighbor.name, isDefault: false },
+            select: { id: true },
+          })
+          neighborIds.push(account.id)
+          await prisma.productListing.create({
+            data: {
+              productId: id,
+              accountId: account.id,
+              status: neighbor.status,
+              externalUrl: neighbor.externalUrl,
+            },
+          })
+        }
+
+        const sold = await agent.post(`/api/v1/products/${id}/sold`)
+        expect(sold.status).toBe(200)
+        expect(sold.body.product?.status).toBe("SOLD")
+        expect(sold.body.product?.listing?.status).toBe("DEACTIVATED")
+
+        const row = await prisma.product.findUnique({
+          where: { id },
+          select: {
+            soldAccountId: true,
+            listings: {
+              select: { accountId: true, status: true, externalUrl: true },
+            },
+          },
+        })
+        expect(row?.soldAccountId).toBe(sellerId)
+        const byAccount = new Map(
+          row?.listings.map((listing) => [listing.accountId, listing]),
+        )
+        expect(byAccount.get(sellerId!)?.status).toBe("DEACTIVATED")
+        expect(byAccount.get(sellerId!)?.externalUrl).toBe(
+          "https://es.wallapop.com/item/sold-account-seller",
+        )
+        expect(byAccount.get(neighborIds[0])?.status).toBe("ACTIVE")
+        expect(byAccount.get(neighborIds[1])?.status).toBe("RESERVED")
+        expect(byAccount.get(neighborIds[2])?.status).toBe("POSTING")
+      } finally {
+        await prisma.product.delete({ where: { id } }).catch(() => undefined)
+        if (neighborIds.length > 0) {
+          await prisma.account.deleteMany({ where: { id: { in: neighborIds } } })
+        }
+      }
+    })
+
+    it("requeues only the account recorded on the sale", async () => {
+      const prisma = getPrisma()
+      expect(prisma).toBeTruthy()
+      if (!prisma) return
+      const sellerId = await findDefaultAccountId(prisma)
+      expect(sellerId).toBeTruthy()
+      const categoryId = await findLeafCategoryId(agent)
+      const sku = `API-SOLD-REQUEUE-${Date.now()}`
+      const created = await agent.post("/api/v1/products").send({
+        sku,
+        title: "Sold requeue account",
+        description: "Return touches the seller only",
+        price: 14,
+        currency: "EUR",
+        categoryId,
+        condition: "GOOD",
+        brand: "Acme",
+      })
+      expect(created.status).toBe(201)
+      const id = created.body.product?.id as string
+      let neighborId = ""
+      try {
+        const put = await agent.put(`/api/v1/products/${id}/listing`).send({
+          status: "ACTIVE",
+          externalUrl: "https://es.wallapop.com/item/sold-requeue-default",
+        })
+        expect(put.status).toBe(200)
+        const account = await prisma.account.create({
+          data: { name: `Vendedor ${sku}`, isDefault: false },
+          select: { id: true },
+        })
+        neighborId = account.id
+        await prisma.productListing.create({
+          data: {
+            productId: id,
+            accountId: neighborId,
+            status: "ACTIVE",
+            externalUrl: "https://es.wallapop.com/item/sold-requeue-neighbor",
+          },
+        })
+
+        const sold = await markProductSoldTx(prisma, id, { accountId: neighborId })
+        expect(sold.kind).toBe("ok")
+
+        const afterSold = await prisma.product.findUnique({
+          where: { id },
+          select: {
+            status: true,
+            soldAccountId: true,
+            listings: { select: { accountId: true, status: true } },
+          },
+        })
+        expect(afterSold?.status).toBe("SOLD")
+        expect(afterSold?.soldAccountId).toBe(neighborId)
+        const soldByAccount = new Map(
+          afterSold?.listings.map((listing) => [listing.accountId, listing.status]),
+        )
+        expect(soldByAccount.get(sellerId!)).toBe("ACTIVE")
+        expect(soldByAccount.get(neighborId)).toBe("DEACTIVATED")
+
+        const requeued = await requeueSoldProductAfterReturn(prisma, id)
+        expect(requeued.kind).toBe("ok")
+        const afterReturn = await prisma.product.findUnique({
+          where: { id },
+          select: {
+            status: true,
+            soldAccountId: true,
+            soldAt: true,
+            listings: {
+              select: { accountId: true, status: true, externalUrl: true },
+            },
+          },
+        })
+        expect(afterReturn?.status).toBe("ACTIVE")
+        expect(afterReturn?.soldAccountId).toBeNull()
+        expect(afterReturn?.soldAt).toBeNull()
+        const returned = new Map(
+          afterReturn?.listings.map((listing) => [listing.accountId, listing]),
+        )
+        expect(returned.get(sellerId!)?.status).toBe("ACTIVE")
+        expect(returned.get(sellerId!)?.externalUrl).toBe(
+          "https://es.wallapop.com/item/sold-requeue-default",
+        )
+        expect(returned.get(neighborId)?.status).toBe("READY_TO_POST")
+        expect(returned.get(neighborId)?.externalUrl).toBeNull()
+      } finally {
+        await prisma.product.delete({ where: { id } }).catch(() => undefined)
+        if (neighborId) {
+          await prisma.account.deleteMany({ where: { id: neighborId } })
+        }
+      }
     })
   })
 

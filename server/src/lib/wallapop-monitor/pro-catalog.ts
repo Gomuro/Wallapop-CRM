@@ -120,45 +120,65 @@ async function readShot(page: Page): Promise<PageShot> {
   return { rows: shot?.rows ?? [], pager: shot?.pager ?? "" }
 }
 
+type CatalogPageExpect = {
+  tab?: string
+  previousPager?: string
+  previousHref?: string
+}
+
+type CatalogEl = {
+  getAttribute(name: string): string | null
+  textContent: string | null
+  href: string
+}
+
+type CatalogDocument = {
+  querySelector(selector: string): CatalogEl | null
+  querySelectorAll(selector: string): CatalogEl[]
+}
+
+const catalogPageSettled = (input: CatalogPageExpect): boolean => {
+  const document = (globalThis as unknown as { document: CatalogDocument })
+    .document
+  const Anchor = (
+    globalThis as unknown as { HTMLAnchorElement: new () => { href: string } }
+  ).HTMLAnchorElement
+  if (input.tab) {
+    const tab = [...document.querySelectorAll("wallapop-tab")].find((el) =>
+      (el.getAttribute("aria-label") || "")
+        .toLowerCase()
+        .startsWith(input.tab ?? ""),
+    )
+    if (!tab || tab.getAttribute("aria-selected") !== "true") return false
+  }
+  const info = document.querySelector(
+    "tsl-pagination-actions .PaginationActions__info",
+  )
+  const text = (info?.textContent ?? "").replace(/\s+/g, " ").trim()
+  const match = text.match(/(\d+)\s*-\s*(\d+)\s*de\s*(\d+)/i)
+  if (!match) return false
+  const from = Number(match[1])
+  const to = Number(match[2])
+  const total = Number(match[3])
+  const rows = document.querySelectorAll('tr[id^="CatalogItem_"]').length
+  if (total === 0) return rows === 0
+  if (rows !== to - from + 1) return false
+  if (input.previousPager && text === input.previousPager) return false
+  const first = document.querySelector(
+    'tr[id^="CatalogItem_"] a[href*="/item/"]',
+  )
+  if (input.previousHref && first instanceof Anchor) {
+    return first.href !== input.previousHref
+  }
+  return true
+}
+
 async function waitForListedPage(
   page: Page,
-  expected: { tab?: string; previousPager?: string; previousHref?: string },
+  expected: CatalogPageExpect,
 ): Promise<void> {
   await page
-    .waitForFunction(
-      (input) => {
-        if (input.tab) {
-          const tab = [...document.querySelectorAll("wallapop-tab")].find((el) =>
-            (el.getAttribute("aria-label") || "")
-              .toLowerCase()
-              .startsWith(input.tab ?? ""),
-          )
-          if (!tab || tab.getAttribute("aria-selected") !== "true") return false
-        }
-        const info = document.querySelector(
-          "tsl-pagination-actions .PaginationActions__info",
-        )
-        const text = (info?.textContent ?? "").replace(/\s+/g, " ").trim()
-        const match = text.match(/(\d+)\s*-\s*(\d+)\s*de\s*(\d+)/i)
-        if (!match) return false
-        const from = Number(match[1])
-        const to = Number(match[2])
-        const total = Number(match[3])
-        const rows = document.querySelectorAll('tr[id^="CatalogItem_"]').length
-        if (total === 0) return rows === 0
-        if (rows !== to - from + 1) return false
-        if (input.previousPager && text === input.previousPager) return false
-        const first = document.querySelector(
-          'tr[id^="CatalogItem_"] a[href*="/item/"]',
-        )
-        if (input.previousHref && first instanceof HTMLAnchorElement) {
-          return first.href !== input.previousHref
-        }
-        return true
-      },
-      expected,
-      { timeout: PAGE_WAIT_MS },
-    )
+    .waitForFunction(catalogPageSettled, expected, { timeout: PAGE_WAIT_MS })
     .catch(() => {})
 }
 

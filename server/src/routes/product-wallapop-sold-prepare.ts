@@ -14,6 +14,7 @@ export type WallapopSoldReady = {
   ok: true
   prisma: NonNullable<ReturnType<typeof getPrisma>>
   productId: string
+  accountId: string
   itemUrl: string
   dryRun: boolean
   soldPrice?: number
@@ -33,8 +34,8 @@ export function isSoldDryRun(): boolean {
 
 export function listingForSold(product: {
   status: string
-  listings: { status: string; externalUrl: string | null }[]
-}): RunWallapopSoldErr | { itemUrl: string } {
+  listings: { status: string; externalUrl: string | null; accountId: string }[]
+}): RunWallapopSoldErr | { itemUrl: string; accountId: string } {
   if (product.status === "SOLD") {
     return soldFail(409, "ALREADY_SOLD", "Product is already sold.")
   }
@@ -54,7 +55,7 @@ export function listingForSold(product: {
       "Falta la URL pública https://es.wallapop.com/item/….",
     )
   }
-  return { itemUrl }
+  return { itemUrl, accountId: listing.accountId }
 }
 
 async function guardSoldSession(): Promise<RunWallapopSoldErr | { ok: true }> {
@@ -89,6 +90,7 @@ export async function prepareWallapopSold(
     ok: true,
     prisma,
     productId,
+    accountId: listing.accountId,
     itemUrl: listing.itemUrl,
     dryRun: options.dryRun === true || isSoldDryRun(),
     soldPrice: options.soldPrice,

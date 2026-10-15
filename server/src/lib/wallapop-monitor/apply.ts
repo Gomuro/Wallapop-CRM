@@ -3,7 +3,10 @@ import { log } from "../log"
 import { markProductSoldTx } from "../product-sold"
 import type { MonitorPlan } from "./diff"
 
-export async function applyMonitorPlan(plan: MonitorPlan): Promise<void> {
+export async function applyMonitorPlan(
+  plan: MonitorPlan,
+  accountId: string | null,
+): Promise<void> {
   const prisma = getPrisma()
   if (!prisma) {
     log("warn", "wallapop_monitor_apply_no_db")
@@ -11,9 +14,14 @@ export async function applyMonitorPlan(plan: MonitorPlan): Promise<void> {
   }
 
   for (const productId of plan.toSoldProductIds) {
-    const result = await markProductSoldTx(prisma, productId, {})
+    if (!accountId) {
+      log("warn", "wallapop_monitor_sold_no_account", { productId })
+      continue
+    }
+    const result = await markProductSoldTx(prisma, productId, { accountId })
     log("info", "wallapop_monitor_marked_sold", {
       productId,
+      accountId,
       kind: result.kind,
     })
   }

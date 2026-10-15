@@ -65,9 +65,10 @@ model Account {
   autopostEnabled Boolean @default(false) @map("autopost_enabled")
   // Wallapop login email (not the CRM operator). Kept across disconnect.
   wallapopEmail String? @map("wallapop_email")
-  listings  ProductListing[]
-  createdAt DateTime      @default(now()) @map("created_at")
-  updatedAt DateTime      @updatedAt @map("updated_at")
+  listings     ProductListing[]
+  soldProducts Product[]        @relation("ProductSoldBy")
+  createdAt    DateTime         @default(now()) @map("created_at")
+  updatedAt    DateTime         @updatedAt @map("updated_at")
 
   @@map("accounts")
 }
@@ -147,6 +148,8 @@ model Product {
   typeAttributes  Json              @default("{}") @map("type_attributes")
   soldAt          DateTime?         @map("sold_at")
   soldPrice       Decimal?          @map("sold_price") @db.Decimal(10, 2)
+  soldAccountId   String?           @map("sold_account_id")
+  soldAccount     Account?          @relation("ProductSoldBy", fields: [soldAccountId], references: [id], onDelete: SetNull)
   images          ProductImage[]
   listings        ProductListing[]
   createdAt       DateTime          @default(now()) @map("created_at")
@@ -155,6 +158,7 @@ model Product {
   @@index([status])
   @@index([categoryId])
   @@index([title])
+  @@index([soldAccountId])
   @@map("products")
 }
 

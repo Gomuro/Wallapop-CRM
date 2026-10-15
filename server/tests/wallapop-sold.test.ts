@@ -42,29 +42,33 @@ describe("listingForSold", () => {
     expect(
       listingForSold({
         status: "SOLD",
-        listings: [{ status: "ACTIVE", externalUrl: MESA }],
+        listings: [{ status: "ACTIVE", externalUrl: MESA, accountId: "acc" }],
       }),
     ).toMatchObject({ ok: false, code: "ALREADY_SOLD" })
     expect(
       listingForSold({
         status: "ACTIVE",
-        listings: [{ status: "READY_TO_POST", externalUrl: MESA }],
+        listings: [{ status: "READY_TO_POST", externalUrl: MESA, accountId: "acc" }],
       }),
     ).toMatchObject({ code: "LISTING_NOT_ACTIVE" })
     expect(
       listingForSold({
         status: "ACTIVE",
         listings: [
-          { status: "ACTIVE", externalUrl: "https://es.wallapop.com/upload/x" },
+          {
+            status: "ACTIVE",
+            externalUrl: "https://es.wallapop.com/upload/x",
+            accountId: "acc",
+          },
         ],
       }),
     ).toMatchObject({ code: "NO_ITEM_URL" })
     expect(
       listingForSold({
         status: "ACTIVE",
-        listings: [{ status: "ACTIVE", externalUrl: MESA }],
+        listings: [{ status: "ACTIVE", externalUrl: MESA, accountId: "acc" }],
       }),
-    ).toEqual({ itemUrl: MESA })
+    ).toEqual({ itemUrl: MESA, accountId: "acc" })
   })
 })
 

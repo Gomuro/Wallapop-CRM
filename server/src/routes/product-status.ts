@@ -12,6 +12,7 @@ import {
   catalogDeleteNeedsWallapop,
   listingBlocksWarehouseInactive,
 } from "../../../lib/inventory/listing-active"
+import { findDefaultAccountId, DEFAULT_ACCOUNT_MISSING_MESSAGE } from "../lib/default-account"
 import { markProductSoldTx, type SoldTxResult } from "../lib/product-sold"
 import { dequeueInactiveWarehouseQueue } from "../lib/warehouse-inactive"
 import { prismaErrorCode } from "../lib/prisma-error"
@@ -156,9 +157,15 @@ export async function postProductSold(req: Request, res: Response) {
     return
   }
 
+  const accountId = await findDefaultAccountId(prisma)
+  if (!accountId) {
+    sendError(res, 404, "NOT_FOUND", DEFAULT_ACCOUNT_MISSING_MESSAGE)
+    return
+  }
+
   let txResult: SoldTxResult
   try {
-    txResult = await markProductSoldTx(prisma, id, body)
+    txResult = await markProductSoldTx(prisma, id, { ...body, accountId })
   } catch (error) {
     if (prismaErrorCode(error) === "P2025") {
       sendError(res, 404, "NOT_FOUND", "Product not found.")

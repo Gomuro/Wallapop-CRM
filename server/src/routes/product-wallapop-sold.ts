@@ -30,6 +30,7 @@ function sendPrepareErr(res: Response, err: RunWallapopSoldErr): void {
 async function applyCrmSold(ready: WallapopSoldReady): Promise<void> {
   const txResult = await markProductSoldTx(ready.prisma, ready.productId, {
     soldPrice: ready.soldPrice,
+    accountId: ready.accountId,
   })
   if (txResult.kind === "not_found") {
     throw new Error("Producto no encontrado.")

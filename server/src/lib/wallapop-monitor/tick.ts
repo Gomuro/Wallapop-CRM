@@ -25,12 +25,15 @@ import {
   scrollCatalogUntilStable,
 } from "./scrape";
 
-async function loadLiveListings(): Promise<MonitorCrmListing[]> {
+async function loadLiveListings(): Promise<{
+  accountId: string | null;
+  listings: MonitorCrmListing[];
+}> {
   const prisma = getPrisma();
-  if (!prisma) return [];
+  if (!prisma) return { accountId: null, listings: [] };
   const accountId = await findDefaultAccountId(prisma);
-  if (!accountId) return [];
-  return prisma.productListing.findMany({
+  if (!accountId) return { accountId: null, listings: [] };
+  const listings = await prisma.productListing.findMany({
     where: {
       accountId,
       status: { in: ["ACTIVE", "RESERVED"] },
@@ -42,6 +45,7 @@ async function loadLiveListings(): Promise<MonitorCrmListing[]> {
       externalUrl: true,
     },
   });
+  return { accountId, listings };
 }
 
 async function scrapeCatalogs(page: Page) {
@@ -101,7 +105,7 @@ async function runMonitorAfterAttach(): Promise<void> {
   try {
     const catalogs = await scrapeCatalogs(page);
     if (!catalogs) return;
-    const listings = await loadLiveListings();
+    const { accountId, listings } = await loadLiveListings();
     const plan = planMonitorUpdates(
       catalogs.published,
       catalogs.sold,
@@ -115,7 +119,7 @@ async function runMonitorAfterAttach(): Promise<void> {
       orphanPublished: plan.orphanPublished.length,
       orphanSold: plan.orphanSold.length,
     });
-    await applyMonitorPlan(plan);
+    await applyMonitorPlan(plan, accountId);
   } finally {
     await closeWorkerSlotPages("monitor");
   }
