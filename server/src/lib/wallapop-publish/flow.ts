@@ -3,9 +3,14 @@ import type { Page } from "playwright";
 import {
   dismissWallapopConsent,
   firstVisible,
+  isWallapopLoggedOutUrl,
   navigateViaAssign,
   throwIfPublishAborted,
 } from "../wallapop-cdp";
+import {
+  markWallapopSessionLoggedOut,
+  WALLAPOP_LOGGED_OUT_MESSAGE,
+} from "../wallapop-session";
 import { log } from "../log";
 import {
   categoryPickerStillEmpty,
@@ -49,6 +54,10 @@ export async function selectConsumerGoods(
 ): Promise<void> {
   mark("consumer_goods");
   logPublishStep("consumer_goods", page, { phase: "consumer_goods_check" });
+  if (isWallapopLoggedOutUrl(page.url())) {
+    await markWallapopSessionLoggedOut();
+    throw new WallapopPublishError("consumer_goods", WALLAPOP_LOGGED_OUT_MESSAGE);
+  }
   if (page.url().includes("consumer-goods")) return;
   if (await clickExactButtonText(page, "Algo que ya no necesito")) return;
   const byRole = page.getByRole("button", {

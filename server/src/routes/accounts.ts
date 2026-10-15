@@ -16,9 +16,9 @@ import {
   pauseAutopostSchedule,
   rescheduleAutopostLoop,
 } from "../lib/wallapop-autopost"
+import { disconnectWallapopSession } from "../lib/wallapop-session-disconnect"
 import {
   connectWallapopSession,
-  disconnectWallapopSession,
   getWallapopSession,
   getWallapopSessionSnapshot,
   submitWallapopSession2fa,

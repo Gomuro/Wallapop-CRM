@@ -9,12 +9,16 @@ import {
   ensureWorkerWindow,
   isBrowserBusyError,
   isLoginOr2faUrl,
+  isWallapopLoggedOutUrl,
   navigateViaAssign,
   quitChromeIfNoWorkerSlots,
   runWithBrowserBusy,
 } from "../wallapop-cdp";
 import { gotoVendidosCatalog } from "../wallapop-sold/nav";
-import { getWallapopSession } from "../wallapop-session";
+import {
+  getWallapopSession,
+  markWallapopSessionLoggedOut,
+} from "../wallapop-session";
 import { applyMonitorPlan } from "./apply";
 import { CATALOG_PUBLISHED_URL } from "./catalog";
 import { planMonitorUpdates, type MonitorCrmListing } from "./diff";
@@ -44,37 +48,40 @@ async function loadLiveListings(): Promise<MonitorCrmListing[]> {
   });
 }
 
-async function scrapeCatalogs(page: Page) {
-  await navigateViaAssign(page, CATALOG_PUBLISHED_URL);
-  await dismissWallapopConsent(page);
+async function leaveIfNotSellerCatalog(page: Page): Promise<boolean> {
+  if (isWallapopLoggedOutUrl(page.url())) {
+    log("info", "wallapop_monitor_logged_out", { url: page.url() });
+    await markWallapopSessionLoggedOut();
+    return true;
+  }
   if (isLoginOr2faUrl(page.url())) {
     log("info", "wallapop_monitor_skip_login", { url: page.url() });
-    return null;
+    return true;
   }
-  const kind = await wallapopCatalogKind(page);
-  if (kind === "pro") {
-    const pro = await scrapeProCatalogs(page);
-    if (!pro) return null;
-    log("info", "wallapop_monitor_published_scanned", {
-      rows: pro.published.length,
-      reserved: pro.published.filter((row) => row.reserved).length,
-      scrolledItems: pro.published.length,
-      url: page.url(),
-      mode: "pro",
-    });
-    log("info", "wallapop_monitor_sold_scanned", {
-      rows: pro.sold.length,
-      sold: pro.sold.length,
-      scrolledItems: pro.sold.length,
-      url: page.url(),
-      mode: "pro",
-    });
-    return pro;
-  }
-  if (kind !== "classic") {
-    log("warn", "wallapop_monitor_catalog_unknown", { url: page.url() });
-    return null;
-  }
+  return false;
+}
+
+async function scrapeProCatalog(page: Page) {
+  const pro = await scrapeProCatalogs(page);
+  if (!pro) return null;
+  log("info", "wallapop_monitor_published_scanned", {
+    rows: pro.published.length,
+    reserved: pro.published.filter((row) => row.reserved).length,
+    scrolledItems: pro.published.length,
+    url: page.url(),
+    mode: "pro",
+  });
+  log("info", "wallapop_monitor_sold_scanned", {
+    rows: pro.sold.length,
+    sold: pro.sold.length,
+    scrolledItems: pro.sold.length,
+    url: page.url(),
+    mode: "pro",
+  });
+  return pro;
+}
+
+async function scrapeClassicCatalog(page: Page) {
   const publishedCount = await scrollCatalogUntilStable(page);
   const published = await scrapePublishedCatalogRows(page);
   log("info", "wallapop_monitor_published_scanned", {
@@ -83,7 +90,6 @@ async function scrapeCatalogs(page: Page) {
     scrolledItems: publishedCount,
     url: page.url(),
   });
-
   await gotoVendidosCatalog(page);
   const soldCount = await scrollCatalogUntilStable(page);
   const sold = await scrapeVendidosCatalogRows(page);
@@ -94,6 +100,17 @@ async function scrapeCatalogs(page: Page) {
     url: page.url(),
   });
   return { published, sold };
+}
+
+async function scrapeCatalogs(page: Page) {
+  await navigateViaAssign(page, CATALOG_PUBLISHED_URL);
+  await dismissWallapopConsent(page);
+  if (await leaveIfNotSellerCatalog(page)) return null;
+  const kind = await wallapopCatalogKind(page);
+  if (kind === "pro") return scrapeProCatalog(page);
+  if (kind === "classic") return scrapeClassicCatalog(page);
+  log("warn", "wallapop_monitor_catalog_unknown", { url: page.url() });
+  return null;
 }
 
 async function runMonitorAfterAttach(): Promise<void> {

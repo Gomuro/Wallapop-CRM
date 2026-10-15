@@ -25,14 +25,11 @@ function scheduleNext(generation: number): void {
 }
 
 async function ensureSessionThenMonitor(): Promise<void> {
-  let session = getWallapopSession()
-  if (session.status !== "ACTIVE") {
-    session = await rehydrateWallapopSessionOnBoot()
-    log("info", "wallapop_session_rehydrate", {
-      status: session.status,
-      requires2FA: session.requires2FA,
-    })
-  }
+  const session = await rehydrateWallapopSessionOnBoot()
+  log("info", "wallapop_session_rehydrate", {
+    status: session.status,
+    requires2FA: session.requires2FA,
+  })
   if (session.status !== "ACTIVE") {
     log("info", "wallapop_monitor_skip_session", { status: session.status })
     return

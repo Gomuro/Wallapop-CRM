@@ -17,6 +17,7 @@ import {
   isHandleAlive,
   isInFlightPublishAborted,
   isLoginOr2faUrl,
+  isWallapopLoggedOutUrl,
   isPublishAbortedError,
   isWallFeedUrl,
   pickLiveSessionPage,
@@ -69,6 +70,28 @@ describe("isLoginOr2faUrl", () => {
     expect(isLoginOr2faUrl("https://es.wallapop.com/wall")).toBe(false)
     expect(
       isLoginOr2faUrl("https://es.wallapop.com/app/catalog/upload"),
+    ).toBe(false)
+    expect(
+      isLoginOr2faUrl(
+        "https://es.wallapop.com/auth/onboarding?redirectUrl=https%3A%2F%2Fes.wallapop.com%2Fwall",
+      ),
+    ).toBe(false)
+  })
+})
+
+describe("isWallapopLoggedOutUrl", () => {
+  it("sees the login card and leaves 2FA alone", () => {
+    expect(
+      isWallapopLoggedOutUrl(
+        "https://es.wallapop.com/auth/onboarding?redirectUrl=https%3A%2F%2Fes.wallapop.com%2Fapp%2Fcatalog%2Fupload",
+      ),
+    ).toBe(true)
+    expect(isWallapopLoggedOutUrl("https://es.wallapop.com/login")).toBe(true)
+    expect(isWallapopLoggedOutUrl("https://es.wallapop.com/wall")).toBe(false)
+    expect(
+      isWallapopLoggedOutUrl(
+        "https://accounts.wallapop.com/realms/wallapop-internal/login-actions/authenticate",
+      ),
     ).toBe(false)
   })
 })

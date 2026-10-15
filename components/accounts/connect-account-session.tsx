@@ -33,6 +33,17 @@ type ConnectSessionSetters = {
   setListingsResetNotice: React.Dispatch<React.SetStateAction<boolean>>;
 };
 
+function applySessionNotice(
+  next: WallapopAccountSession,
+  setError: ConnectSessionSetters["setError"],
+) {
+  if (next.status === "ACTIVE") {
+    setError(null);
+    return;
+  }
+  if (next.error) setError(next.error);
+}
+
 function attachWallapopStatusSync(ctx: {
   pendingKindRef: React.MutableRefObject<PendingKind>;
   resetModeRef: React.MutableRefObject<ResetMode>;
@@ -48,6 +59,7 @@ function attachWallapopStatusSync(ctx: {
       const next = await getWallapopAccountStatus();
       if (cancelled) return;
       setters.setSession(next);
+      applySessionNotice(next, setters.setError);
       if (next.status === "ACTIVE" && resetModeRef.current === "cancel") {
         setters.setDisconnectConfirmOpen(false);
       }

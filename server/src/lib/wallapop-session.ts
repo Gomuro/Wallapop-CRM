@@ -2,9 +2,7 @@ import type { WallapopConnectionStatus } from "../../../lib/validations/account"
 
 import {
   classifyOwnedSessionWindow,
-  closeWallapopBrowser,
   loginWallapopInBrowser,
-  logoutWallapopInBrowser,
   reconcileWallapopBrowserState,
   submitWallapop2faInBrowser,
   type ReconcileBrowserState,
@@ -86,6 +84,19 @@ async function syncDefaultAccountStatus(
   }
 }
 
+export const WALLAPOP_LOGGED_OUT_MESSAGE = "La sesión de Wallapop se ha cerrado. Entra en Cuenta e inicia sesión para publicar y reservar."
+
+/** Drop a session that the server still remembers as logged in. 2FA is left open. */
+export async function markWallapopSessionLoggedOut(): Promise<void> {
+  if (state.requires2FA || state.status === "AUTHENTICATING") return
+  if (state.error === WALLAPOP_LOGGED_OUT_MESSAGE) return
+  state.status = "DISCONNECTED"
+  state.requires2FA = false
+  state.error = WALLAPOP_LOGGED_OUT_MESSAGE
+  log("warn", "wallapop_session_logged_out")
+  await syncDefaultAccountStatus("INACTIVE")
+}
+
 async function applyReconcileResult(
   reconciled: ReconcileBrowserState,
 ): Promise<void> {
@@ -102,6 +113,7 @@ async function applyReconcileResult(
     await syncDefaultAccountStatus("ACTIVE")
     return
   }
+  if (state.status === "ACTIVE") await markWallapopSessionLoggedOut()
 }
 
 async function applyReconcileToState(): Promise<void> {
@@ -304,21 +316,16 @@ export async function submitWallapopSession2fa(
   }
 }
 
-export async function disconnectWallapopSession(): Promise<WallapopSessionSnapshot> {
+export function beginWallapopDisconnect(): void {
   connectGeneration += 1
   setKeepChromeWarm(false)
-  try {
-    await logoutWallapopInBrowser()
-  } catch (error) {
-    if (isBrowserBusyError(error)) {
-      connectGeneration -= 1
-      throw error
-    }
-    log("warn", "wallapop_disconnect_logout_error", {
-      message: error instanceof Error ? error.message : String(error),
-    })
-    await closeWallapopBrowser()
-  }
+}
+
+export function cancelWallapopDisconnect(): void {
+  connectGeneration -= 1
+}
+
+export async function finishWallapopDisconnect(): Promise<WallapopSessionSnapshot> {
   state.status = "DISCONNECTED"
   state.requires2FA = false
   state.email = null
