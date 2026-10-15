@@ -40,12 +40,17 @@ export async function readAllVisibleButtonLabels(
 }
 
 const DISMISS_SEARCH_EVAL = `(() => {
+    const overlay = document.querySelector(".SearchOverlay");
+    if (!overlay) return false;
     const s = document.querySelector('input[name="search"]');
-    if (s) { s.value = ""; s.dispatchEvent(new Event("input", { bubbles: true })); s.blur(); }
+    if (s instanceof HTMLElement) s.blur();
+    if (overlay instanceof HTMLElement) overlay.click();
+    return true;
   })()`;
 
 export async function dismissSearchOverlay(page: Page): Promise<void> {
-  await page.evaluate(DISMISS_SEARCH_EVAL);
+  const open = await page.evaluate(DISMISS_SEARCH_EVAL);
+  if (!open) return;
   await page.keyboard.press("Escape").catch(() => {});
   await page.waitForTimeout(300);
 }

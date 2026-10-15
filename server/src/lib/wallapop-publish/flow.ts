@@ -12,10 +12,7 @@ import {
   WALLAPOP_LOGGED_OUT_MESSAGE,
 } from "../wallapop-session";
 import { log } from "../log";
-import {
-  categoryPickerStillEmpty,
-  categorySectionVisible,
-} from "./category";
+import { categoryPickerStillEmpty, categorySectionVisible } from "./category";
 import { logPublishStep, snapshotPublishForm } from "./debug";
 import { fillPublishForm } from "./form";
 import {
@@ -48,12 +45,19 @@ export async function gotoUpload(
 }
 
 const CONSUMER_GOODS_LABEL = "Algo que ya no necesito";
+/** Live DOM 2026-10-15: aria-label replaces the visible title for getByRole. */
+const CONSUMER_GOODS_ARIA = "Consumer Goods Vertical";
 const CONSUMER_GOODS_WAIT_MS = 15_000;
 
 function consumerGoodsButton(page: Page) {
   return page
     .locator(`walla-button[text="${CONSUMER_GOODS_LABEL}"]`)
-    .or(page.getByRole("button", { name: CONSUMER_GOODS_LABEL, exact: true }));
+    .or(page.locator(`button[aria-label="${CONSUMER_GOODS_ARIA}"]`))
+    .or(
+      page
+        .locator("button.UploadStepVertical__multiIcons")
+        .filter({ hasText: CONSUMER_GOODS_LABEL }),
+    );
 }
 
 /** Skeleton first, then either the choice or the summary field. */
@@ -87,7 +91,10 @@ export async function selectConsumerGoods(
   const choice = await waitForConsumerGoods(page);
   if (choice === "logged_out") {
     await markWallapopSessionLoggedOut();
-    throw new WallapopPublishError("consumer_goods", WALLAPOP_LOGGED_OUT_MESSAGE);
+    throw new WallapopPublishError(
+      "consumer_goods",
+      WALLAPOP_LOGGED_OUT_MESSAGE,
+    );
   }
   if (choice === "ready") return;
   throw new WallapopPublishError(
@@ -166,7 +173,10 @@ export async function advanceUntilPublicar(page: Page): Promise<boolean> {
   for (let round = 0; round < 14; round++) {
     throwIfPublishAborted();
     if (await finalButtonVisible(page)) {
-      logPublishStep("before_publicar", page, { phase: "publicar_visible", round });
+      logPublishStep("before_publicar", page, {
+        phase: "publicar_visible",
+        round,
+      });
       return true;
     }
     await page.evaluate(`window.scrollBy(0, 350)`);
