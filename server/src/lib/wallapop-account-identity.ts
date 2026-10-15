@@ -69,11 +69,12 @@ async function resetListingsForIdentityChange(
 export async function syncWallapopIdentityOnActive(
   prisma: PrismaClient,
   incomingEmail: string,
+  accountId?: string,
 ): Promise<WallapopIdentitySyncResult> {
   const email = normalizeWallapopEmail(incomingEmail)
   if (!email) return { listingsReset: false }
   const account = await prisma.account.findFirst({
-    where: { isDefault: true },
+    where: accountId ? { id: accountId } : { isDefault: true },
     select: { id: true, wallapopEmail: true },
   })
   if (!account) return { listingsReset: false }

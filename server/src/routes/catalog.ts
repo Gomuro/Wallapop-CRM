@@ -17,6 +17,7 @@ import {
   stopDefaultAccountAutopost,
 } from "./accounts"
 import { listBrands } from "./brands"
+import { getDevMonitor, putDevMonitor } from "./dev-monitor"
 import {
   getCategory,
   listCategories,
@@ -76,6 +77,9 @@ catalog.post("/products/:id/wallapop-sold", postProductWallapopSold)
 catalog.post("/products/:id/wallapop-eliminar", postProductWallapopEliminar)
 catalog.post("/products/:id/catalog-delete", postCatalogDelete)
 catalog.post("/products/:id/wallapop-devolucion", postProductWallapopDevolucion)
+
+catalog.get("/dev/monitor", getDevMonitor)
+catalog.put("/dev/monitor", putDevMonitor)
 
 catalog.get("/accounts", listAccounts)
 catalog.post("/accounts", createAccount)

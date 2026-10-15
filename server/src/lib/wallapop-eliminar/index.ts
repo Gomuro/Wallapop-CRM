@@ -26,7 +26,7 @@ export { cacheBustItemUrl, publishedRowsContainItem } from "./verify"
 async function eliminarInner(
   input: EliminarWallapopInput,
 ): Promise<EliminarWallapopResult> {
-  const page = await ensureWorkerWindow("eliminar")
+  const page = await ensureWorkerWindow("eliminar", input.cdpPort)
   let step: EliminarStep = "attach"
   log("info", "wallapop_eliminar_start", {
     itemUrl: input.itemUrl,
@@ -45,7 +45,7 @@ async function eliminarInner(
     })
     throw error
   } finally {
-    await closeWorkerSlotPages("eliminar")
+    await closeWorkerSlotPages("eliminar", input.cdpPort)
   }
 }
 
@@ -54,8 +54,12 @@ export async function eliminarWallapopInBrowser(
   input: EliminarWallapopInput,
 ): Promise<EliminarWallapopResult> {
   try {
-    return await runWithBrowserBusy("eliminar", () => eliminarInner(input))
+    return await runWithBrowserBusy(
+      "eliminar",
+      () => eliminarInner(input),
+      input.cdpPort,
+    )
   } finally {
-    if (!input.dryRun) await quitChromeIfNoWorkerSlots()
+    if (!input.dryRun) await quitChromeIfNoWorkerSlots(input.cdpPort)
   }
 }

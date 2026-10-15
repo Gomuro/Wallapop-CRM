@@ -90,6 +90,7 @@ function pageUrlLower(page: Page): string {
 async function probeWallIfNeeded(
   mfaPage: Page | null,
   activePage: Page,
+  port?: number,
 ): Promise<Page> {
   const activeUrl = pageUrlLower(activePage)
   const onWallapop =
@@ -103,7 +104,7 @@ async function probeWallIfNeeded(
     waitUntil: "domcontentloaded",
     timeout: NAV_TIMEOUT_MS,
   })
-  return getWallapopHandle()?.page ?? activePage
+  return getWallapopHandle(port)?.page ?? activePage
 }
 
 async function classifyReconcilePage(
@@ -122,15 +123,17 @@ async function classifyReconcilePage(
   return "NONE"
 }
 
-async function detectReconcileStateFromHandle(): Promise<ReconcileBrowserState> {
-  const handle = getWallapopHandle()
+async function detectReconcileStateFromHandle(
+  port?: number,
+): Promise<ReconcileBrowserState> {
+  const handle = getWallapopHandle(port)
   if (!handle) return "NONE"
   const mfaPage = findMfaPage(handle.context.pages())
   let activePage = mfaPage ?? handle.page
   if (mfaPage && mfaPage !== handle.page) {
-    setWallapopHandle({ ...handle, page: mfaPage, ownedPage: false })
+    setWallapopHandle({ ...handle, page: mfaPage, ownedPage: false }, port)
   }
-  activePage = await probeWallIfNeeded(mfaPage, activePage)
+  activePage = await probeWallIfNeeded(mfaPage, activePage, port)
   if (!mfaPage) {
     await dismissWallapopConsent(activePage)
   }
@@ -139,8 +142,9 @@ async function detectReconcileStateFromHandle(): Promise<ReconcileBrowserState> 
 
 async function reconcileWithAttach(
   spawnIfNeeded: boolean,
+  port?: number,
 ): Promise<ReconcileBrowserState> {
-  const busy = getBrowserBusy()
+  const busy = getBrowserBusy(port)
   if (busy !== "idle") {
     log("info", "wallapop_browser_reconcile_skipped_busy", {
       busy,
@@ -150,18 +154,18 @@ async function reconcileWithAttach(
   }
 
   try {
-    let handle = getWallapopHandle()
+    let handle = getWallapopHandle(port)
     if (!handle) {
       handle = spawnIfNeeded
-        ? await attachOrLaunch()
-        : await connectCdpHandle()
-      setWallapopHandle(handle)
+        ? await attachOrLaunch(undefined, port)
+        : await connectCdpHandle(port)
+      setWallapopHandle(handle, port)
       log("info", "wallapop_browser_reconcile_attached", {
         cdpUrl: CDP_URL,
         spawned: spawnIfNeeded,
       })
     }
-    return await detectReconcileStateFromHandle()
+    return await detectReconcileStateFromHandle(port)
   } catch (error) {
     log("info", "wallapop_browser_reconcile_none", {
       message: error instanceof Error ? error.message : String(error),
@@ -173,16 +177,20 @@ async function reconcileWithAttach(
 }
 
 /** Attach-only (no Chrome spawn). Used by status / publish gates. */
-export async function reconcileWallapopBrowserState(): Promise<ReconcileBrowserState> {
-  return reconcileWithAttach(false)
+export async function reconcileWallapopBrowserState(
+  port?: number,
+): Promise<ReconcileBrowserState> {
+  return reconcileWithAttach(false, port)
 }
 
 /**
  * Boot / interval session-valid: own worker window, never hijack `/wall`.
  * Caller must hold the `session` slot. Closes the window unless 2FA is on it.
  */
-export async function classifyOwnedSessionWindow(): Promise<ReconcileBrowserState> {
-  const page = await ensureWorkerWindow("session")
+export async function classifyOwnedSessionWindow(
+  port?: number,
+): Promise<ReconcileBrowserState> {
+  const page = await ensureWorkerWindow("session", port)
   let keepFor2fa = false
   try {
     log("info", "wallapop_session_worker_probe_nav", { to: PROBE_URL })
@@ -196,7 +204,7 @@ export async function classifyOwnedSessionWindow(): Promise<ReconcileBrowserStat
       keepFor2fa = true
       const handle = getWallapopHandle()
       if (handle) {
-        setWallapopHandle({ ...handle, page, ownedPage: true })
+        setWallapopHandle({ ...handle, page, ownedPage: true }, port)
       }
     }
     return classified
@@ -213,20 +221,20 @@ export async function reconcileWallapopBrowserStateSpawning(): Promise<Reconcile
   return classifyOwnedSessionWindow()
 }
 
-async function requireIdleFor2fa(): Promise<void> {
-  const busyAtStart = getBrowserBusy()
+async function requireIdleFor2fa(port?: number): Promise<void> {
+  const busyAtStart = getBrowserBusy(port)
   if (busyAtStart !== "idle") {
     throw new BrowserBusyError(busyAtStart, "login")
   }
 }
 
-async function attachHandleFor2fa(): Promise<void> {
-  let handle = getWallapopHandle()
+async function attachHandleFor2fa(port?: number): Promise<void> {
+  let handle = getWallapopHandle(port)
   if (handle?.page) return
-  const reconciled = await reconcileWallapopBrowserState()
-  handle = getWallapopHandle()
+  const reconciled = await reconcileWallapopBrowserState(port)
+  handle = getWallapopHandle(port)
   if (reconciled === "REQUIRES_2FA" && handle?.page) return
-  const busyAfter = getBrowserBusy()
+  const busyAfter = getBrowserBusy(port)
   if (busyAfter !== "idle") {
     throw new BrowserBusyError(busyAfter, "login")
   }
@@ -278,16 +286,19 @@ async function submitWallapopOtp(
   }
 }
 
-async function retargetAfter2faSubmit(page: Page): Promise<Page> {
-  const handle = getWallapopHandle()
+async function retargetAfter2faSubmit(page: Page, port?: number): Promise<Page> {
+  const handle = getWallapopHandle(port)
   if (!handle) return page
   const next = preferLoggedInPage(handle.context.pages(), handle.page)
-  setWallapopHandle({ ...handle, page: next, ownedPage: false })
+  setWallapopHandle({ ...handle, page: next, ownedPage: false }, port)
   return next
 }
 
-async function runWallapop2faSubmit(code: string): Promise<BrowserLoginOutcome> {
-  const handle = getWallapopHandle()
+async function runWallapop2faSubmit(
+  code: string,
+  port?: number,
+): Promise<BrowserLoginOutcome> {
+  const handle = getWallapopHandle(port)
   if (!handle?.page) {
     throw new Error("No hay una sesión de autenticación activa.")
   }
@@ -302,15 +313,15 @@ async function runWallapop2faSubmit(code: string): Promise<BrowserLoginOutcome> 
     return assertLoginOutcome(await waitForLoginOutcome(page))
   }
   await submitWallapopOtp(page, otpInput)
-  page = await retargetAfter2faSubmit(page)
+  page = await retargetAfter2faSubmit(page, port)
   return assertLoginOutcome(await waitForLoginOutcome(page))
 }
 
 export async function submitWallapop2faInBrowser(
   code: string,
+  port?: number,
 ): Promise<BrowserLoginOutcome> {
-  // Reconcile/attach while idle — reconcile skips when busy ≠ idle.
-  await requireIdleFor2fa()
-  await attachHandleFor2fa()
-  return runWithBrowserBusy("login", () => runWallapop2faSubmit(code))
+  await requireIdleFor2fa(port)
+  await attachHandleFor2fa(port)
+  return runWithBrowserBusy("login", () => runWallapop2faSubmit(code, port), port)
 }

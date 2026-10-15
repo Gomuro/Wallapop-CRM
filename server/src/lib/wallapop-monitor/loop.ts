@@ -1,10 +1,12 @@
 import { log, serializeError } from "../log"
 import { getWallapopSession, rehydrateWallapopSessionOnBoot } from "../wallapop-session"
+import { readDevMonitorEnabled } from "./dev-switch"
 import { runWallapopMonitorTick } from "./tick"
 
 export const MONITOR_INTERVAL_MS = 5 * 60 * 1000
 
 let started = false
+let enabled = true
 let scheduleTimer: ReturnType<typeof setTimeout> | null = null
 let scheduleGeneration = 0
 
@@ -15,6 +17,29 @@ export function resetWallapopMonitorLoopForTests(): void {
     scheduleTimer = null
   }
   started = false
+  enabled = true
+}
+
+export function isWallapopMonitorEnabled(): boolean {
+  return enabled
+}
+
+/** Stops the Chrome probe. Turning it back on runs one pass now. */
+export function setWallapopMonitorEnabled(next: boolean): boolean {
+  enabled = next
+  if (!started) return enabled
+  scheduleGeneration += 1
+  if (scheduleTimer != null) {
+    clearTimeout(scheduleTimer)
+    scheduleTimer = null
+  }
+  if (!enabled) {
+    log("info", "wallapop_monitor_paused")
+    return enabled
+  }
+  log("info", "wallapop_monitor_resumed")
+  void runScheduledTick(scheduleGeneration)
+  return enabled
 }
 
 function scheduleNext(generation: number): void {
@@ -41,7 +66,7 @@ async function ensureSessionThenMonitor(): Promise<void> {
 }
 
 async function runScheduledTick(generation: number): Promise<void> {
-  if (generation !== scheduleGeneration) return
+  if (generation !== scheduleGeneration || !enabled) return
   try {
     await ensureSessionThenMonitor()
   } catch (error) {
@@ -61,10 +86,16 @@ export function startWallapopMonitorLoop(): void {
     return
   }
   started = true
+  enabled = readDevMonitorEnabled()
   const generation = scheduleGeneration
   log("info", "wallapop_monitor_loop_started", {
     intervalMs: MONITOR_INTERVAL_MS,
+    enabled,
   })
+  if (!enabled) {
+    log("info", "wallapop_monitor_paused")
+    return
+  }
   void (async () => {
     if (getWallapopSession().status === "ACTIVE") return
     const session = await rehydrateWallapopSessionOnBoot()

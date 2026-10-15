@@ -14,6 +14,7 @@ export type WallapopEliminarReady = {
   ok: true
   prisma: NonNullable<ReturnType<typeof getPrisma>>
   productId: string
+  accountId: string
   itemUrl: string
   dryRun: boolean
 }
@@ -31,14 +32,19 @@ export function isEliminarDryRun(): boolean {
 }
 
 /** Live on Wallapop (en venta or reserved) with a public es /item/ URL; not sold. */
-export function listingForEliminar(product: {
-  status: string
-  listings: { status: string; externalUrl: string | null }[]
-}): RunWallapopEliminarErr | { itemUrl: string } {
+export function listingForEliminar(
+  product: {
+    status: string
+    listings: { status: string; externalUrl: string | null; accountId: string }[]
+  },
+  accountId?: string,
+): RunWallapopEliminarErr | { itemUrl: string; accountId: string } {
   if (product.status === "SOLD") {
     return eliminarFail(409, "ALREADY_SOLD", "El producto ya está vendido.")
   }
-  const listing = product.listings[0]
+  const listing = accountId
+    ? product.listings.find((row) => row.accountId === accountId)
+    : product.listings[0]
   if (!listing || (listing.status !== "ACTIVE" && listing.status !== "RESERVED")) {
     return eliminarFail(
       409,
@@ -54,11 +60,13 @@ export function listingForEliminar(product: {
       "Falta la URL pública https://es.wallapop.com/item/….",
     )
   }
-  return { itemUrl }
+  return { itemUrl, accountId: listing.accountId }
 }
 
-async function guardEliminarSession(): Promise<RunWallapopEliminarErr | { ok: true }> {
-  const session = await getWallapopSessionSnapshot()
+async function guardEliminarSession(
+  accountId?: string,
+): Promise<RunWallapopEliminarErr | { ok: true }> {
+  const session = await getWallapopSessionSnapshot(accountId)
   if (session.status !== "ACTIVE") {
     return eliminarFail(
       409,
@@ -71,7 +79,7 @@ async function guardEliminarSession(): Promise<RunWallapopEliminarErr | { ok: tr
 
 export async function prepareWallapopEliminar(
   productId: string,
-  options: { dryRun?: boolean } = {},
+  options: { dryRun?: boolean; accountId?: string } = {},
 ): Promise<RunWallapopEliminarErr | WallapopEliminarReady> {
   const prisma = getPrisma()
   if (!prisma) {
@@ -81,14 +89,15 @@ export async function prepareWallapopEliminar(
   if (!product) {
     return eliminarFail(404, "NOT_FOUND", "Producto no encontrado.")
   }
-  const listing = listingForEliminar(product)
+  const listing = listingForEliminar(product, options.accountId)
   if ("ok" in listing) return listing
-  const session = await guardEliminarSession()
+  const session = await guardEliminarSession(listing.accountId)
   if (!session.ok) return session
   return {
     ok: true,
     prisma,
     productId,
+    accountId: listing.accountId,
     itemUrl: listing.itemUrl,
     dryRun: options.dryRun === true || isEliminarDryRun(),
   }

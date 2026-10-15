@@ -1,30 +1,28 @@
 import { describe, expect, it } from "vitest"
 
-import {
-  isForeignAccountChrome,
-  readActionAccountId,
-} from "../src/lib/foreign-chrome"
+import { chromePlaceAt } from "../../lib/accounts/chrome-place"
+import { readActionAccountId } from "../src/lib/foreign-chrome"
 
-describe("foreign chrome", () => {
-  it("lets the first account through when the button names it", () => {
-    expect(
-      isForeignAccountChrome({ accountId: "norte", defaultAccountId: "norte" }),
-    ).toBe(false)
+describe("chrome place", () => {
+  it("keeps the first account on 9222 and ChromeCDP-Persistent", () => {
+    expect(chromePlaceAt(0)).toEqual({
+      port: 9222,
+      profileName: "ChromeCDP-Persistent",
+    })
   })
 
-  it("stops a second account before any browser call", () => {
-    expect(
-      isForeignAccountChrome({ accountId: "sur", defaultAccountId: "norte" }),
-    ).toBe(true)
+  it("gives the next accounts 9232 and 9242 with their own folder", () => {
+    expect(chromePlaceAt(1)).toEqual({
+      port: 9232,
+      profileName: "ChromeCDP-9232",
+    })
+    expect(chromePlaceAt(2)).toEqual({
+      port: 9242,
+      profileName: "ChromeCDP-9242",
+    })
   })
 
-  it("keeps the old call with no accountId on the first Chrome", () => {
-    expect(
-      isForeignAccountChrome({
-        accountId: undefined,
-        defaultAccountId: "norte",
-      }),
-    ).toBe(false)
+  it("reads an account id from the button body", () => {
     expect(readActionAccountId({})).toBeUndefined()
     expect(readActionAccountId({ accountId: "  sur  " })).toBe("sur")
   })

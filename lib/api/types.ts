@@ -129,6 +129,8 @@ export type ApiDefaultAccount = {
   autopostIntervalMs: number | null
   autopostEnabled?: boolean
   wallapopEmail?: string | null
+  cdpPort?: number
+  profileName?: string
   createdAt: string
   updatedAt: string
 }

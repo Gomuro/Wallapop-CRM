@@ -19,6 +19,7 @@ export const wallapopConnectionStatusSchema = z.enum([
 ])
 
 export const wallapopConnectSchema = z.object({
+  accountId: z.string().trim().min(1).optional(),
   email: z.string().trim().email("Introduce un email válido.").max(254),
   password: z.string().min(1, "Introduce la contraseña.").max(200),
   proxy: z
@@ -35,6 +36,7 @@ export const wallapopConnectSchema = z.object({
 })
 
 export const wallapop2faSchema = z.object({
+  accountId: z.string().trim().min(1).optional(),
   code: z
     .string()
     .trim()

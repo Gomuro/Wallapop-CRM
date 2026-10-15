@@ -20,6 +20,7 @@ export class WallapopSoldError extends Error {
 export type MarkWallapopSoldInput = {
   itemUrl: string
   dryRun: boolean
+  cdpPort?: number
 }
 
 export type MarkWallapopSoldResult = {

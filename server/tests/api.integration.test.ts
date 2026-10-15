@@ -1399,7 +1399,7 @@ describe("API v1 integration (Express + Postgres)", () => {
       }
     })
 
-    it("stops sold, eliminar and devolución for another account before Chrome", async () => {
+    it("looks up a missing product even when the button names another account", async () => {
       const prisma = getPrisma()
       expect(prisma).toBeTruthy()
       if (!prisma) return
@@ -1414,8 +1414,8 @@ describe("API v1 integration (Express + Postgres)", () => {
           "/api/v1/products/missing-product/wallapop-devolucion",
         ]) {
           const res = await agent.post(path).send({ accountId: neighbor.id })
-          expect(res.status).toBe(409)
-          expect(errorCode(res.body)).toBe("FOREIGN_CHROME")
+          expect(res.status).toBe(404)
+          expect(errorCode(res.body)).toBe("NOT_FOUND")
         }
       } finally {
         await prisma.account

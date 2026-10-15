@@ -9,9 +9,12 @@ type PrismaDb = NonNullable<ReturnType<typeof getPrisma>>
 export async function deactivateListingAfterEliminar(
   prisma: PrismaDb,
   productId: string,
+  accountId?: string,
 ): Promise<number> {
   const result = await prisma.productListing.updateMany({
-    where: { productId, account: { isDefault: true } },
+    where: accountId
+      ? { productId, accountId }
+      : { productId, account: { isDefault: true } },
     data: { status: "DEACTIVATED", externalUrl: null },
   })
   return result.count

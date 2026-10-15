@@ -40,9 +40,9 @@ async function sendCdpBrowserClose(
  * so the next attachOrLaunch restores cookies. Use after publish so the VPS
  * is not holding a headed Chrome between ticks.
  */
-export async function quitWallapopChrome(): Promise<void> {
-  const current = getWallapopHandle()
-  setWallapopHandle(null)
+export async function quitWallapopChrome(port?: number): Promise<void> {
+  const current = getWallapopHandle(port)
+  setWallapopHandle(null, port)
   if (current) {
     try {
       await sendCdpBrowserClose(current.browser)
@@ -53,18 +53,18 @@ export async function quitWallapopChrome(): Promise<void> {
       await current.browser.close().catch(() => {})
     }
   }
-  killSpawnedChrome()
+  killSpawnedChrome(port)
 }
 
 /**
  * Disconnect Playwright, quit chrome.exe, keep the Persistent profile on disk.
  * Blocked while a worker slot holds Chrome (use `quitWallapopChrome` after the lock).
  */
-export async function closeWallapopBrowser(): Promise<void> {
-  if (isAnyWorkerSlotBusy()) {
-    throw new BrowserBusyError(getBrowserBusy(), "logout")
+export async function closeWallapopBrowser(port?: number): Promise<void> {
+  if (isAnyWorkerSlotBusy(port)) {
+    throw new BrowserBusyError(getBrowserBusy(port), "logout")
   }
-  await quitWallapopChrome()
+  await quitWallapopChrome(port)
 }
 
 /**
@@ -72,24 +72,24 @@ export async function closeWallapopBrowser(): Promise<void> {
  * If publish already holds a slot, skip. If quit already started, wait —
  * the next job's ensureCdpAttached also waits, then launches a new Chrome.
  */
-export async function quitChromeIfNoWorkerSlots(): Promise<void> {
-  if (isAnyWorkerSlotBusy()) {
+export async function quitChromeIfNoWorkerSlots(port?: number): Promise<void> {
+  if (isAnyWorkerSlotBusy(port)) {
     log("info", "wallapop_chrome_kept_other_slot", {
       busy: true,
     })
     return
   }
-  if (isKeepChromeWarm()) {
+  if (isKeepChromeWarm(port)) {
     log("info", "wallapop_chrome_kept_warm")
     return
   }
   await beginChromeQuit(async () => {
-    if (isAnyWorkerSlotBusy()) {
+    if (isAnyWorkerSlotBusy(port)) {
       log("info", "wallapop_chrome_kept_other_slot", { busy: true })
       return
     }
-    await quitWallapopChrome()
-  })
+    await quitWallapopChrome(port)
+  }, port)
 }
 
 export function isLoginOr2faUrl(url: string): boolean {
@@ -275,8 +275,8 @@ async function closeOwnedUploadTab(
   await retargetHandleAfterUploadClose(current)
 }
 
-export async function closeWallapopUploadTab(): Promise<void> {
-  const current = getWallapopHandle()
+export async function closeWallapopUploadTab(port?: number): Promise<void> {
+  const current = getWallapopHandle(port)
   if (!current) return
   try {
     const { url, alreadyClosed } = readUploadTabUrl(current)

@@ -18,6 +18,7 @@ export class WallapopEliminarError extends Error {
 export type EliminarWallapopInput = {
   itemUrl: string
   dryRun: boolean
+  cdpPort?: number
 }
 
 export type EliminarWallapopResult = {

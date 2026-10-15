@@ -37,6 +37,7 @@ function attachWallapopStatusSync(ctx: {
   pendingKindRef: React.MutableRefObject<PendingKind>;
   resetModeRef: React.MutableRefObject<ResetMode>;
   setters: ConnectSessionSetters;
+  accountId?: string;
 }) {
   const { pendingKindRef, resetModeRef, setters } = ctx;
   let cancelled = false;
@@ -45,7 +46,7 @@ function attachWallapopStatusSync(ctx: {
     if (pendingKindRef.current !== null) return;
     if (options?.initial) setters.setStatusLoading(true);
     try {
-      const next = await getWallapopAccountStatus();
+      const next = await getWallapopAccountStatus(ctx.accountId);
       if (cancelled) return;
       setters.setSession(next);
       if (next.status === "ACTIVE" && resetModeRef.current === "cancel") {
@@ -97,6 +98,7 @@ async function runConnectAccount(ctx: {
   email: string;
   password: string;
   proxy: string;
+  accountId?: string;
   connectRequestIdRef: React.MutableRefObject<number>;
   setters: ConnectSessionSetters;
 }) {
@@ -118,6 +120,7 @@ async function runConnectAccount(ctx: {
   });
   try {
     const next = await connectWallapopAccount({
+      accountId: ctx.accountId,
       email: trimmedEmail,
       password: ctx.password,
       proxy: ctx.proxy,
@@ -148,6 +151,7 @@ async function runConnectAccount(ctx: {
 async function runSubmitTwoFa(ctx: {
   event: React.FormEvent;
   twoFaCode: string;
+  accountId?: string;
   twoFaRequestIdRef: React.MutableRefObject<number>;
   setters: ConnectSessionSetters;
 }) {
@@ -162,7 +166,7 @@ async function runSubmitTwoFa(ctx: {
   const requestId = ++ctx.twoFaRequestIdRef.current;
   ctx.setters.setPendingKind("2fa");
   try {
-    const next = await submitWallapop2fa(code);
+    const next = await submitWallapop2fa(code, ctx.accountId);
     if (requestId !== ctx.twoFaRequestIdRef.current) return;
     ctx.setters.setSession(next);
     if (next.listingsReset) ctx.setters.setListingsResetNotice(true);
@@ -184,6 +188,7 @@ async function runSubmitTwoFa(ctx: {
 }
 
 async function runDisconnectAccount(ctx: {
+  accountId?: string;
   connectRequestIdRef: React.MutableRefObject<number>;
   twoFaRequestIdRef: React.MutableRefObject<number>;
   setters: ConnectSessionSetters;
@@ -194,7 +199,7 @@ async function runDisconnectAccount(ctx: {
   ctx.twoFaRequestIdRef.current += 1;
   ctx.setters.setPendingKind("disconnect");
   try {
-    const next = await disconnectWallapopAccount();
+    const next = await disconnectWallapopAccount(ctx.accountId);
     ctx.setters.setSession(next);
     ctx.setters.setTwoFaOpen(false);
     ctx.setters.setTwoFaCode("");
@@ -280,7 +285,7 @@ function snapshotConnectSession(ctx: {
   };
 }
 
-export function useConnectAccountSession(): ConnectAccountSession {
+export function useConnectAccountSession(accountId?: string): ConnectAccountSession {
   const apiReady = isApiConfigured();
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
@@ -331,9 +336,10 @@ export function useConnectAccountSession(): ConnectAccountSession {
       pendingKindRef,
       resetModeRef,
       setters,
+      accountId,
     });
   // eslint-disable-next-line react-hooks/exhaustive-deps -- setState fns are stable
-  }, [apiReady]);
+  }, [apiReady, accountId]);
 
   function openResetConfirm(mode: ResetMode) {
     if (pendingKind === "disconnect") return;
@@ -347,15 +353,17 @@ export function useConnectAccountSession(): ConnectAccountSession {
       email,
       password,
       proxy,
+      accountId,
       connectRequestIdRef,
       setters,
     });
   }
   function onSubmit2fa(event: React.FormEvent) {
-    void runSubmitTwoFa({ event, twoFaCode, twoFaRequestIdRef, setters });
+    void runSubmitTwoFa({ event, twoFaCode, accountId, twoFaRequestIdRef, setters });
   }
   function onDisconnect() {
     void runDisconnectAccount({
+      accountId,
       connectRequestIdRef,
       twoFaRequestIdRef,
       setters,

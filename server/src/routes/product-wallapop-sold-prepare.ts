@@ -32,14 +32,19 @@ export function isSoldDryRun(): boolean {
   return process.env.WALLAPOP_SOLD_DRY_RUN !== "false"
 }
 
-export function listingForSold(product: {
-  status: string
-  listings: { status: string; externalUrl: string | null; accountId: string }[]
-}): RunWallapopSoldErr | { itemUrl: string; accountId: string } {
+export function listingForSold(
+  product: {
+    status: string
+    listings: { status: string; externalUrl: string | null; accountId: string }[]
+  },
+  accountId?: string,
+): RunWallapopSoldErr | { itemUrl: string; accountId: string } {
   if (product.status === "SOLD") {
     return soldFail(409, "ALREADY_SOLD", "Product is already sold.")
   }
-  const listing = product.listings[0]
+  const listing = accountId
+    ? product.listings.find((row) => row.accountId === accountId)
+    : product.listings[0]
   if (!listing || listing.status !== "ACTIVE") {
     return soldFail(
       409,
@@ -58,8 +63,10 @@ export function listingForSold(product: {
   return { itemUrl, accountId: listing.accountId }
 }
 
-async function guardSoldSession(): Promise<RunWallapopSoldErr | { ok: true }> {
-  const session = await getWallapopSessionSnapshot()
+async function guardSoldSession(
+  accountId?: string,
+): Promise<RunWallapopSoldErr | { ok: true }> {
+  const session = await getWallapopSessionSnapshot(accountId)
   if (session.status !== "ACTIVE") {
     return soldFail(
       409,
@@ -72,7 +79,7 @@ async function guardSoldSession(): Promise<RunWallapopSoldErr | { ok: true }> {
 
 export async function prepareWallapopSold(
   productId: string,
-  options: { dryRun?: boolean; soldPrice?: number } = {},
+  options: { dryRun?: boolean; soldPrice?: number; accountId?: string } = {},
 ): Promise<RunWallapopSoldErr | WallapopSoldReady> {
   const prisma = getPrisma()
   if (!prisma) {
@@ -82,9 +89,9 @@ export async function prepareWallapopSold(
   if (!product) {
     return soldFail(404, "NOT_FOUND", "Producto no encontrado.")
   }
-  const listing = listingForSold(product)
+  const listing = listingForSold(product, options.accountId)
   if ("ok" in listing) return listing
-  const session = await guardSoldSession()
+  const session = await guardSoldSession(listing.accountId)
   if (!session.ok) return session
   return {
     ok: true,

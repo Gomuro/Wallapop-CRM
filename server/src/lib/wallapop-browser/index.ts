@@ -29,14 +29,14 @@ export {
 
 const LOGIN_URL = "https://es.wallapop.com/login"
 
-export async function logoutWallapopInBrowser(): Promise<void> {
+export async function logoutWallapopInBrowser(port?: number): Promise<void> {
   await runWithBrowserBusy("logout", async () => {
     try {
-      let handle = getWallapopHandle()
+      let handle = getWallapopHandle(port)
       if (!handle) {
-        handle = await connectCdpHandle()
-        setWallapopHandle(handle)
-        log("info", "wallapop_logout_attached_cdp", { cdpUrl: CDP_URL })
+        handle = await connectCdpHandle(port)
+        setWallapopHandle(handle, port)
+        log("info", "wallapop_logout_attached_cdp", { cdpUrl: CDP_URL, port })
       }
 
       const { context, page } = handle
@@ -62,7 +62,7 @@ export async function logoutWallapopInBrowser(): Promise<void> {
         message: error instanceof Error ? error.message : String(error),
       })
     } finally {
-      await closeWallapopBrowser()
+      await closeWallapopBrowser(port)
     }
-  })
+  }, port)
 }

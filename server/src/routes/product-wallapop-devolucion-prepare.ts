@@ -19,6 +19,7 @@ export type WallapopDevolucionReady = {
   ok: true
   prisma: NonNullable<ReturnType<typeof getPrisma>>
   productId: string
+  accountId: string
   itemUrl: string | null
   dryRun: boolean
 }
@@ -32,14 +33,19 @@ function devolucionFail(
 }
 
 /** Sold warehouse; optional public /item/ URL to Eliminar before re-queue. */
-export function listingForDevolucion(product: {
-  status: string
-  listings: { status: string; externalUrl: string | null }[]
-}): RunWallapopDevolucionErr | { itemUrl: string | null } {
+export function listingForDevolucion(
+  product: {
+    status: string
+    listings: { status: string; externalUrl: string | null; accountId: string }[]
+  },
+  accountId?: string,
+): RunWallapopDevolucionErr | { itemUrl: string | null; accountId: string } {
   if (product.status !== "SOLD") {
     return devolucionFail(409, "NOT_SOLD", "El producto no está vendido.")
   }
-  const listing = product.listings[0]
+  const listing = accountId
+    ? product.listings.find((row) => row.accountId === accountId)
+    : product.listings[0]
   if (listing?.status === "POSTING") {
     return devolucionFail(
       409,
@@ -49,13 +55,14 @@ export function listingForDevolucion(product: {
   }
   return {
     itemUrl: listing ? wallapopEsItemUrlOrNull(listing.externalUrl) : null,
+    accountId: listing?.accountId ?? accountId ?? "",
   }
 }
 
-async function guardDevolucionSession(): Promise<
-  RunWallapopDevolucionErr | { ok: true }
-> {
-  const session = await getWallapopSessionSnapshot()
+async function guardDevolucionSession(
+  accountId?: string,
+): Promise<RunWallapopDevolucionErr | { ok: true }> {
+  const session = await getWallapopSessionSnapshot(accountId)
   if (session.status !== "ACTIVE") {
     return devolucionFail(
       409,
@@ -95,7 +102,7 @@ async function rejectDevolucionWithoutBrand(
 
 export async function prepareWallapopDevolucion(
   productId: string,
-  options: { dryRun?: boolean } = {},
+  options: { dryRun?: boolean; accountId?: string } = {},
 ): Promise<RunWallapopDevolucionErr | WallapopDevolucionReady> {
   const prisma = getPrisma()
   if (!prisma) {
@@ -105,18 +112,19 @@ export async function prepareWallapopDevolucion(
   if (!product) {
     return devolucionFail(404, "NOT_FOUND", "Producto no encontrado.")
   }
-  const listing = listingForDevolucion(product)
+  const listing = listingForDevolucion(product, options.accountId)
   if ("ok" in listing) return listing
   const brand = await rejectDevolucionWithoutBrand(prisma, productId)
   if (!brand.ok) return brand
   if (listing.itemUrl) {
-    const session = await guardDevolucionSession()
+    const session = await guardDevolucionSession(listing.accountId)
     if (!session.ok) return session
   }
   return {
     ok: true,
     prisma,
     productId,
+    accountId: listing.accountId,
     itemUrl: listing.itemUrl,
     dryRun: listing.itemUrl != null && (options.dryRun === true || isEliminarDryRun()),
   }

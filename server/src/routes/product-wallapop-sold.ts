@@ -2,7 +2,8 @@ import type { Request, Response } from "express"
 import { ZodError } from "zod"
 
 import { productSoldBodySchema } from "../../../lib/validations/product"
-import { stopForeignChrome } from "../lib/foreign-chrome"
+import { chromePortForAccount } from "../lib/account-chrome"
+import { readActionAccountId } from "../lib/foreign-chrome"
 import { sendError } from "../lib/http-error"
 import { isBrowserBusyError } from "../lib/wallapop-cdp"
 import { markProductSoldTx } from "../lib/product-sold"
@@ -96,6 +97,7 @@ export async function runWallapopSoldJob(ready: WallapopSoldReady): Promise<void
     const browser = await markWallapopSoldInBrowser({
       itemUrl: ready.itemUrl,
       dryRun: ready.dryRun,
+      cdpPort: await chromePortForAccount(ready.accountId),
     })
     if (browser.dryRun) return
     await applyCrmSold(ready)
@@ -116,6 +118,7 @@ async function runPreparedSold(
     const browser = await markWallapopSoldInBrowser({
       itemUrl: prepared.itemUrl,
       dryRun: prepared.dryRun,
+      cdpPort: await chromePortForAccount(prepared.accountId),
     })
     if (browser.dryRun) {
       res.json({
@@ -139,7 +142,6 @@ export async function postProductWallapopSold(req: Request, res: Response) {
     sendError(res, 404, "NOT_FOUND", "Producto no encontrado.")
     return
   }
-  if (await stopForeignChrome(res, req.body)) return
   let body: { dryRun: boolean; soldPrice?: number }
   try {
     body = parseWallapopSoldBody(req)
@@ -150,7 +152,10 @@ export async function postProductWallapopSold(req: Request, res: Response) {
     }
     throw error
   }
-  const prepared = await prepareWallapopSold(productId, body)
+  const prepared = await prepareWallapopSold(productId, {
+    ...body,
+    accountId: readActionAccountId(req.body),
+  })
   if (!prepared.ok) {
     sendPrepareErr(res, prepared)
     return

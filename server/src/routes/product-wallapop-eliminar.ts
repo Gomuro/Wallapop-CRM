@@ -1,6 +1,7 @@
 import type { Request, Response } from "express"
 
-import { stopForeignChrome } from "../lib/foreign-chrome"
+import { chromePortForAccount } from "../lib/account-chrome"
+import { readActionAccountId } from "../lib/foreign-chrome"
 import { sendError } from "../lib/http-error"
 import { log, serializeError } from "../lib/log"
 import { deactivateListingAfterEliminar } from "../lib/product-eliminar"
@@ -45,7 +46,7 @@ async function persistCrmEliminar(
   ready: WallapopEliminarReady,
   res: Response,
 ): Promise<void> {
-  await deactivateListingAfterEliminar(ready.prisma, ready.productId)
+  await deactivateListingAfterEliminar(ready.prisma, ready.productId, ready.accountId)
   const product = await loadProductCard(ready.prisma, ready.productId)
   if (!product) {
     sendError(
@@ -72,9 +73,10 @@ export async function runWallapopEliminarJob(
     const browser = await eliminarWallapopInBrowser({
       itemUrl: ready.itemUrl,
       dryRun: ready.dryRun,
+      cdpPort: await chromePortForAccount(ready.accountId),
     })
     if (browser.dryRun) return
-    await deactivateListingAfterEliminar(ready.prisma, ready.productId)
+    await deactivateListingAfterEliminar(ready.prisma, ready.productId, ready.accountId)
   } catch (error) {
     throw new Error(mapEliminarBrowserError(error).message)
   }
@@ -88,6 +90,7 @@ async function runPreparedEliminar(
     const browser = await eliminarWallapopInBrowser({
       itemUrl: prepared.itemUrl,
       dryRun: prepared.dryRun,
+      cdpPort: await chromePortForAccount(prepared.accountId),
     })
     if (browser.dryRun) {
       res.json({ ok: true, dryRun: true, step: browser.step, product: null, error: null })
@@ -105,13 +108,15 @@ export async function postProductWallapopEliminar(req: Request, res: Response) {
     sendError(res, 404, "NOT_FOUND", "Producto no encontrado.")
     return
   }
-  if (await stopForeignChrome(res, req.body)) return
   const raw: unknown = req.body ?? {}
   const dryRun =
     typeof raw === "object" &&
     raw !== null &&
     (raw as { dryRun?: unknown }).dryRun === true
-  const prepared = await prepareWallapopEliminar(productId, { dryRun })
+  const prepared = await prepareWallapopEliminar(productId, {
+    dryRun,
+    accountId: readActionAccountId(raw),
+  })
   if (!prepared.ok) {
     sendPrepareErr(res, prepared)
     return

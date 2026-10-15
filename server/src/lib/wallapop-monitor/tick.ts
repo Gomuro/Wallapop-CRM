@@ -1,6 +1,6 @@
 import type { Page } from "playwright";
 
-import { findDefaultAccountId } from "../default-account";
+import { assignChromePlaces } from "../account-chrome";
 import { getPrisma } from "../db";
 import { log, serializeError } from "../log";
 import {
@@ -14,7 +14,7 @@ import {
   runWithBrowserBusy,
 } from "../wallapop-cdp";
 import { gotoVendidosCatalog } from "../wallapop-sold/nav";
-import { getWallapopSession } from "../wallapop-session";
+import { peekWallapopSession } from "../wallapop-session";
 import { applyMonitorPlan } from "./apply";
 import { CATALOG_PUBLISHED_URL } from "./catalog";
 import { planMonitorUpdates, type MonitorCrmListing } from "./diff";
@@ -25,14 +25,9 @@ import {
   scrollCatalogUntilStable,
 } from "./scrape";
 
-async function loadLiveListings(): Promise<{
-  accountId: string | null;
-  listings: MonitorCrmListing[];
-}> {
+async function loadLiveListings(accountId: string): Promise<MonitorCrmListing[]> {
   const prisma = getPrisma();
-  if (!prisma) return { accountId: null, listings: [] };
-  const accountId = await findDefaultAccountId(prisma);
-  if (!accountId) return { accountId: null, listings: [] };
+  if (!prisma) return [];
   const listings = await prisma.productListing.findMany({
     where: {
       accountId,
@@ -45,7 +40,7 @@ async function loadLiveListings(): Promise<{
       externalUrl: true,
     },
   });
-  return { accountId, listings };
+  return listings;
 }
 
 async function scrapeCatalogs(page: Page) {
@@ -100,12 +95,12 @@ async function scrapeCatalogs(page: Page) {
   return { published, sold };
 }
 
-async function runMonitorAfterAttach(): Promise<void> {
-  const page = await ensureWorkerWindow("monitor");
+async function runMonitorAfterAttach(accountId: string, port: number): Promise<void> {
+  const page = await ensureWorkerWindow("monitor", port);
   try {
     const catalogs = await scrapeCatalogs(page);
     if (!catalogs) return;
-    const { accountId, listings } = await loadLiveListings();
+    const listings = await loadLiveListings(accountId);
     const plan = planMonitorUpdates(
       catalogs.published,
       catalogs.sold,
@@ -121,28 +116,45 @@ async function runMonitorAfterAttach(): Promise<void> {
     });
     await applyMonitorPlan(plan, accountId);
   } finally {
-    await closeWorkerSlotPages("monitor");
+    await closeWorkerSlotPages("monitor", port);
   }
 }
 
 export async function runWallapopMonitorTick(): Promise<void> {
-  const session = getWallapopSession();
-  if (session.status !== "ACTIVE") {
-    log("info", "wallapop_monitor_skip_session", { status: session.status });
+  const prisma = getPrisma();
+  if (!prisma) return;
+  const accounts = await prisma.account.findMany({
+    select: { id: true, isDefault: true, createdAt: true },
+  });
+  const places = assignChromePlaces(accounts);
+  const active = accounts.filter(
+    (account) => peekWallapopSession(account.id).status === "ACTIVE",
+  );
+  if (active.length === 0) {
+    log("info", "wallapop_monitor_skip_session", { status: "DISCONNECTED" });
     await quitChromeIfNoWorkerSlots();
     return;
   }
-  try {
-    await runWithBrowserBusy("monitor", () => runMonitorAfterAttach());
-  } catch (error) {
-    if (isBrowserBusyError(error)) {
-      log("info", "wallapop_monitor_skip_busy", { busy: error.busyWith });
-      return;
+  for (const account of active) {
+    const port = places.get(account.id)?.port;
+    if (port == null) continue;
+    try {
+      await runWithBrowserBusy(
+        "monitor",
+        () => runMonitorAfterAttach(account.id, port),
+        port,
+      );
+    } catch (error) {
+      if (isBrowserBusyError(error)) {
+        log("info", "wallapop_monitor_skip_busy", { busy: error.busyWith, port });
+        continue;
+      }
+      log("warn", "wallapop_monitor_tick_failed", {
+        port,
+        err: serializeError(error),
+      });
+    } finally {
+      await quitChromeIfNoWorkerSlots(port);
     }
-    log("warn", "wallapop_monitor_tick_failed", {
-      err: serializeError(error),
-    });
-  } finally {
-    await quitChromeIfNoWorkerSlots();
   }
 }

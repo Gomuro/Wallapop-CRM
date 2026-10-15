@@ -1,3 +1,4 @@
+import { firstCdpPort } from "../../../../lib/accounts/chrome-place"
 import { log } from "../log"
 import { closeWallapopUploadTab } from "./tabs"
 
@@ -18,16 +19,32 @@ const WORKER_SLOT_ORDER = [
   "session",
 ] as const satisfies readonly BrowserWorkerSlot[]
 
-const workerSlots = new Set<BrowserWorkerSlot>()
-let exclusiveBusy: BrowserExclusiveOp | null = null
-/** AbortController for the in-flight publish tick; null when not publishing. */
-let publishAbort: AbortController | null = null
-/** Set by Stop: skip quitWallapopChrome so the session stays warm for next Start. */
-let keepChromeAfterAbort = false
-/** 2FA / Stop: do not quit chrome.exe. Autopost and monitor relaunch when they need it. */
-let keepChromeWarm = false
-/** In-flight Browser.close + kill. Autopost waits, then attachOrLaunch. */
-let chromeQuit: Promise<void> | null = null
+type Desk = {
+  workerSlots: Set<BrowserWorkerSlot>
+  exclusiveBusy: BrowserExclusiveOp | null
+  publishAbort: AbortController | null
+  keepChromeAfterAbort: boolean
+  keepChromeWarm: boolean
+  chromeQuit: Promise<void> | null
+}
+
+const desks = new Map<number, Desk>()
+
+function desk(port = firstCdpPort()): Desk {
+  let row = desks.get(port)
+  if (!row) {
+    row = {
+      workerSlots: new Set(),
+      exclusiveBusy: null,
+      publishAbort: null,
+      keepChromeAfterAbort: false,
+      keepChromeWarm: false,
+      chromeQuit: null,
+    }
+    desks.set(port, row)
+  }
+  return row
+}
 
 export class BrowserBusyError extends Error {
   readonly code = "BROWSER_BUSY" as const
@@ -59,8 +76,8 @@ export function isPublishAbortedError(
   return error instanceof PublishAbortedError
 }
 
-export function isInFlightPublishAborted(): boolean {
-  return publishAbort?.signal.aborted === true
+export function isInFlightPublishAborted(port = firstCdpPort()): boolean {
+  return desk(port).publishAbort?.signal.aborted === true
 }
 
 export function throwIfPublishAborted(): void {
@@ -71,76 +88,84 @@ function isWorkerSlot(op: Exclude<BrowserBusy, "idle">): op is BrowserWorkerSlot
   return (WORKER_SLOT_ORDER as readonly string[]).includes(op)
 }
 
-function firstBusyWorkerSlot(): BrowserWorkerSlot | null {
-  return WORKER_SLOT_ORDER.find((slot) => workerSlots.has(slot)) ?? null
+function firstBusyWorkerSlot(port = firstCdpPort()): BrowserWorkerSlot | null {
+  const slots = desk(port).workerSlots
+  return WORKER_SLOT_ORDER.find((slot) => slots.has(slot)) ?? null
 }
 
 /**
  * Prefer publish when worker slots overlap so the posting
  * watchdog still treats an in-flight Publicar as holding Chrome.
  */
-export function getBrowserBusy(): BrowserBusy {
-  if (exclusiveBusy) return exclusiveBusy
-  return firstBusyWorkerSlot() ?? "idle"
+export function getBrowserBusy(port = firstCdpPort()): BrowserBusy {
+  const row = desk(port)
+  if (row.exclusiveBusy) return row.exclusiveBusy
+  return firstBusyWorkerSlot(port) ?? "idle"
 }
 
-export function isBrowserPublishBusy(): boolean {
-  return workerSlots.has("publish")
+export function isBrowserPublishBusy(port = firstCdpPort()): boolean {
+  return desk(port).workerSlots.has("publish")
 }
 
-export function isBrowserSoldBusy(): boolean {
-  return workerSlots.has("sold")
+export function isBrowserSoldBusy(port = firstCdpPort()): boolean {
+  return desk(port).workerSlots.has("sold")
 }
 
-export function isBrowserEliminarBusy(): boolean {
-  return workerSlots.has("eliminar")
+export function isBrowserEliminarBusy(port = firstCdpPort()): boolean {
+  return desk(port).workerSlots.has("eliminar")
 }
 
-export function isBrowserMonitorBusy(): boolean {
-  return workerSlots.has("monitor")
+export function isBrowserMonitorBusy(port = firstCdpPort()): boolean {
+  return desk(port).workerSlots.has("monitor")
 }
 
-export function isBrowserSessionBusy(): boolean {
-  return workerSlots.has("session")
+export function isBrowserSessionBusy(port = firstCdpPort()): boolean {
+  return desk(port).workerSlots.has("session")
 }
 
-export function isAnyWorkerSlotBusy(): boolean {
-  return workerSlots.size > 0
+export function isAnyWorkerSlotBusy(port = firstCdpPort()): boolean {
+  return desk(port).workerSlots.size > 0
 }
 
-export function setKeepChromeWarm(on: boolean): void {
-  keepChromeWarm = on
+export function setKeepChromeWarm(on: boolean, port = firstCdpPort()): void {
+  desk(port).keepChromeWarm = on
 }
 
-export function isKeepChromeWarm(): boolean {
-  return keepChromeWarm
+export function isKeepChromeWarm(port = firstCdpPort()): boolean {
+  return desk(port).keepChromeWarm
 }
 
-export function waitForChromeQuit(): Promise<void> {
-  return chromeQuit ?? Promise.resolve()
+export function waitForChromeQuit(port = firstCdpPort()): Promise<void> {
+  return desk(port).chromeQuit ?? Promise.resolve()
 }
 
 /** One quit at a time. Caller must have already seen idle worker slots. */
-export function beginChromeQuit(fn: () => Promise<void>): Promise<void> {
-  if (chromeQuit) return chromeQuit
-  chromeQuit = fn().finally(() => {
-    chromeQuit = null
+export function beginChromeQuit(
+  fn: () => Promise<void>,
+  port = firstCdpPort(),
+): Promise<void> {
+  const row = desk(port)
+  if (row.chromeQuit) return row.chromeQuit
+  row.chromeQuit = fn().finally(() => {
+    row.chromeQuit = null
   })
-  return chromeQuit
+  return row.chromeQuit
 }
 
-function occupantForExclusive(): BrowserBusy {
-  if (exclusiveBusy) return exclusiveBusy
-  return firstBusyWorkerSlot() ?? "idle"
+function occupantForExclusive(port = firstCdpPort()): BrowserBusy {
+  const row = desk(port)
+  if (row.exclusiveBusy) return row.exclusiveBusy
+  return firstBusyWorkerSlot(port) ?? "idle"
 }
 
-function assertCanStart(op: Exclude<BrowserBusy, "idle">): void {
+function assertCanStart(op: Exclude<BrowserBusy, "idle">, port = firstCdpPort()): void {
+  const row = desk(port)
   if (isWorkerSlot(op)) {
-    if (exclusiveBusy) throw new BrowserBusyError(exclusiveBusy, op)
-    if (workerSlots.has(op)) throw new BrowserBusyError(op, op)
+    if (row.exclusiveBusy) throw new BrowserBusyError(row.exclusiveBusy, op)
+    if (row.workerSlots.has(op)) throw new BrowserBusyError(op, op)
     return
   }
-  const occupant = occupantForExclusive()
+  const occupant = occupantForExclusive(port)
   if (occupant !== "idle") throw new BrowserBusyError(occupant, op)
 }
 
@@ -148,76 +173,79 @@ function assertCanStart(op: Exclude<BrowserBusy, "idle">): void {
  * Stop the current publish tick: abort CDP waits and close the owned upload tab.
  * Does not quit chrome.exe — the `/wall` session stays for the next Start.
  */
-export async function abortInFlightPublish(): Promise<void> {
-  if (!workerSlots.has("publish")) {
-    log("info", "wallapop_publish_abort_idle", { busy: getBrowserBusy() })
+export async function abortInFlightPublish(port = firstCdpPort()): Promise<void> {
+  const row = desk(port)
+  if (!row.workerSlots.has("publish")) {
+    log("info", "wallapop_publish_abort_idle", { busy: getBrowserBusy(port) })
     return
   }
-  keepChromeAfterAbort = true
-  publishAbort?.abort()
+  row.keepChromeAfterAbort = true
+  row.publishAbort?.abort()
   log("info", "wallapop_publish_abort_requested")
-  await closeWallapopUploadTab()
+  await closeWallapopUploadTab(port)
 }
 
-export function consumeKeepChromeAfterAbort(): boolean {
-  const keep = keepChromeAfterAbort
-  keepChromeAfterAbort = false
+export function consumeKeepChromeAfterAbort(port = firstCdpPort()): boolean {
+  const row = desk(port)
+  const keep = row.keepChromeAfterAbort
+  row.keepChromeAfterAbort = false
   return keep
 }
 
 /** Tests only — drop abort / busy flags. Does not touch the CDP handle. */
 export function resetWallapopPublishAbortForTests(): void {
-  publishAbort = null
-  keepChromeAfterAbort = false
-  keepChromeWarm = false
-  chromeQuit = null
-  exclusiveBusy = null
-  workerSlots.clear()
+  desks.clear()
 }
 
 /**
  * Reject if this op cannot start. Worker slots may overlap;
- * login/logout stay exclusive against everything.
+ * login/logout stay exclusive against everything on that Chrome.
  */
-export function assertBrowserIdle(forOp: Exclude<BrowserBusy, "idle">): void {
-  assertCanStart(forOp)
+export function assertBrowserIdle(
+  forOp: Exclude<BrowserBusy, "idle">,
+  port = firstCdpPort(),
+): void {
+  assertCanStart(forOp, port)
 }
 
-function occupy(op: Exclude<BrowserBusy, "idle">): void {
+function occupy(op: Exclude<BrowserBusy, "idle">, port = firstCdpPort()): void {
+  const row = desk(port)
   if (op === "publish") {
-    publishAbort = new AbortController()
-    workerSlots.add("publish")
+    row.publishAbort = new AbortController()
+    row.workerSlots.add("publish")
     return
   }
   if (isWorkerSlot(op)) {
-    workerSlots.add(op)
+    row.workerSlots.add(op)
     return
   }
-  exclusiveBusy = op
+  row.exclusiveBusy = op
 }
 
-function release(op: Exclude<BrowserBusy, "idle">): void {
+function release(op: Exclude<BrowserBusy, "idle">, port = firstCdpPort()): void {
+  const row = desk(port)
   if (op === "publish") {
-    publishAbort = null
-    workerSlots.delete("publish")
+    row.publishAbort = null
+    row.workerSlots.delete("publish")
     return
   }
   if (isWorkerSlot(op)) {
-    workerSlots.delete(op)
+    row.workerSlots.delete(op)
     return
   }
-  exclusiveBusy = null
+  row.exclusiveBusy = null
 }
 
 export async function runWithBrowserBusy<T>(
   op: Exclude<BrowserBusy, "idle">,
   fn: () => Promise<T>,
+  port = firstCdpPort(),
 ): Promise<T> {
-  assertCanStart(op)
-  occupy(op)
+  assertCanStart(op, port)
+  occupy(op, port)
   try {
     return await fn()
   } finally {
-    release(op)
+    release(op, port)
   }
 }

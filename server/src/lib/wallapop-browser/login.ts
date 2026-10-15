@@ -241,10 +241,11 @@ async function runWallapopEmailLogin(input: {
   email: string
   password: string
   proxy?: string | null
+  cdpPort?: number
 }): Promise<BrowserLoginOutcome> {
-  await closeWallapopBrowser()
-  const attached = await attachOrLaunch(input.proxy)
-  setWallapopHandle(attached)
+  await closeWallapopBrowser(input.cdpPort)
+  const attached = await attachOrLaunch(input.proxy, input.cdpPort)
+  setWallapopHandle(attached, input.cdpPort)
   const { page } = attached
   try {
     await page.goto(LOGIN_URL, {
@@ -272,6 +273,11 @@ export async function loginWallapopInBrowser(input: {
   email: string
   password: string
   proxy?: string | null
+  cdpPort?: number
 }): Promise<BrowserLoginOutcome> {
-  return runWithBrowserBusy("login", () => runWallapopEmailLogin(input))
+  return runWithBrowserBusy(
+    "login",
+    () => runWallapopEmailLogin(input),
+    input.cdpPort,
+  )
 }

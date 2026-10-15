@@ -31,8 +31,14 @@ function statusBadgeVariant(
   return "outline";
 }
 
-export function ConnectAccountForm({ embedded = false }: { embedded?: boolean }) {
-  const session = useConnectAccountSession();
+export function ConnectAccountForm({
+  embedded = false,
+  accountId,
+}: {
+  embedded?: boolean
+  accountId?: string
+}) {
+  const session = useConnectAccountSession(accountId);
   const {
     apiReady,
     session: account,

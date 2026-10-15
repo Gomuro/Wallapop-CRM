@@ -29,7 +29,7 @@ export {
 async function markWallapopSoldInner(
   input: MarkWallapopSoldInput,
 ): Promise<MarkWallapopSoldResult> {
-  const page = await ensureWorkerWindow("sold")
+  const page = await ensureWorkerWindow("sold", input.cdpPort)
   let step: SoldStep = "attach"
   log("info", "wallapop_sold_start", {
     itemUrl: input.itemUrl,
@@ -55,9 +55,13 @@ export async function markWallapopSoldInBrowser(
   input: MarkWallapopSoldInput,
 ): Promise<MarkWallapopSoldResult> {
   try {
-    return await runWithBrowserBusy("sold", () => markWallapopSoldInner(input))
+    return await runWithBrowserBusy(
+      "sold",
+      () => markWallapopSoldInner(input),
+      input.cdpPort,
+    )
   } finally {
-    await closeSoldJobPages()
-    if (!input.dryRun) await quitChromeIfNoWorkerSlots()
+    await closeSoldJobPages(input.cdpPort)
+    if (!input.dryRun) await quitChromeIfNoWorkerSlots(input.cdpPort)
   }
 }

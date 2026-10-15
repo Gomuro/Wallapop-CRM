@@ -93,6 +93,7 @@ async function waitForTargetPage(
 async function openOwnedWindow(
   handle: WallapopBrowserHandle,
   slot: BrowserWorkerSlot,
+  port?: number,
 ): Promise<Page> {
   const before = new Set(handle.context.pages())
   const browser = handle.browser as BrowserWithCdp
@@ -126,7 +127,7 @@ async function openOwnedWindow(
       })
     }
   }
-  if (listOwnedWorkerPages().length > 0) {
+  if (listOwnedWorkerPages(port).length > 0) {
     throw new Error(
       `No se pudo abrir una ventana propia para «${slot}»; no se reutiliza la pestaña de otro worker.`,
     )
@@ -142,15 +143,16 @@ async function openOwnedWindow(
 
 export async function ensureWorkerWindow(
   slot: BrowserWorkerSlot,
+  port?: number,
 ): Promise<Page> {
-  const handle = await ensureCdpAttached()
-  const page = await openOwnedWindow(handle, slot)
-  setWorkerPage(slot, page)
+  const handle = await ensureCdpAttached(port)
+  const page = await openOwnedWindow(handle, slot, port)
+  setWorkerPage(slot, page, port)
   if (slot === "publish") {
-    setWallapopHandle({ ...handle, page, ownedPage: true })
+    setWallapopHandle({ ...handle, page, ownedPage: true }, port)
     log("info", "wallapop_upload_tab_opened", { ownedPage: true })
   } else if (slot === "sold") {
-    registerSoldJobPage(page)
+    registerSoldJobPage(page, port)
   }
   return page
 }
@@ -160,8 +162,8 @@ export async function ensureWallapopPage(): Promise<Page> {
   return ensureWorkerWindow("publish")
 }
 
-export async function closeSoldJobPages(): Promise<void> {
-  const pages = takeSoldJobPages()
+export async function closeSoldJobPages(port?: number): Promise<void> {
+  const pages = takeSoldJobPages(port)
   for (const page of pages) {
     if (isClosedPage(page)) continue
     await page.close().catch(() => {})
@@ -171,17 +173,18 @@ export async function closeSoldJobPages(): Promise<void> {
 /** Close the window this slot opened. Does not quit chrome.exe. */
 export async function closeWorkerSlotPages(
   slot: BrowserWorkerSlot,
+  port?: number,
 ): Promise<void> {
   if (slot === "sold") {
-    await closeSoldJobPages()
+    await closeSoldJobPages(port)
     return
   }
   if (slot === "publish") {
-    await closeWallapopUploadTab()
+    await closeWallapopUploadTab(port)
     return
   }
-  const page = peekWorkerPage(slot)
-  clearWorkerPage(slot)
+  const page = peekWorkerPage(slot, port)
+  clearWorkerPage(slot, port)
   if (!page || isClosedPage(page)) return
   await page.close().catch(() => {})
 }

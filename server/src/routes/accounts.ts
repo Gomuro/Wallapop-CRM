@@ -8,6 +8,7 @@ import {
   wallapop2faSchema,
   wallapopConnectSchema,
 } from "../../../lib/validations/account"
+import { assignChromePlaces } from "../lib/account-chrome"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import { log, serializeError } from "../lib/log"
@@ -56,6 +57,18 @@ function toAccountJson(row: {
   }
 }
 
+function withChromePlace<T extends { id: string }>(
+  row: T,
+  places: Map<string, { port: number; profileName: string }>,
+) {
+  const place = places.get(row.id)
+  return {
+    ...row,
+    cdpPort: place?.port ?? 9222,
+    profileName: place?.profileName ?? "ChromeCDP-Persistent",
+  }
+}
+
 export async function listAccounts(_req: Request, res: Response) {
   const prisma = getPrisma()
   if (!prisma) {
@@ -65,7 +78,10 @@ export async function listAccounts(_req: Request, res: Response) {
   const accounts = await prisma.account.findMany({
     orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
   })
-  res.json({ accounts: accounts.map(toAccountJson) })
+  const places = assignChromePlaces(accounts)
+  res.json({
+    accounts: accounts.map((row) => withChromePlace(toAccountJson(row), places)),
+  })
 }
 
 /** CRM row only. Does not open Chrome and does not write ProductListing. */
@@ -101,7 +117,12 @@ export async function createAccount(req: Request, res: Response) {
       postalCode: body.postalCode ?? null,
     },
   })
-  res.status(201).json({ account: toAccountJson(created) })
+  const accounts = await prisma.account.findMany({
+    select: { id: true, isDefault: true, createdAt: true },
+  })
+  res.status(201).json({
+    account: withChromePlace(toAccountJson(created), assignChromePlaces(accounts)),
+  })
 }
 
 function toSessionJson(session: WallapopSessionSnapshot) {
@@ -268,12 +289,23 @@ export async function stopDefaultAccountAutopost(
   await jsonDefaultAutopost(res)
 }
 
-export async function getAccountConnectionStatus(_req: Request, res: Response) {
-  res.json(toSessionJson(await getWallapopSessionSnapshot()))
+function readAccountId(value: unknown): string | undefined {
+  if (typeof value !== "string") return undefined
+  const trimmed = value.trim()
+  return trimmed.length > 0 ? trimmed : undefined
+}
+
+export async function getAccountConnectionStatus(req: Request, res: Response) {
+  res.json(toSessionJson(await getWallapopSessionSnapshot(readAccountId(req.query.accountId))))
 }
 
 export async function connectAccount(req: Request, res: Response) {
-  let body: { email: string; password: string; proxy: string | null }
+  let body: {
+    accountId?: string
+    email: string
+    password: string
+    proxy: string | null
+  }
   try {
     body = wallapopConnectSchema.parse(req.body)
   } catch (error) {
@@ -293,6 +325,7 @@ export async function connectAccount(req: Request, res: Response) {
     email: body.email,
     password: body.password,
     proxy: body.proxy,
+    accountId: body.accountId,
   })
 
   if (!result.ok) {
@@ -306,7 +339,7 @@ export async function connectAccount(req: Request, res: Response) {
 }
 
 export async function connectAccount2fa(req: Request, res: Response) {
-  let body: { code: string }
+  let body: { accountId?: string; code: string }
   try {
     body = wallapop2faSchema.parse(req.body)
   } catch (error) {
@@ -322,7 +355,7 @@ export async function connectAccount2fa(req: Request, res: Response) {
     throw error
   }
 
-  const result = await submitWallapopSession2fa(body.code)
+  const result = await submitWallapopSession2fa(body.code, body.accountId)
   if (!result.ok) {
     const status =
       result.code === "NOT_AUTHENTICATING" || result.code === "BROWSER_BUSY"
@@ -335,9 +368,9 @@ export async function connectAccount2fa(req: Request, res: Response) {
   res.json(toSessionJson(result.session))
 }
 
-export async function disconnectAccount(_req: Request, res: Response) {
+export async function disconnectAccount(req: Request, res: Response) {
   try {
-    const session = await disconnectWallapopSession()
+    const session = await disconnectWallapopSession(readAccountId(req.body?.accountId))
     res.json(toSessionJson(session))
   } catch (error) {
     if (isBrowserBusyError(error)) {
