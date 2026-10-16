@@ -116,9 +116,14 @@ async function scrapeCatalogs(page: Page) {
 async function runMonitorAfterAttach(): Promise<void> {
   const page = await ensureWorkerWindow("monitor");
   try {
+    // Freeze CRM rows before paging. A publish during this pass writes its
+    // /item/ URL after the catalog snapshot, and must not be wiped as missing.
+    const listings = await loadLiveListings();
+    log("info", "wallapop_monitor_listings_snapshot", {
+      count: listings.length,
+    });
     const catalogs = await scrapeCatalogs(page);
     if (!catalogs) return;
-    const listings = await loadLiveListings();
     const plan = planMonitorUpdates(
       catalogs.published,
       catalogs.sold,

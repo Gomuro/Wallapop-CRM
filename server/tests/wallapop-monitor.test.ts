@@ -117,6 +117,21 @@ describe("planMonitorUpdates", () => {
     expect(plan.toSoldProductIds).toEqual([])
   })
 
+  it("keeps a URL published during paging as an orphan instead of wiping it", () => {
+    const publishedDuringScrape =
+      "https://es.wallapop.com/item/mueble-zapatero-basic-2-puertas-6-baldas-1313413990"
+    const plan = planMonitorUpdates(
+      [
+        { href: ARMARIO, reserved: false },
+        { href: publishedDuringScrape, reserved: false },
+      ],
+      [],
+      listings.filter((row) => row.externalUrl === ARMARIO),
+    )
+    expect(plan.toDeactivated).toEqual([])
+    expect(plan.orphanPublished).toEqual([publishedDuringScrape])
+  })
+
   it("logs catalog hrefs that are not in CRM instead of auto-SOLD", () => {
     const plan = planMonitorUpdates(
       [{ href: "https://es.wallapop.com/item/orphan-9", reserved: true }],
