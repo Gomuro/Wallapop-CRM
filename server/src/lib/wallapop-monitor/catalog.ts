@@ -1,7 +1,8 @@
 /**
- * Todo el catálogo. `/app/catalog/published` redirects to
- * `/catalog/management/consumergoods` (Suscripción Multicategoría) and hides
- * motor parts that are live in the full list.
+ * Entry URL for the seller catalog. Wallapop remembers the last choice in
+ * «Catálogo seleccionado» and keeps Suscripción Multicategoría
+ * (`/consumergoods`) even after this navigation. The monitor then clicks
+ * `walla-dropdown-item` «Todo el catálogo».
  */
 export const CATALOG_PUBLISHED_URL =
   "https://es.wallapop.com/app/catalog/management"

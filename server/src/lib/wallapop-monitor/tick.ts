@@ -22,7 +22,11 @@ import {
 import { applyMonitorPlan } from "./apply";
 import { CATALOG_PUBLISHED_URL } from "./catalog";
 import { planMonitorUpdates, type MonitorCrmListing } from "./diff";
-import { scrapeProCatalogs, wallapopCatalogKind } from "./pro-catalog";
+import {
+  ensureTodoElCatalogo,
+  scrapeProCatalogs,
+  wallapopCatalogKind,
+} from "./pro-catalog";
 import {
   scrapePublishedCatalogRows,
   scrapeVendidosCatalogRows,
@@ -107,7 +111,14 @@ async function scrapeCatalogs(page: Page, confirmHrefs?: string[]) {
   await dismissWallapopConsent(page);
   if (await leaveIfNotSellerCatalog(page)) return null;
   const kind = await wallapopCatalogKind(page);
-  if (kind === "pro") return scrapeProCatalog(page, confirmHrefs);
+  if (kind === "pro") {
+    const onFullCatalog = await ensureTodoElCatalogo(page);
+    if (!onFullCatalog) {
+      log("warn", "wallapop_monitor_catalog_not_full", { url: page.url() });
+      return null;
+    }
+    return scrapeProCatalog(page, confirmHrefs);
+  }
   if (kind === "classic") return scrapeClassicCatalog(page);
   log("warn", "wallapop_monitor_catalog_unknown", { url: page.url() });
   return null;
@@ -124,11 +135,7 @@ async function runMonitorAfterAttach(): Promise<void> {
     });
     let catalogs = await scrapeCatalogs(page);
     if (!catalogs) return;
-    let plan = planMonitorUpdates(
-      catalogs.published,
-      catalogs.sold,
-      listings,
-    );
+    let plan = planMonitorUpdates(catalogs.published, catalogs.sold, listings);
     if (plan.toDeactivated.length > 0) {
       const confirmHrefs = listings
         .filter(
@@ -141,11 +148,7 @@ async function runMonitorAfterAttach(): Promise<void> {
       });
       catalogs = await scrapeCatalogs(page, confirmHrefs);
       if (!catalogs) return;
-      plan = planMonitorUpdates(
-        catalogs.published,
-        catalogs.sold,
-        listings,
-      );
+      plan = planMonitorUpdates(catalogs.published, catalogs.sold, listings);
     }
     log("info", "wallapop_monitor_plan", {
       toReserved: plan.toReserved.length,
