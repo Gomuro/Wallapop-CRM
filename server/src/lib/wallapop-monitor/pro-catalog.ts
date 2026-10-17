@@ -1,11 +1,14 @@
 import type { Page } from "playwright"
 
+import { wallapopItemPathKey } from "../../../../lib/inventory/wallapop-item-url"
 import { log } from "../log"
 import type { PublishedCatalogRow } from "./catalog"
 import type { SoldCatalogRow } from "./diff"
 
 const MAX_PAGES = 20
 const PAGE_WAIT_MS = 8_000
+/** Activos can still show the pre-publish table after the pager already matches. */
+const ACTIVOS_ROW_WAIT_MS = 45_000
 
 export function parseProPager(
   text: string,
@@ -194,11 +197,63 @@ async function openTab(page: Page, prefix: string): Promise<void> {
   })
 }
 
+export async function waitForActivosHrefs(
+  page: Page,
+  hrefs: string[],
+): Promise<boolean> {
+  const needles = [
+    ...new Set(
+      hrefs
+        .map((href) => wallapopItemPathKey(href))
+        .filter((key): key is string => key != null),
+    ),
+  ]
+  if (needles.length === 0) return false
+  try {
+    await page.waitForFunction(
+      (needles: string[]) => {
+        function walk(root: ParentNode, visit: (el: Element) => void) {
+          root.querySelectorAll("*").forEach((el) => {
+            visit(el)
+            if (el.shadowRoot) walk(el.shadowRoot, visit)
+          })
+        }
+        const need = new Set(needles)
+        walk(document, (node) => {
+          if (node.tagName !== "A") return
+          const href = (node as HTMLAnchorElement).href
+          if (!href) return
+          try {
+            const path = new URL(href).pathname.replace(/\/$/, "").toLowerCase()
+            if (need.has(path)) need.delete(path)
+          } catch {
+            /* ignore bad hrefs */
+          }
+        })
+        return need.size === 0
+      },
+      needles,
+      { timeout: ACTIVOS_ROW_WAIT_MS, polling: 1_000 },
+    )
+    return true
+  } catch {
+    return false
+  }
+}
+
 async function readAllPages(
   page: Page,
   tab: string,
+  confirmHrefs?: string[],
 ): Promise<{ rows: PublishedCatalogRow[]; total: number | null } | null> {
   await openTab(page, tab)
+  if (tab === "Activos" && confirmHrefs && confirmHrefs.length > 0) {
+    const appeared = await waitForActivosHrefs(page, confirmHrefs)
+    log("info", "wallapop_monitor_activos_wait", {
+      hrefs: confirmHrefs.length,
+      appeared,
+    })
+  }
   const seen = new Map<string, PublishedCatalogRow>()
   let total: number | null = null
   let pager = ""
@@ -236,11 +291,14 @@ async function readAllPages(
   return { rows: [...seen.values()], total }
 }
 
-export async function scrapeProCatalogs(page: Page): Promise<{
+export async function scrapeProCatalogs(
+  page: Page,
+  confirmHrefs?: string[],
+): Promise<{
   published: PublishedCatalogRow[]
   sold: SoldCatalogRow[]
 } | null> {
-  const activos = await readAllPages(page, "Activos")
+  const activos = await readAllPages(page, "Activos", confirmHrefs)
   if (!activos) return null
   const vendidos = await readAllPages(page, "Vendidos")
   if (!vendidos) return null

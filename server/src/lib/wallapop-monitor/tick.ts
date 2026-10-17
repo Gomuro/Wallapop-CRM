@@ -61,8 +61,8 @@ async function leaveIfNotSellerCatalog(page: Page): Promise<boolean> {
   return false;
 }
 
-async function scrapeProCatalog(page: Page) {
-  const pro = await scrapeProCatalogs(page);
+async function scrapeProCatalog(page: Page, confirmHrefs?: string[]) {
+  const pro = await scrapeProCatalogs(page, confirmHrefs);
   if (!pro) return null;
   log("info", "wallapop_monitor_published_scanned", {
     rows: pro.published.length,
@@ -102,12 +102,12 @@ async function scrapeClassicCatalog(page: Page) {
   return { published, sold };
 }
 
-async function scrapeCatalogs(page: Page) {
+async function scrapeCatalogs(page: Page, confirmHrefs?: string[]) {
   await navigateViaAssign(page, CATALOG_PUBLISHED_URL);
   await dismissWallapopConsent(page);
   if (await leaveIfNotSellerCatalog(page)) return null;
   const kind = await wallapopCatalogKind(page);
-  if (kind === "pro") return scrapeProCatalog(page);
+  if (kind === "pro") return scrapeProCatalog(page, confirmHrefs);
   if (kind === "classic") return scrapeClassicCatalog(page);
   log("warn", "wallapop_monitor_catalog_unknown", { url: page.url() });
   return null;
@@ -122,13 +122,31 @@ async function runMonitorAfterAttach(): Promise<void> {
     log("info", "wallapop_monitor_listings_snapshot", {
       count: listings.length,
     });
-    const catalogs = await scrapeCatalogs(page);
+    let catalogs = await scrapeCatalogs(page);
     if (!catalogs) return;
-    const plan = planMonitorUpdates(
+    let plan = planMonitorUpdates(
       catalogs.published,
       catalogs.sold,
       listings,
     );
+    if (plan.toDeactivated.length > 0) {
+      const confirmHrefs = listings
+        .filter(
+          (listing) =>
+            plan.toDeactivated.includes(listing.id) && listing.externalUrl,
+        )
+        .map((listing) => listing.externalUrl as string);
+      log("info", "wallapop_monitor_reread_activos", {
+        missing: confirmHrefs.length,
+      });
+      catalogs = await scrapeCatalogs(page, confirmHrefs);
+      if (!catalogs) return;
+      plan = planMonitorUpdates(
+        catalogs.published,
+        catalogs.sold,
+        listings,
+      );
+    }
     log("info", "wallapop_monitor_plan", {
       toReserved: plan.toReserved.length,
       toActive: plan.toActive.length,
