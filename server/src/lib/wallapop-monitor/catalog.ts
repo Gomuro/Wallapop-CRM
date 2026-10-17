@@ -1,5 +1,10 @@
+/**
+ * Todo el catálogo. `/app/catalog/published` redirects to
+ * `/catalog/management/consumergoods` (Suscripción Multicategoría) and hides
+ * motor parts that are live in the full list.
+ */
 export const CATALOG_PUBLISHED_URL =
-  "https://es.wallapop.com/app/catalog/published"
+  "https://es.wallapop.com/app/catalog/management"
 export const CATALOG_SOLD_URL = "https://es.wallapop.com/app/catalog/sold"
 
 export type PublishedCatalogRow = {
