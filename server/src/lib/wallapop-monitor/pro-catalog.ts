@@ -159,17 +159,13 @@ export async function ensureTodoElCatalogo(page: Page): Promise<boolean> {
 
   try {
     await page.waitForFunction(
-      (label: string) => {
-        const path = location.pathname.replace(/\/$/, "")
+      `(() => {
+        const path = location.pathname.replace(/\\/$/, "")
         if (path !== "/app/catalog/management") return false
-        const button = document.querySelector(
-          '[aria-label^="Catálogo seleccionado"]',
-        )
-        return (button?.getAttribute("aria-label") || "")
-          .toLowerCase()
-          .includes(label)
-      },
-      TODO_CATALOG_LABEL,
+        const button = document.querySelector('[aria-label^="Catálogo seleccionado"]')
+        const label = button ? button.getAttribute("aria-label") || "" : ""
+        return label.toLowerCase().includes(${JSON.stringify(TODO_CATALOG_LABEL)})
+      })()`,
       { timeout: CATALOG_SWITCH_WAIT_MS },
     )
   } catch {
@@ -190,85 +186,82 @@ export async function ensureTodoElCatalogo(page: Page): Promise<boolean> {
   return true
 }
 
-async function readCatalogChoice(page: Page): Promise<CatalogChoice> {
-  return (await page.evaluate(() => {
-    function walk(root: ParentNode, visit: (el: Element) => void) {
-      root.querySelectorAll("*").forEach((el) => {
-        visit(el)
-        if (el.shadowRoot) walk(el.shadowRoot, visit)
-      })
-    }
-    function textOf(el: Element): string {
-      let text = ""
-      walk(el, (node) => {
-        if (text) return
-        node.childNodes.forEach((child) => {
-          if (child.nodeType === 3 && (child.textContent || "").trim()) {
-            text = (child.textContent || "").trim()
-          }
-        })
-      })
-      return text || (el.textContent || "").replace(/\s+/g, " ").trim()
-    }
-    const button = document.querySelector(
-      '[aria-label^="Catálogo seleccionado"]',
-    )
-    let selected = ""
-    walk(document, (el) => {
-      if (selected || el.tagName !== "WALLA-DROPDOWN-ITEM") return
-      if (el.getAttribute("aria-selected") !== "true") return
-      selected = textOf(el)
+const READ_CATALOG_CHOICE_EVAL = `(() => {
+  function walk(root, visit) {
+    if (!root || !root.querySelectorAll) return
+    root.querySelectorAll("*").forEach((el) => {
+      visit(el)
+      if (el.shadowRoot) walk(el.shadowRoot, visit)
     })
-    return {
-      hasSwitcher: Boolean(button),
-      label: button?.getAttribute("aria-label") || "",
-      selected,
-    }
-  })) as CatalogChoice
+  }
+  function textOf(el) {
+    let text = ""
+    walk(el, (node) => {
+      if (text || !node.childNodes) return
+      node.childNodes.forEach((child) => {
+        if (child.nodeType === 3 && String(child.textContent || "").trim()) {
+          text = String(child.textContent).trim()
+        }
+      })
+    })
+    return text || String(el.textContent || "").replace(/\\s+/g, " ").trim()
+  }
+  const button = document.querySelector('[aria-label^="Catálogo seleccionado"]')
+  let selected = ""
+  walk(document, (el) => {
+    if (selected || el.tagName !== "WALLA-DROPDOWN-ITEM") return
+    if (el.getAttribute("aria-selected") !== "true") return
+    selected = textOf(el)
+  })
+  return {
+    hasSwitcher: Boolean(button),
+    label: button ? button.getAttribute("aria-label") || "" : "",
+    selected,
+  }
+})()`
+
+const CLICK_TODO_CATALOG_EVAL = `(() => {
+  const wanted = ${JSON.stringify(TODO_CATALOG_LABEL)}
+  function walk(root, visit) {
+    if (!root || !root.querySelectorAll) return
+    root.querySelectorAll("*").forEach((el) => {
+      visit(el)
+      if (el.shadowRoot) walk(el.shadowRoot, visit)
+    })
+  }
+  function textOf(el) {
+    let text = ""
+    walk(el, (node) => {
+      if (text || !node.childNodes) return
+      node.childNodes.forEach((child) => {
+        if (child.nodeType === 3 && String(child.textContent || "").trim()) {
+          text = String(child.textContent).trim()
+        }
+      })
+    })
+    return text || String(el.textContent || "").replace(/\\s+/g, " ").trim()
+  }
+  const button = document.querySelector('[aria-label^="Catálogo seleccionado"]')
+  if (button && button.getAttribute("aria-expanded") !== "true") button.click()
+  let target = null
+  walk(document, (el) => {
+    if (target || el.tagName !== "WALLA-DROPDOWN-ITEM") return
+    if (textOf(el).toLowerCase() !== wanted) return
+    target = el
+  })
+  if (!target) return "missing"
+  target.click()
+  return "clicked"
+})()`
+
+async function readCatalogChoice(page: Page): Promise<CatalogChoice> {
+  return (await page.evaluate(READ_CATALOG_CHOICE_EVAL)) as CatalogChoice
 }
 
 async function clickTodoCatalogItem(
   page: Page,
 ): Promise<"clicked" | "missing"> {
-  return (await page.evaluate((wanted: string) => {
-    function walk(root: ParentNode, visit: (el: Element) => void) {
-      root.querySelectorAll("*").forEach((el) => {
-        visit(el)
-        if (el.shadowRoot) walk(el.shadowRoot, visit)
-      })
-    }
-    function textOf(el: Element): string {
-      let text = ""
-      walk(el, (node) => {
-        if (text) return
-        node.childNodes.forEach((child) => {
-          if (child.nodeType === 3 && (child.textContent || "").trim()) {
-            text = (child.textContent || "").trim()
-          }
-        })
-      })
-      return text || (el.textContent || "").replace(/\s+/g, " ").trim()
-    }
-    const button = document.querySelector(
-      '[aria-label^="Catálogo seleccionado"]',
-    )
-    if (
-      button instanceof HTMLElement &&
-      button.getAttribute("aria-expanded") !== "true"
-    ) {
-      button.click()
-    }
-    const matches: HTMLElement[] = []
-    walk(document, (el) => {
-      if (matches.length || el.tagName !== "WALLA-DROPDOWN-ITEM") return
-      if (textOf(el).toLowerCase() !== wanted) return
-      if (el instanceof HTMLElement) matches.push(el)
-    })
-    const target = matches[0]
-    if (!target) return "missing"
-    target.click()
-    return "clicked"
-  }, TODO_CATALOG_LABEL)) as "clicked" | "missing"
+  return (await page.evaluate(CLICK_TODO_CATALOG_EVAL)) as "clicked" | "missing"
 }
 
 export async function wallapopCatalogKind(
