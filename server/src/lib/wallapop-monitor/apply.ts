@@ -1,6 +1,7 @@
 import { getPrisma } from "../db"
 import { log } from "../log"
 import { markProductSoldTx } from "../product-sold"
+import { scheduleSiblingEliminar } from "../sibling-eliminar"
 import type { MonitorPlan } from "./diff"
 
 export async function applyMonitorPlan(
@@ -24,6 +25,9 @@ export async function applyMonitorPlan(
       accountId,
       kind: result.kind,
     })
+    if (result.kind === "ok") {
+      void scheduleSiblingEliminar(productId, accountId)
+    }
   }
 
   if (plan.toReserved.length > 0) {

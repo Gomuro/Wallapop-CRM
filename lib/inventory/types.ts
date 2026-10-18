@@ -10,6 +10,14 @@ export type InventoryProductImage = {
 }
 
 /** Single default-account listing (matches API listing JSON). */
+export type AccountListingGlance = {
+  accountId: string
+  accountName: string
+  isDefault: boolean
+  status: ListingStatusRead | null
+  externalUrl: string | null
+}
+
 export type InventoryListing = {
   id: string
   accountId: string
@@ -55,6 +63,8 @@ export type InventoryProductMedia = {
   listing: InventoryListing | null
   /** Every ProductListing row already stored. Absent on catalog cards. */
   listings?: InventoryListing[]
+  /** One row per Wallapop account, including accounts with no listing yet. */
+  accountStates?: AccountListingGlance[]
   soldAccountId?: string | null
   typeAttributes: Record<string, unknown>
   /** From GET /products list when full listing is omitted. */

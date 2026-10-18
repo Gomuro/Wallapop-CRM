@@ -19,14 +19,14 @@ export const productListInclude = {
     select: { url: true },
   },
   listings: {
-    where: { account: { isDefault: true } },
     orderBy: { createdAt: "asc" as const },
-    take: 1,
     select: {
+      accountId: true,
       status: true,
       lastPostedAt: true,
       externalUrl: true,
       shippingEnabled: true,
+      account: { select: { name: true, isDefault: true } },
     },
   },
 }
@@ -194,7 +194,10 @@ type ProductDetailRow = ProductJsonRow & {
 }
 
 /** `listing` stays the default-account row. `listings` is every row that already exists. */
-export function toProductDetailJson(row: ProductDetailRow) {
+export function toProductDetailJson(
+  row: ProductDetailRow,
+  accounts: AccountGlanceSource[] = [],
+) {
   const ordered = [...row.listings].sort(
     (a, b) => Number(b.account.isDefault) - Number(a.account.isDefault),
   )
@@ -210,6 +213,17 @@ export function toProductDetailJson(row: ProductDetailRow) {
       accountName: item.account.name,
       isDefault: item.account.isDefault,
     })),
+    accounts: accountGlancesForProduct(
+      accounts,
+      ordered.map((item) => ({
+        accountId: item.accountId,
+        status: item.status,
+        lastPostedAt: item.lastPostedAt,
+        externalUrl: item.externalUrl,
+        shippingEnabled: item.shippingEnabled,
+        account: item.account,
+      })),
+    ),
   }
 }
 
@@ -310,32 +324,74 @@ type ProductListItemExtras = {
   heightCm: { toString(): string } | null
   images: Array<{ url: string }>
   listings: Array<{
+    accountId: string
     status: string
     lastPostedAt: Date | null
     externalUrl: string | null
     shippingEnabled: boolean
+    account?: { name: string; isDefault: boolean } | null
   }>
+}
+
+export type AccountGlanceSource = {
+  id: string
+  name: string
+  isDefault: boolean
 }
 
 type ProductListItemRow = ProductListItemIdentity & ProductListItemExtras
 
+function defaultListListing(row: ProductListItemRow) {
+  return (
+    row.listings.find((item) => item.account?.isDefault) ?? row.listings[0] ?? null
+  )
+}
+
 function toProductListItemListing(row: ProductListItemRow) {
-  const listingStatus = row.listings[0]?.status ?? null
-  const live =
-    listingStatus === "ACTIVE" || listingStatus === "RESERVED"
+  const listing = defaultListListing(row)
+  const listingStatus = listing?.status ?? null
+  const live = listingStatus === "ACTIVE" || listingStatus === "RESERVED"
   return {
     listingStatus,
     listingActive:
-      live && wallapopItemUrlOrNull(row.listings[0]?.externalUrl) != null,
-    lastPostedAt: row.listings[0]?.lastPostedAt?.toISOString() ?? null,
+      live && wallapopItemUrlOrNull(listing?.externalUrl) != null,
+    lastPostedAt: listing?.lastPostedAt?.toISOString() ?? null,
     shippingPublishReady: isShippingPublishReady({
       weightKg: decimalJson(row.weightKg),
-      shippingEnabled: row.listings[0]?.shippingEnabled,
+      shippingEnabled: listing?.shippingEnabled,
     }),
   }
 }
 
-export function toProductListItemJson(row: ProductListItemRow) {
+export async function loadAccountGlances(
+  prisma: NonNullable<ReturnType<typeof getPrisma>>,
+): Promise<AccountGlanceSource[]> {
+  return prisma.account.findMany({
+    orderBy: [{ isDefault: "desc" }, { createdAt: "asc" }],
+    select: { id: true, name: true, isDefault: true },
+  })
+}
+
+export function accountGlancesForProduct(
+  accounts: AccountGlanceSource[],
+  listings: ProductListItemRow["listings"],
+) {
+  return accounts.map((account) => {
+    const listing = listings.find((item) => item.accountId === account.id)
+    return {
+      accountId: account.id,
+      accountName: account.name,
+      isDefault: account.isDefault,
+      status: listing?.status ?? null,
+      externalUrl: listing?.externalUrl ?? null,
+    }
+  })
+}
+
+export function toProductListItemJson(
+  row: ProductListItemRow,
+  accounts: AccountGlanceSource[] = [],
+) {
   return {
     id: row.id,
     sku: row.sku,
@@ -347,5 +403,6 @@ export function toProductListItemJson(row: ProductListItemRow) {
     coverUrl: row.images[0]?.url ?? null,
     updatedAt: row.updatedAt.toISOString(),
     ...toProductListItemListing(row),
+    accounts: accountGlancesForProduct(accounts, row.listings),
   }
 }

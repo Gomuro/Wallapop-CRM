@@ -1,5 +1,9 @@
 import { log, serializeError } from "../log"
-import { getWallapopSession, rehydrateWallapopSessionOnBoot } from "../wallapop-session"
+import {
+  getWallapopSession,
+  rehydrateSavedAccountSessions,
+  rehydrateWallapopSessionOnBoot,
+} from "../wallapop-session"
 import { readDevMonitorEnabled } from "./dev-switch"
 import { runWallapopMonitorTick } from "./tick"
 
@@ -94,14 +98,21 @@ export function startWallapopMonitorLoop(): void {
   })
   if (!enabled) {
     log("info", "wallapop_monitor_paused")
+    void rehydrateSavedAccountSessions().catch((error) =>
+      log("warn", "wallapop_monitor_boot_failed", {
+        err: serializeError(error),
+      }),
+    )
     return
   }
   void (async () => {
-    if (getWallapopSession().status === "ACTIVE") return
-    const session = await rehydrateWallapopSessionOnBoot()
+    await rehydrateSavedAccountSessions()
+    const session = getWallapopSession()
+    if (session.status === "ACTIVE") return
+    const again = await rehydrateWallapopSessionOnBoot()
     log("info", "wallapop_session_rehydrate", {
-      status: session.status,
-      requires2FA: session.requires2FA,
+      status: again.status,
+      requires2FA: again.requires2FA,
     })
   })()
     .catch((error) =>

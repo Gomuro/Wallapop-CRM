@@ -138,7 +138,7 @@ async function publishWallapopInBrowserAfterAttach(
 async function publishWallapopInBrowserInner(
   input: PublishWallapopInput,
 ): Promise<PublishWallapopResult> {
-  const page = await ensureWallapopPage();
+  const page = await ensureWallapopPage(input.cdpPort);
   return publishWallapopInBrowserAfterAttach(input, page);
 }
 
@@ -152,17 +152,19 @@ export async function publishWallapopInBrowser(
     );
   }
   try {
-    return await runWithBrowserBusy("publish", () =>
-      publishWallapopInBrowserInner(input),
+    return await runWithBrowserBusy(
+      "publish",
+      () => publishWallapopInBrowserInner(input),
+      input.cdpPort,
     );
   } finally {
-    if (consumeKeepChromeAfterAbort()) {
+    if (consumeKeepChromeAfterAbort(input.cdpPort)) {
       log("info", "wallapop_chrome_kept_after_abort", { dryRun: input.dryRun });
     } else if (input.dryRun) {
-      await closeWallapopUploadTab();
+      await closeWallapopUploadTab(input.cdpPort);
     } else {
-      await closeWallapopUploadTab();
-      await quitChromeIfNoWorkerSlots();
+      await closeWallapopUploadTab(input.cdpPort);
+      await quitChromeIfNoWorkerSlots(input.cdpPort);
     }
   }
 }

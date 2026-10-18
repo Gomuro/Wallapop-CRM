@@ -261,6 +261,14 @@ Body (JSON, camelCase): усі поля опційні, **хоча б одне**
 - У БД / конфігу акаунта зберігати шлях до `userDataDir` (+ порт / proxy), **не** пароль Wallapop.
 - Shortcut-шаблон як `Chrome CDP.lnk`: `chrome.exe --remote-debugging-port=<port> --user-data-dir="<dir>"` + stability flags.
 
+### Балансировщик (потім, не цей етап)
+
+Окреме рішення, **які товари закидати в який магазин, а які ні**. Не розподіл навантаження між воркерами.
+
+Зараз це зібрано на колінці: черга `READY_TO_POST`, «вже є на першій касі», порожня друга каса, ручна **Poner en cola**. Autopost, browser, CDP, monitor, inventory, sold і publish лише виконують те, що їм уже поклали.
+
+Балансировщик має сам знати це правило для кожної каси: цей SKU у цей магазин закидаємо, цей ні. Воркери лишаються виконавцями.
+
 Потрібно: встановлений Google Chrome на машині API; Playwright для CDP (`npm i playwright`).
 
 ### Email login UI map + selector registry

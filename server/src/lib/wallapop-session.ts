@@ -131,6 +131,17 @@ async function syncAccountStatus(
   }
 }
 
+async function rememberSavedEmail(row: SessionState, accountId: string): Promise<void> {
+  if (row.email) return
+  const prisma = getPrisma()
+  if (!prisma) return
+  const account = await prisma.account.findUnique({
+    where: { id: accountId },
+    select: { wallapopEmail: true },
+  })
+  if (account?.wallapopEmail) row.email = account.wallapopEmail
+}
+
 async function applyReconcileResult(
   reconciled: ReconcileBrowserState,
   row: SessionState,
@@ -146,8 +157,53 @@ async function applyReconcileResult(
     row.status = "ACTIVE"
     row.requires2FA = false
     row.error = null
+    await rememberSavedEmail(row, accountId)
     await syncAccountStatus(accountId, "ACTIVE")
   }
+}
+
+/** Open this account's saved Chrome profile, classify, then close the window. */
+async function rehydrateAccountSession(accountId: string, port: number): Promise<void> {
+  const row = sessionRow(accountId)
+  if (row.requires2FA || row.status === "ACTIVE") return
+  try {
+    await runWithBrowserBusy(
+      "session",
+      async () => {
+        const reconciled = await classifyOwnedSessionWindow(port)
+        await applyReconcileResult(reconciled, row, accountId)
+        if (reconciled === "NONE") setKeepChromeWarm(false, port)
+      },
+      port,
+    )
+  } catch (error) {
+    if (isBrowserBusyError(error)) {
+      log("info", "wallapop_session_rehydrate_skipped_busy", {
+        accountId,
+        port,
+        busy: error.busyWith,
+      })
+      return
+    }
+    throw error
+  }
+  if (!row.requires2FA) await quitChromeIfNoWorkerSlots(port)
+}
+
+export async function rehydrateSavedAccountSessions(): Promise<void> {
+  const prisma = getPrisma()
+  if (!prisma) return
+  const accounts = await prisma.account.findMany({
+    select: { id: true, isDefault: true, createdAt: true },
+  })
+  const places = assignChromePlaces(accounts)
+  await Promise.all(
+    accounts.map(async (account) => {
+      const port = places.get(account.id)?.port
+      if (port == null) return
+      await rehydrateAccountSession(account.id, port)
+    }),
+  )
 }
 
 async function applyReconcileToState(
@@ -170,10 +226,8 @@ export async function getWallapopSessionSnapshot(
   accountId?: string,
 ): Promise<WallapopSessionSnapshot> {
   const target = await resolveAccountTarget(accountId)
-  const row = sessionRow(target.accountId)
-  if (row.requires2FA || row.status === "ACTIVE") return snapshotOf(row)
-  await applyReconcileToState(row, target.accountId, target.port)
-  return snapshotOf(row)
+  await rehydrateAccountSession(target.accountId, target.port)
+  return snapshotOf(sessionRow(target.accountId))
 }
 
 /**
@@ -182,28 +236,8 @@ export async function getWallapopSessionSnapshot(
  */
 export async function rehydrateWallapopSessionOnBoot(): Promise<WallapopSessionSnapshot> {
   const target = await resolveAccountTarget()
-  const row = sessionRow(target.accountId)
-  try {
-    await runWithBrowserBusy("session", async () => {
-      const reconciled = await classifyOwnedSessionWindow(target.port)
-      await applyReconcileResult(reconciled, row, target.accountId)
-      if (reconciled === "NONE") {
-        setKeepChromeWarm(false, target.port)
-      }
-    }, target.port)
-  } catch (error) {
-    if (isBrowserBusyError(error)) {
-      log("info", "wallapop_session_rehydrate_skipped_busy", {
-        busy: error.busyWith,
-      })
-    } else {
-      throw error
-    }
-  }
-  if (!row.requires2FA) {
-    await quitChromeIfNoWorkerSlots(target.port)
-  }
-  return snapshotOf(row)
+  await rehydrateAccountSession(target.accountId, target.port)
+  return snapshotOf(sessionRow(target.accountId))
 }
 
 /** @deprecated Prefer getWallapopSessionSnapshot — sync view without CDP rehydrate. */

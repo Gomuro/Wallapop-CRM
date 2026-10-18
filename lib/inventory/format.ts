@@ -2,6 +2,8 @@ import type { ListingStatusRead } from "@/lib/inventory/types"
 import type { ProductStatus } from "@/lib/validations"
 
 import { computeListingActive, isLiveOnWallapopStatus } from "./listing-active"
+import type { AccountListingGlance } from "./types"
+import { wallapopItemUrlOrNull } from "./wallapop-item-url"
 
 export function formatEuro(amount: number) {
   return new Intl.NumberFormat("es-ES", {
@@ -118,6 +120,24 @@ export function listingIndicatorShort(
   if (listing.status === "READY_TO_POST") return "Listo para publicar"
   if (listing.status === "DEACTIVATED") return "Desactivado"
   return listingStatusLabel(listing.status)
+}
+
+export function accountGlanceLabel(row: AccountListingGlance): string {
+  if (row.status === "POSTING") return "Publicando…"
+  if (row.status === "FAILED") return "Error"
+  if (row.status === "RESERVED") return "Reservado"
+  if (row.status === "READY_TO_POST") return "En cola"
+  if (row.status === "DEACTIVATED") return "Desactivado"
+  if (row.status === "ACTIVE" && wallapopItemUrlOrNull(row.externalUrl)) {
+    return "Publicado"
+  }
+  if (row.status === "ACTIVE") return "Sin enlace"
+  return "Sin publicar"
+}
+
+export function accountGlanceIsLive(row: AccountListingGlance): boolean {
+  if (row.status === "RESERVED") return true
+  return row.status === "ACTIVE" && wallapopItemUrlOrNull(row.externalUrl) != null
 }
 
 export function listingBadgeVariant(

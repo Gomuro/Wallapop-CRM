@@ -8,21 +8,24 @@ import {
   wallapop2faSchema,
   wallapopConnectSchema,
 } from "../../../lib/validations/account"
-import { assignChromePlaces } from "../lib/account-chrome"
+import { assignChromePlaces, chromePortForAccount } from "../lib/account-chrome"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import { log, serializeError } from "../lib/log"
 import { linkQueuedListingsAlreadyLive } from "../lib/wallapop-already-live"
 import {
   loadAutopostStatus,
+  pauseAccountAutopost,
   pauseAutopostSchedule,
   rescheduleAutopostLoop,
+  scheduleAccountAutopost,
 } from "../lib/wallapop-autopost"
 import {
   connectWallapopSession,
   disconnectWallapopSession,
   getWallapopSession,
   getWallapopSessionSnapshot,
+  peekWallapopSession,
   submitWallapopSession2fa,
   type WallapopSessionSnapshot,
 } from "../lib/wallapop-session"
@@ -379,4 +382,147 @@ export async function disconnectAccount(req: Request, res: Response) {
     }
     throw error
   }
+}
+
+function routeAccountId(value: string | string[] | undefined): string | undefined {
+  return typeof value === "string" && value.length > 0 ? value : undefined
+}
+
+async function jsonAccountAutopost(res: Response, accountId: string) {
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+  const account = await prisma.account.findUnique({ where: { id: accountId } })
+  if (!account) {
+    sendError(res, 404, "NOT_FOUND", "Cuenta no encontrada.")
+    return
+  }
+  res.json({
+    account: toAccountJson(account),
+    autopost: await loadAutopostStatus(prisma, account.id),
+    workers: listWorkerJobs(),
+  })
+}
+
+export async function getAccountAutopost(req: Request, res: Response) {
+  const accountId = routeAccountId(req.params.id)
+  if (!accountId) {
+    sendError(res, 404, "NOT_FOUND", "Cuenta no encontrada.")
+    return
+  }
+  await jsonAccountAutopost(res, accountId)
+}
+
+export async function patchAccountAutopost(req: Request, res: Response) {
+  const accountId = routeAccountId(req.params.id)
+  if (!accountId) {
+    sendError(res, 404, "NOT_FOUND", "Cuenta no encontrada.")
+    return
+  }
+  let body: { value: number; unit: "seconds" | "minutes" | "hours" | "days" }
+  try {
+    body = autopostIntervalPatchSchema.parse(req.body)
+  } catch (error) {
+    if (error instanceof ZodError) {
+      sendError(
+        res,
+        400,
+        "VALIDATION_ERROR",
+        error.issues[0]?.message ?? "Invalid body.",
+      )
+      return
+    }
+    throw error
+  }
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+  const account = await prisma.account.findUnique({ where: { id: accountId } })
+  if (!account) {
+    sendError(res, 404, "NOT_FOUND", "Cuenta no encontrada.")
+    return
+  }
+  await prisma.account.update({
+    where: { id: account.id },
+    data: { autopostIntervalMs: autopostIntervalToMs(body.value, body.unit) },
+  })
+  if (account.isDefault) await rescheduleAutopostLoop()
+  else if (account.autopostEnabled) await scheduleAccountAutopost(account.id)
+  await jsonAccountAutopost(res, account.id)
+}
+
+export async function startAccountAutopost(req: Request, res: Response) {
+  const accountId = routeAccountId(req.params.id)
+  if (!accountId) {
+    sendError(res, 404, "NOT_FOUND", "Cuenta no encontrada.")
+    return
+  }
+  if (peekWallapopSession(accountId).status !== "ACTIVE") {
+    sendError(
+      res,
+      409,
+      "NOT_ACTIVE",
+      "Conecta la cuenta de Wallapop antes de iniciar el autopost.",
+    )
+    return
+  }
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+  const account = await prisma.account.findUnique({ where: { id: accountId } })
+  if (!account) {
+    sendError(res, 404, "NOT_FOUND", "Cuenta no encontrada.")
+    return
+  }
+  await prisma.account.update({
+    where: { id: account.id },
+    data: { autopostEnabled: true },
+  })
+  if (account.isDefault) {
+    try {
+      await linkQueuedListingsAlreadyLive(prisma)
+    } catch (error) {
+      log("warn", "wallapop_already_live_sweep_failed", serializeError(error))
+    }
+    await rescheduleAutopostLoop()
+  } else {
+    await scheduleAccountAutopost(account.id)
+  }
+  await jsonAccountAutopost(res, account.id)
+}
+
+export async function stopAccountAutopost(req: Request, res: Response) {
+  const accountId = routeAccountId(req.params.id)
+  if (!accountId) {
+    sendError(res, 404, "NOT_FOUND", "Cuenta no encontrada.")
+    return
+  }
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+  const account = await prisma.account.findUnique({ where: { id: accountId } })
+  if (!account) {
+    sendError(res, 404, "NOT_FOUND", "Cuenta no encontrada.")
+    return
+  }
+  await prisma.account.update({
+    where: { id: account.id },
+    data: { autopostEnabled: false },
+  })
+  if (account.isDefault) {
+    await abortInFlightPublish()
+    pauseAutopostSchedule()
+  } else {
+    await abortInFlightPublish(await chromePortForAccount(account.id))
+    pauseAccountAutopost(account.id)
+  }
+  await jsonAccountAutopost(res, account.id)
 }

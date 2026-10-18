@@ -202,14 +202,14 @@ export async function classifyOwnedSessionWindow(
     const classified = await classifyReconcilePage(page)
     if (classified === "REQUIRES_2FA") {
       keepFor2fa = true
-      const handle = getWallapopHandle()
+      const handle = getWallapopHandle(port)
       if (handle) {
         setWallapopHandle({ ...handle, page, ownedPage: true }, port)
       }
     }
     return classified
   } finally {
-    if (!keepFor2fa) await closeWorkerSlotPages("session")
+    if (!keepFor2fa) await closeWorkerSlotPages("session", port)
   }
 }
 

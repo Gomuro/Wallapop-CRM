@@ -15,10 +15,15 @@ import {
 } from "../wallapop-cdp";
 import { gotoVendidosCatalog } from "../wallapop-sold/nav";
 import { peekWallapopSession } from "../wallapop-session";
+import { scheduleOpenSiblingAdsForSoldProducts } from "../sibling-eliminar";
 import { applyMonitorPlan } from "./apply";
 import { CATALOG_PUBLISHED_URL } from "./catalog";
 import { planMonitorUpdates, type MonitorCrmListing } from "./diff";
-import { scrapeProCatalogs, wallapopCatalogKind } from "./pro-catalog";
+import {
+  ensureTodoElCatalogo,
+  scrapeProCatalogs,
+  wallapopCatalogKind,
+} from "./pro-catalog";
 import {
   scrapePublishedCatalogRows,
   scrapeVendidosCatalogRows,
@@ -52,6 +57,11 @@ async function scrapeCatalogs(page: Page) {
   }
   const kind = await wallapopCatalogKind(page);
   if (kind === "pro") {
+    const onFullCatalog = await ensureTodoElCatalogo(page);
+    if (!onFullCatalog) {
+      log("warn", "wallapop_monitor_catalog_not_full", { url: page.url() });
+      return null;
+    }
     const pro = await scrapeProCatalogs(page);
     if (!pro) return null;
     log("info", "wallapop_monitor_published_scanned", {
@@ -98,9 +108,13 @@ async function scrapeCatalogs(page: Page) {
 async function runMonitorAfterAttach(accountId: string, port: number): Promise<void> {
   const page = await ensureWorkerWindow("monitor", port);
   try {
+    const listings = await loadLiveListings(accountId);
+    log("info", "wallapop_monitor_listings_snapshot", {
+      accountId,
+      count: listings.length,
+    });
     const catalogs = await scrapeCatalogs(page);
     if (!catalogs) return;
-    const listings = await loadLiveListings(accountId);
     const plan = planMonitorUpdates(
       catalogs.published,
       catalogs.sold,
@@ -121,6 +135,7 @@ async function runMonitorAfterAttach(accountId: string, port: number): Promise<v
 }
 
 export async function runWallapopMonitorTick(): Promise<void> {
+  void scheduleOpenSiblingAdsForSoldProducts();
   const prisma = getPrisma();
   if (!prisma) return;
   const accounts = await prisma.account.findMany({

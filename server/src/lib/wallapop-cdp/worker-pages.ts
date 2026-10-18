@@ -6,6 +6,7 @@ import type { BrowserWorkerSlot } from "./busy"
 
 const workerPages = new Map<string, Page>()
 const soldJobPages = new Map<number, Page[]>()
+const watchPages = new Map<number, Page>()
 
 function slotKey(slot: BrowserWorkerSlot, port = firstCdpPort()): string {
   return `${port}:${slot}`
@@ -20,6 +21,8 @@ function pagesForPort(port: number): Page[] {
   for (const page of soldJobPages.get(port) ?? []) {
     if (!isClosedPage(page)) owned.push(page)
   }
+  const watch = watchPages.get(port)
+  if (watch && !isClosedPage(watch)) owned.push(watch)
   return owned
 }
 
@@ -34,7 +37,29 @@ export function isOwnedWorkerPage(page: Page): boolean {
   for (const pages of soldJobPages.values()) {
     if (pages.includes(page) && !isClosedPage(page)) return true
   }
+  for (const watch of watchPages.values()) {
+    if (watch === page && !isClosedPage(watch)) return true
+  }
   return false
+}
+
+/** Developer view. Not a worker slot, so jobs must not close it. */
+export function pinWatchPage(page: Page, port = firstCdpPort()): void {
+  watchPages.set(port, page)
+}
+
+export function clearWatchPage(port = firstCdpPort()): void {
+  watchPages.delete(port)
+}
+
+export function releaseWatchPage(page: Page, port = firstCdpPort()): void {
+  if (watchPages.get(port) === page) watchPages.delete(port)
+}
+
+export function peekWatchPage(port = firstCdpPort()): Page | null {
+  const page = watchPages.get(port)
+  if (!page || isClosedPage(page)) return null
+  return page
 }
 
 export function peekWorkerPage(

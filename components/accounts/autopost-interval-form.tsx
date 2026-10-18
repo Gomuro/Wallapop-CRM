@@ -9,8 +9,14 @@ import {
 import { useAutopostIntervalState } from "./autopost-interval-state"
 import { AutopostStatusCard } from "./autopost-status-card"
 
-export function AutopostIntervalForm({ embedded = false }: { embedded?: boolean }) {
-  const state = useAutopostIntervalState()
+export function AutopostIntervalForm({
+  embedded = false,
+  accountId,
+}: {
+  embedded?: boolean
+  accountId?: string
+}) {
+  const state = useAutopostIntervalState(accountId)
   const interval = (
     <div className="border-t px-4 pt-4 pb-4">
       <p className="mb-3 text-sm font-medium">Intervalo</p>

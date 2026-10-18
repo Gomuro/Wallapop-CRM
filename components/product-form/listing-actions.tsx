@@ -4,6 +4,8 @@ import { useRouter } from "next/navigation"
 import { useState, useTransition } from "react"
 
 import { updateProductListingAction } from "@/app/actions/listing"
+import { apiClientFetch } from "@/lib/api/client"
+import { ApiError } from "@/lib/api/errors"
 import { ConfirmAction } from "@/components/confirm-action"
 import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
 import {
@@ -94,6 +96,58 @@ export function EliminarWallapopButton({
       onConfirm={confirmEliminar}
     />
     </>
+  )
+}
+
+/** No row yet on this account → its own READY_TO_POST. Other accounts stay as they are. */
+export function QueueAccountButton({
+  productId,
+  accountId,
+  accountLabel,
+}: {
+  productId: string
+  accountId: string
+  accountLabel: string
+}) {
+  const router = useRouter()
+  const state = useConfirmState()
+
+  function confirmQueue() {
+    state.setError(null)
+    state.startTransition(async () => {
+      try {
+        await apiClientFetch(`/products/${encodeURIComponent(productId)}/queue`, {
+          method: "POST",
+          body: JSON.stringify({ accountId }),
+        })
+        state.setOpen(false)
+        router.refresh()
+      } catch (caught) {
+        if (isNextRedirect(caught)) throw caught
+        state.setError(
+          caught instanceof ApiError
+            ? caught.message
+            : actionFailureMessage(caught),
+        )
+      }
+    })
+  }
+
+  return (
+    <ConfirmAction
+      open={state.open}
+      onOpenChange={state.onOpenChange}
+      triggerLabel="Poner en cola"
+      triggerClassName="h-12 w-full"
+      triggerVariant="secondary"
+      title={`Publicar en ${accountLabel}`}
+      description="Se pondrá en la cola de esta cuenta y saldrá como anuncio nuevo. Las demás cuentas no cambian."
+      confirmLabel="Poner en cola"
+      pendingLabel="Guardando…"
+      error={state.error}
+      pending={state.pending}
+      onConfirm={confirmQueue}
+    />
   )
 }
 
@@ -199,8 +253,8 @@ export function DevolucionButton({
       title={withAccount("Devolución", accountLabel)}
       description={
         hasItemUrl
-          ? "Se borrará el anuncio vendido en Wallapop (Eliminar) y el mismo producto volverá a En venta y a la cola de publicación. Puedes seguir en el catálogo: el trabajo sigue en la cuenta. No se crea un producto nuevo."
-          : "El anuncio ya no tiene URL pública. El mismo producto volverá a En venta y a la cola de publicación. No se crea un producto nuevo."
+          ? "Se borrará el anuncio vendido de esta cuenta y solo esta cuenta volverá a En venta y a la cola. Las demás cuentas no se publican. No se crea un producto nuevo."
+          : "Esta cuenta ya no tiene URL pública. Solo ella volverá a En venta y a la cola. Las demás cuentas no se publican. No se crea un producto nuevo."
       }
       confirmLabel="Confirmar devolución"
       pendingLabel={hasItemUrl ? "En Wallapop…" : "Guardando…"}

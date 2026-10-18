@@ -1,5 +1,11 @@
+/**
+ * Entry URL for the seller catalog. Wallapop remembers the last choice in
+ * «Catálogo seleccionado» and keeps Suscripción Multicategoría
+ * (`/consumergoods`) even after this navigation. The monitor then clicks
+ * `walla-dropdown-item` «Todo el catálogo».
+ */
 export const CATALOG_PUBLISHED_URL =
-  "https://es.wallapop.com/app/catalog/published"
+  "https://es.wallapop.com/app/catalog/management"
 export const CATALOG_SOLD_URL = "https://es.wallapop.com/app/catalog/sold"
 
 export type PublishedCatalogRow = {

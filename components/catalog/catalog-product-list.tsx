@@ -67,6 +67,7 @@ function CatalogProductGrid({
   view,
   selecting,
   selected,
+  focusAccountId,
   onToggle,
   onHold,
 }: {
@@ -74,6 +75,7 @@ function CatalogProductGrid({
   view: "grid" | "list"
   selecting: boolean
   selected: Set<string>
+  focusAccountId: string | null
   onToggle: (id: string) => void
   onHold: (id: string) => void
 }) {
@@ -88,6 +90,7 @@ function CatalogProductGrid({
             priority={index === 0}
             selecting={selecting}
             selected={selected.has(product.id)}
+            focusAccountId={focusAccountId}
             onToggle={() => onToggle(product.id)}
             onHold={() => onHold(product.id)}
           />
@@ -106,6 +109,7 @@ function CatalogProductGrid({
           priority={index === 0}
           selecting={selecting}
           selected={selected.has(product.id)}
+          focusAccountId={focusAccountId}
           onToggle={() => onToggle(product.id)}
           onHold={() => onHold(product.id)}
         />
@@ -138,6 +142,7 @@ export function CatalogProductList({
   const [error, setError] = useState<string | null>(null)
   const [selecting, setSelecting] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
+  const [queueAccountId, setQueueAccountId] = useState<string | null>(null)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const inFlight = useRef(false)
   const generation = useRef(0)
@@ -206,10 +211,28 @@ export function CatalogProductList({
       products={displayed}
       selecting={selecting}
       selected={selected}
+      queueAccountId={queueAccountId}
+      onQueueAccountId={setQueueAccountId}
       onSelectingChange={setSelecting}
       onSelectedChange={setSelected}
       onRemoved={(ids) => {
         setItems((prev) => prev.filter((product) => !ids.includes(product.id)))
+      }}
+      onQueued={(ids, accountId) => {
+        const queued = new Set(ids)
+        setItems((prev) =>
+          prev.map((product) => {
+            if (!queued.has(product.id)) return product
+            return {
+              ...product,
+              accountStates: product.accountStates?.map((state) =>
+                state.accountId === accountId
+                  ? { ...state, status: "READY_TO_POST", externalUrl: null }
+                  : state,
+              ),
+            }
+          }),
+        )
       }}
     >
       <CatalogProductGrid
@@ -217,6 +240,7 @@ export function CatalogProductList({
         view={view}
         selecting={selecting}
         selected={selected}
+        focusAccountId={queueAccountId}
         onToggle={(id) =>
           setSelected((prev) => {
             const next = toggleId(prev, id)

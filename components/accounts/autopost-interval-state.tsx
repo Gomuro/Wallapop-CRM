@@ -5,6 +5,7 @@ import { useEffect, useState, useSyncExternalStore } from "react"
 import { isApiConfigured } from "@/lib/api/config"
 import type { ApiAutopostStatus, ApiWorkerJob } from "@/lib/api/types"
 import {
+  getAccountAutopost,
   getDefaultAccountAutopost,
   getWallapopAccountStatus,
   startAutopost,
@@ -75,15 +76,15 @@ export type AutopostSetters = {
   setStartConfirmOpen: (open: boolean) => void
 }
 
-function subscribeAutopostLoad(setters: AutopostSetters) {
+function subscribeAutopostLoad(setters: AutopostSetters, accountId?: string) {
   let cancelled = false
 
   async function load() {
     setters.setLoading(true)
     try {
       const [next, session] = await Promise.all([
-        getDefaultAccountAutopost(),
-        getWallapopAccountStatus().catch(() => null),
+        accountId ? getAccountAutopost(accountId) : getDefaultAccountAutopost(),
+        getWallapopAccountStatus(accountId).catch(() => null),
       ])
       if (cancelled) return
       const parsed = msToAutopostIntervalInput(next.autopost.effectiveIntervalMs)
@@ -110,6 +111,7 @@ export async function saveAutopostInterval(ctx: {
   event: React.FormEvent
   value: string
   unit: AutopostIntervalUnit
+  accountId?: string
   setters: AutopostSetters
 }) {
   ctx.event.preventDefault()
@@ -128,7 +130,7 @@ export async function saveAutopostInterval(ctx: {
 
   ctx.setters.setSaving(true)
   try {
-    const next = await updateAutopostInterval(parsed.data)
+    const next = await updateAutopostInterval(parsed.data, ctx.accountId)
     const shown = msToAutopostIntervalInput(next.autopost.effectiveIntervalMs)
     ctx.setters.setValue(String(shown.value))
     ctx.setters.setUnit(shown.unit)
@@ -142,12 +144,15 @@ export async function saveAutopostInterval(ctx: {
   }
 }
 
-export async function startAutopostRun(setters: AutopostSetters) {
+export async function startAutopostRun(
+  setters: AutopostSetters,
+  accountId?: string,
+) {
   setters.setStartConfirmOpen(false)
   setters.setError(null)
   setters.setToggling(true)
   try {
-    const next = await startAutopost()
+    const next = await startAutopost(accountId)
     setters.setAutopost(next.autopost)
     setters.setWorkers(next.workers ?? [])
   } catch (err) {
@@ -157,11 +162,14 @@ export async function startAutopostRun(setters: AutopostSetters) {
   }
 }
 
-export async function stopAutopostRun(setters: AutopostSetters) {
+export async function stopAutopostRun(
+  setters: AutopostSetters,
+  accountId?: string,
+) {
   setters.setError(null)
   setters.setToggling(true)
   try {
-    const next = await stopAutopost()
+    const next = await stopAutopost(accountId)
     setters.setAutopost(next.autopost)
     setters.setWorkers(next.workers ?? [])
   } catch (err) {
@@ -172,6 +180,7 @@ export async function stopAutopostRun(setters: AutopostSetters) {
 }
 
 export type AutopostIntervalValues = {
+  accountId?: string
   apiReady: boolean
   value: string
   unit: AutopostIntervalUnit
@@ -203,7 +212,7 @@ export type AutopostIntervalState = AutopostIntervalValues &
   AutopostIntervalBusy &
   AutopostIntervalControls
 
-export function useAutopostIntervalState(): AutopostIntervalState {
+export function useAutopostIntervalState(accountId?: string): AutopostIntervalState {
   const apiReady = isApiConfigured()
   const [value, setValue] = useState("15")
   const [unit, setUnit] = useState<AutopostIntervalUnit>("minutes")
@@ -234,9 +243,9 @@ export function useAutopostIntervalState(): AutopostIntervalState {
 
   useEffect(() => {
     if (!apiReady) return
-    return subscribeAutopostLoad(setters)
+    return subscribeAutopostLoad(setters, accountId)
   // eslint-disable-next-line react-hooks/exhaustive-deps -- setState fns are stable
-  }, [apiReady])
+  }, [apiReady, accountId])
 
   const running = autopost?.enabled === true
   const nextTickLabel = useAutopostNextTickLabel(autopost?.nextTickAt, running)
@@ -245,7 +254,7 @@ export function useAutopostIntervalState(): AutopostIntervalState {
     if (!apiReady) return
     let cancelled = false
     const timer = window.setInterval(() => {
-      void getDefaultAccountAutopost()
+      void (accountId ? getAccountAutopost(accountId) : getDefaultAccountAutopost())
         .then((next) => {
           if (cancelled) return
           setAutopost(next.autopost)
@@ -257,7 +266,7 @@ export function useAutopostIntervalState(): AutopostIntervalState {
       cancelled = true
       window.clearInterval(timer)
     }
-  }, [apiReady])
+  }, [apiReady, accountId])
 
   useEffect(() => {
     if (!saved) return
@@ -272,6 +281,7 @@ export function useAutopostIntervalState(): AutopostIntervalState {
     : "Aún no hay publicaciones"
 
   return {
+    accountId,
     apiReady,
     value,
     unit,

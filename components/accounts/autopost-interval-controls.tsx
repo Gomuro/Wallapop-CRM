@@ -36,12 +36,29 @@ export function AutopostIntervalFields({
 }: {
   state: AutopostIntervalState
 }) {
-  const { apiReady, value, unit, busy, saving, setters, setValue, setUnit } =
-    state
+  const {
+    accountId,
+    apiReady,
+    value,
+    unit,
+    busy,
+    saving,
+    setters,
+    setValue,
+    setUnit,
+  } = state
 
   return (
     <form
-      onSubmit={(event) => void saveAutopostInterval({ event, value, unit, setters })}
+      onSubmit={(event) =>
+        void saveAutopostInterval({
+          event,
+          value,
+          unit,
+          accountId,
+          setters,
+        })
+      }
       className="flex flex-col gap-4"
     >
       <div className="grid grid-cols-[1fr_8.5rem] gap-2">
@@ -101,7 +118,7 @@ export function AutopostStartConfirmDialog({
 }: {
   state: AutopostIntervalState
 }) {
-  const { startConfirmOpen, toggling, setters } = state
+  const { accountId, startConfirmOpen, toggling, setters } = state
   return (
     <Dialog open={startConfirmOpen} onOpenChange={setters.setStartConfirmOpen}>
       <DialogContent>
@@ -127,7 +144,7 @@ export function AutopostStartConfirmDialog({
             type="button"
             className="h-11 w-full sm:w-auto"
             disabled={toggling}
-            onClick={() => void startAutopostRun(setters)}
+            onClick={() => void startAutopostRun(setters, accountId)}
           >
             {toggling ? <LoaderCircleIcon className="animate-spin" /> : null}
             Iniciar

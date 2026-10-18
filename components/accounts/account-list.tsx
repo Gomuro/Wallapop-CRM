@@ -6,11 +6,13 @@ import { ChevronLeftIcon, ChevronRightIcon, LoaderCircleIcon } from "lucide-reac
 
 import { AutopostIntervalForm } from "@/components/accounts/autopost-interval-form"
 import { ConnectAccountForm } from "@/components/accounts/connect-account-form"
+import { DevWatchChrome } from "@/components/accounts/dev-watch-chrome"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { PageContainer } from "@/components/shell/page-container"
 import { typeScreen } from "@/lib/ui/type"
 import { cn } from "@/lib/utils"
+import { msToAutopostIntervalInput } from "@/lib/validations/account"
 import {
   Card,
   CardAction,
@@ -31,8 +33,6 @@ import {
   type ApiAccountCard,
 } from "@/lib/api/account-cards"
 import { ApiError } from "@/lib/api/errors"
-import { msToAutopostIntervalInput } from "@/lib/validations/account"
-
 function ChromePlace({ account }: { account: ApiAccountCard }) {
   return (
     <div className="space-y-1 text-sm text-muted-foreground">
@@ -47,40 +47,6 @@ function cadence(ms: number | null): string | null {
   if (ms == null || ms <= 0) return null
   const { value, unit } = msToAutopostIntervalInput(ms)
   return `cada ~${value} ${unit === "minutes" ? "min" : unit === "seconds" ? "s" : unit === "hours" ? "h" : "d"}`
-}
-
-function QuietAccountBody({
-  account,
-  loginHidden = false,
-}: {
-  account: ApiAccountCard
-  loginHidden?: boolean
-}) {
-  const every = cadence(account.autopostIntervalMs)
-  return (
-    <CardContent className="flex flex-col gap-4">
-      {loginHidden ? null : <ChromePlace account={account} />}
-      {loginHidden ? null : (
-        <div className="border-t pt-4">
-          <p className="text-sm font-medium">Login</p>
-          <p className="mt-1 text-sm text-muted-foreground">
-            {account.wallapopEmail ?? "Sin login"}
-          </p>
-        </div>
-      )}
-      <div className={loginHidden ? "" : "border-t pt-4"}>
-        <p className="text-sm font-medium">Autopost</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          {account.autopostEnabled ? "En marcha" : "Parado"}
-          {every ? ` · ${every}` : ""}
-        </p>
-      </div>
-      <div className="rounded-lg bg-muted/40 px-3 py-2.5">
-        <p className="text-sm font-medium">Ahora</p>
-        <p className="mt-0.5 text-sm text-muted-foreground">Sin tarea</p>
-      </div>
-    </CardContent>
-  )
 }
 
 function autopostLine(account: ApiAccountCard): string {
@@ -124,13 +90,12 @@ function AccountBody({ account }: { account: ApiAccountCard }) {
       </CardHeader>
       <CardContent>
         <ChromePlace account={account} />
+        {process.env.NODE_ENV === "development" ? (
+          <DevWatchChrome accountId={account.id} />
+        ) : null}
       </CardContent>
       <ConnectAccountForm embedded accountId={account.id} />
-      {account.isDefault ? (
-        <AutopostIntervalForm embedded />
-      ) : (
-        <QuietAccountBody account={account} loginHidden />
-      )}
+      <AutopostIntervalForm embedded accountId={account.id} />
     </Card>
   )
 }

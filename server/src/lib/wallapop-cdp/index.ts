@@ -70,6 +70,7 @@ export {
   closeWorkerSlotPages,
   ensureWallapopPage,
   ensureWorkerWindow,
+  openDevWatchWindow,
 } from "./windows"
 
 export { getWorkerPage, peekWorkerPage, registerSoldJobPage } from "./worker-pages"

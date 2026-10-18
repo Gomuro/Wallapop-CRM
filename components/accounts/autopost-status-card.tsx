@@ -200,6 +200,7 @@ function AutopostNotices({ error, saved }: { error: string | null; saved: boolea
 }
 
 function AutopostToggle({
+  accountId,
   running,
   apiReady,
   toggling,
@@ -207,7 +208,7 @@ function AutopostToggle({
   setters,
 }: Pick<
   AutopostIntervalState,
-  "running" | "apiReady" | "toggling" | "sessionActive" | "setters"
+  "accountId" | "running" | "apiReady" | "toggling" | "sessionActive" | "setters"
 >) {
   return (
     <>
@@ -217,7 +218,7 @@ function AutopostToggle({
           variant="destructive"
           className="h-12 w-full"
           disabled={!apiReady || toggling}
-          onClick={() => void stopAutopostRun(setters)}
+          onClick={() => void stopAutopostRun(setters, accountId)}
           aria-busy={toggling || undefined}
         >
           {toggling ? <LoaderCircleIcon className="animate-spin" /> : null}
@@ -244,6 +245,7 @@ function AutopostToggle({
 
 export function AutopostStatusCard({ state }: { state: AutopostIntervalState }) {
   const {
+    accountId,
     apiReady,
     autopost,
     workers,
@@ -304,6 +306,7 @@ export function AutopostStatusCard({ state }: { state: AutopostIntervalState }) 
         <AutopostRecentSkips autopost={autopost} />
         <AutopostNotices error={error} saved={saved} />
         <AutopostToggle
+          accountId={accountId}
           running={running}
           apiReady={apiReady}
           toggling={toggling}

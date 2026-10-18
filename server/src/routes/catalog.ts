@@ -13,11 +13,15 @@ import {
   getDefaultAccount,
   listAccounts,
   patchDefaultAccountAutopost,
+  getAccountAutopost,
+  patchAccountAutopost,
+  startAccountAutopost,
   startDefaultAccountAutopost,
+  stopAccountAutopost,
   stopDefaultAccountAutopost,
 } from "./accounts"
 import { listBrands } from "./brands"
-import { getDevMonitor, putDevMonitor } from "./dev-monitor"
+import { getDevMonitor, postDevAccountWatch, putDevMonitor } from "./dev-monitor"
 import {
   getCategory,
   listCategories,
@@ -25,6 +29,7 @@ import {
 import {
   getProductListing,
   putProductListing,
+  queueProductOnAccount,
 } from "./product-listings"
 import { publishProduct } from "./product-publish"
 import { postProductWallapopDevolucion } from "./product-wallapop-devolucion"
@@ -72,6 +77,7 @@ catalog.delete("/products/:id/images/:imageId", deleteProductImage)
 
 catalog.get("/products/:id/listing", getProductListing)
 catalog.put("/products/:id/listing", putProductListing)
+catalog.post("/products/:id/queue", queueProductOnAccount)
 catalog.post("/products/:id/publish", publishProduct)
 catalog.post("/products/:id/wallapop-sold", postProductWallapopSold)
 catalog.post("/products/:id/wallapop-eliminar", postProductWallapopEliminar)
@@ -80,6 +86,7 @@ catalog.post("/products/:id/wallapop-devolucion", postProductWallapopDevolucion)
 
 catalog.get("/dev/monitor", getDevMonitor)
 catalog.put("/dev/monitor", putDevMonitor)
+catalog.post("/dev/accounts/:id/watch", postDevAccountWatch)
 
 catalog.get("/accounts", listAccounts)
 catalog.post("/accounts", createAccount)
@@ -87,6 +94,10 @@ catalog.get("/accounts/default", getDefaultAccount)
 catalog.patch("/accounts/default/autopost", patchDefaultAccountAutopost)
 catalog.post("/accounts/default/autopost/start", startDefaultAccountAutopost)
 catalog.post("/accounts/default/autopost/stop", stopDefaultAccountAutopost)
+catalog.get("/accounts/:id/autopost", getAccountAutopost)
+catalog.patch("/accounts/:id/autopost", patchAccountAutopost)
+catalog.post("/accounts/:id/autopost/start", startAccountAutopost)
+catalog.post("/accounts/:id/autopost/stop", stopAccountAutopost)
 catalog.get("/accounts/status", getAccountConnectionStatus)
 catalog.post("/accounts/connect", connectAccount)
 catalog.post("/accounts/connect/2fa", connectAccount2fa)

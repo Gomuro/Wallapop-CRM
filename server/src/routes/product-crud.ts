@@ -22,6 +22,7 @@ import {
   paramId,
   parseListQuery,
   productListInclude,
+  loadAccountGlances,
   sendZod,
   toProductDetailJson,
   toProductJson,
@@ -89,7 +90,7 @@ export async function listProducts(req: Request, res: Response) {
   const where = buildListWhere(query)
   const skip = (query.page - 1) * query.pageSize
 
-  const [total, rows] = await Promise.all([
+  const [total, rows, accounts] = await Promise.all([
     prisma.product.count({ where }),
     prisma.product.findMany({
       where,
@@ -98,12 +99,13 @@ export async function listProducts(req: Request, res: Response) {
       take: query.pageSize,
       include: productListInclude,
     }),
+    loadAccountGlances(prisma),
   ])
 
   const totalPages = total === 0 ? 0 : Math.ceil(total / query.pageSize)
 
   res.json({
-    products: rows.map(toProductListItemJson),
+    products: rows.map((row) => toProductListItemJson(row, accounts)),
     page: query.page,
     pageSize: query.pageSize,
     total,
@@ -214,12 +216,15 @@ export async function getProduct(req: Request, res: Response) {
     sendError(res, 500, "INTERNAL", "Database is not configured.")
     return
   }
-  const product = await loadProductDetail(prisma, id)
+  const [product, accounts] = await Promise.all([
+    loadProductDetail(prisma, id),
+    loadAccountGlances(prisma),
+  ])
   if (!product) {
     sendError(res, 404, "NOT_FOUND", "Product not found.")
     return
   }
-  res.json({ product: toProductDetailJson(product) })
+  res.json({ product: toProductDetailJson(product, accounts) })
 }
 
 type UpdateProductBody = ReturnType<typeof updateBodySchema.parse>

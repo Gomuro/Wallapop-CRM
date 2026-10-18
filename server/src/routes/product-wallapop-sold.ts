@@ -7,6 +7,7 @@ import { readActionAccountId } from "../lib/foreign-chrome"
 import { sendError } from "../lib/http-error"
 import { isBrowserBusyError } from "../lib/wallapop-cdp"
 import { markProductSoldTx } from "../lib/product-sold"
+import { scheduleSiblingEliminar } from "../lib/sibling-eliminar"
 import { markWallapopSoldInBrowser, WallapopSoldError } from "../lib/wallapop-sold"
 import { enqueueWorkerJob } from "../lib/wallapop-worker-jobs"
 import { log, serializeError } from "../lib/log"
@@ -40,6 +41,7 @@ async function applyCrmSold(ready: WallapopSoldReady): Promise<void> {
   if (txResult.kind === "already_sold") {
     throw new Error("Product is already sold.")
   }
+  void scheduleSiblingEliminar(ready.productId, ready.accountId)
 }
 
 async function persistCrmSold(ready: WallapopSoldReady, res: Response) {

@@ -66,30 +66,35 @@ export async function getDefaultAccountAutopost() {
   return apiClientFetch<ApiDefaultAccountResponse>("/accounts/default")
 }
 
+export async function getAccountAutopost(accountId: string) {
+  return apiClientFetch<ApiDefaultAccountResponse>(`/accounts/${accountId}/autopost`)
+}
+
 export async function updateAutopostInterval(
   input: AutopostIntervalPatchInput,
+  accountId?: string,
 ) {
-  return apiClientFetch<ApiDefaultAccountResponse>(
-    "/accounts/default/autopost",
-    {
-      method: "PATCH",
-      body: JSON.stringify(input),
-    },
-  )
+  const path = accountId
+    ? `/accounts/${accountId}/autopost`
+    : "/accounts/default/autopost"
+  return apiClientFetch<ApiDefaultAccountResponse>(path, {
+    method: "PATCH",
+    body: JSON.stringify(input),
+  })
 }
 
-export async function startAutopost() {
-  return apiClientFetch<ApiDefaultAccountResponse>(
-    "/accounts/default/autopost/start",
-    { method: "POST" },
-  )
+export async function startAutopost(accountId?: string) {
+  const path = accountId
+    ? `/accounts/${accountId}/autopost/start`
+    : "/accounts/default/autopost/start"
+  return apiClientFetch<ApiDefaultAccountResponse>(path, { method: "POST" })
 }
 
-export async function stopAutopost() {
-  return apiClientFetch<ApiDefaultAccountResponse>(
-    "/accounts/default/autopost/stop",
-    { method: "POST" },
-  )
+export async function stopAutopost(accountId?: string) {
+  const path = accountId
+    ? `/accounts/${accountId}/autopost/stop`
+    : "/accounts/default/autopost/stop"
+  return apiClientFetch<ApiDefaultAccountResponse>(path, { method: "POST" })
 }
 
 export function wallapopAccountErrorMessage(error: unknown): string {

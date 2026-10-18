@@ -62,7 +62,7 @@ function ProductDetailAside({ product }: { product: InventoryProduct }) {
         ) : null}
       </div>
       <ProductListingBlocks product={product} />
-      {process.env.NODE_ENV === "development" ? (
+      {process.env.NODE_ENV === "development" && product.status === "ACTIVE" ? (
         <TestPublishButton
           productId={product.id}
           disabled={

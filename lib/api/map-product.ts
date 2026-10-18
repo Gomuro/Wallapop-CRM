@@ -1,5 +1,6 @@
 import { resolveMediaUrl } from "@/lib/api/config"
 import type {
+  ApiAccountGlance,
   ApiCategory,
   ApiListing,
   ApiProduct,
@@ -13,6 +14,7 @@ import {
 import { computeListingActive } from "@/lib/inventory/listing-active"
 import { isShippingPublishReady } from "@/lib/inventory/shipping-for-publish"
 import type {
+  AccountListingGlance,
   InventoryListing,
   InventoryProduct,
   ListingStatusRead,
@@ -56,6 +58,34 @@ function asStatus(value: unknown): ProductStatus {
   return typeof value === "string" && PRODUCT_STATUSES.has(value as ProductStatus)
     ? (value as ProductStatus)
     : "ACTIVE"
+}
+
+function mapAccountGlances(
+  rows: ApiAccountGlance[] | null | undefined,
+): AccountListingGlance[] | undefined {
+  if (!rows) return undefined
+  return rows.flatMap((row) => {
+    const accountId = asString(row.accountId)
+    const accountName = asString(row.accountName).trim()
+    if (!accountId || !accountName) return []
+    const status =
+      typeof row.status === "string" &&
+      LISTING_STATUSES.has(row.status as ListingStatusRead)
+        ? (row.status as ListingStatusRead)
+        : null
+    return [
+      {
+        accountId,
+        accountName,
+        isDefault: row.isDefault === true,
+        status,
+        externalUrl:
+          typeof row.externalUrl === "string" && row.externalUrl.trim()
+            ? row.externalUrl
+            : null,
+      },
+    ]
+  })
 }
 
 function asListingStatus(value: unknown): ListingStatusRead {
@@ -178,6 +208,7 @@ export function toListItemInventoryProduct(
     createdAt: asString(row.updatedAt),
     updatedAt: asString(row.updatedAt),
     listing,
+    accountStates: mapAccountGlances(row.accounts),
     typeAttributes: {},
     listingActive: listItemListingActive(row, listing),
     shippingPublishReady: row.shippingPublishReady === true,
@@ -237,6 +268,7 @@ function inventoryListingMeta(
   return {
     listing,
     listings: mapStoredListings(product, listing),
+    accountStates: mapAccountGlances(product.accounts),
     soldAccountId:
       typeof product.soldAccountId === "string" ? product.soldAccountId : null,
     typeAttributes:

@@ -1,21 +1,28 @@
-import type { Page } from "playwright"
+import type { BrowserContext, Page } from "playwright"
 
 import { log } from "../log"
 import {
+  ACCOUNT_WINDOW_HEIGHT,
+  ACCOUNT_WINDOW_WIDTH,
   ACTION_TIMEOUT_MS,
   ensureCdpAttached,
   isClosedPage,
+  navigateViaAssign,
   setWallapopHandle,
+  WALLAPOP_WALL_URL,
   type WallapopBrowserHandle,
 } from "./attach"
 import type { BrowserWorkerSlot } from "./busy"
-import { closeWallapopUploadTab } from "./tabs"
+import { closeWallapopUploadTab, quitChromeIfNoWorkerSlots } from "./tabs"
 import {
   clearWorkerPage,
   isOwnedWorkerPage,
   listOwnedWorkerPages,
+  peekWatchPage,
   peekWorkerPage,
+  pinWatchPage,
   registerSoldJobPage,
+  releaseWatchPage,
   setWorkerPage,
   takeSoldJobPages,
 } from "./worker-pages"
@@ -30,6 +37,46 @@ type BrowserWithCdp = WallapopBrowserHandle["browser"] & {
 }
 
 const WINDOW_WAIT_MS = 12_000
+
+/** One size for every account. A restored profile window is put back to this. */
+export async function fitAccountWindows(context: BrowserContext): Promise<void> {
+  const seen = new Set<number>()
+  for (const page of context.pages()) {
+    if (isClosedPage(page)) continue
+    try {
+      const session = await page.context().newCDPSession(page)
+      const info = (await session.send("Browser.getWindowForTarget")) as {
+        windowId?: number
+      }
+      const windowId = info.windowId
+      if (windowId == null || seen.has(windowId)) {
+        await session.detach().catch(() => {})
+        continue
+      }
+      seen.add(windowId)
+      await session.send("Browser.setWindowBounds", {
+        windowId,
+        bounds: {
+          width: ACCOUNT_WINDOW_WIDTH,
+          height: ACCOUNT_WINDOW_HEIGHT,
+          windowState: "normal",
+        },
+      })
+      await session.detach().catch(() => {})
+    } catch (error) {
+      log("warn", "wallapop_window_size_failed", {
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
+  }
+  if (seen.size > 0) {
+    log("info", "wallapop_window_sized", {
+      windows: seen.size,
+      width: ACCOUNT_WINDOW_WIDTH,
+      height: ACCOUNT_WINDOW_HEIGHT,
+    })
+  }
+}
 
 /** Clicks need focus. Monitor scrapes in the background and must not steal Eliminar. */
 const FOREGROUND_SLOTS: ReadonlySet<BrowserWorkerSlot> = new Set([
@@ -94,6 +141,8 @@ async function openOwnedWindow(
   handle: WallapopBrowserHandle,
   slot: BrowserWorkerSlot,
   port?: number,
+  logSlot: string = slot,
+  claim?: (page: Page) => void,
 ): Promise<Page> {
   const before = new Set(handle.context.pages())
   const browser = handle.browser as BrowserWithCdp
@@ -106,38 +155,43 @@ async function openOwnedWindow(
       })
       const page = await waitForTargetPage(handle, before, created.targetId ?? null)
       if (page) {
+        page.setDefaultTimeout(ACTION_TIMEOUT_MS)
+        claim?.(page)
         if (FOREGROUND_SLOTS.has(slot)) {
           await page.bringToFront().catch(() => {})
         }
+        await fitAccountWindows(handle.context)
         log("info", "wallapop_worker_window_opened", {
-          slot,
+          slot: logSlot,
           ownedPage: true,
           targetId: created.targetId ?? null,
         })
         return page
       }
       log("warn", "wallapop_worker_window_target_missing", {
-        slot,
+        slot: logSlot,
         targetId: created.targetId ?? null,
       })
     } catch (error) {
       log("warn", "wallapop_worker_window_create_failed", {
-        slot,
+        slot: logSlot,
         message: error instanceof Error ? error.message : String(error),
       })
     }
   }
   if (listOwnedWorkerPages(port).length > 0) {
     throw new Error(
-      `No se pudo abrir una ventana propia para «${slot}»; no se reutiliza la pestaña de otro worker.`,
+      `No se pudo abrir una ventana propia para «${logSlot}»; no se reutiliza la pestaña de otro worker.`,
     )
   }
   const page = await handle.context.newPage()
   page.setDefaultTimeout(ACTION_TIMEOUT_MS)
+  claim?.(page)
   if (FOREGROUND_SLOTS.has(slot)) {
     await page.bringToFront().catch(() => {})
   }
-  log("info", "wallapop_worker_tab_fallback", { slot, ownedPage: true })
+  await fitAccountWindows(handle.context)
+  log("info", "wallapop_worker_tab_fallback", { slot: logSlot, ownedPage: true })
   return page
 }
 
@@ -158,8 +212,8 @@ export async function ensureWorkerWindow(
 }
 
 /** Publish / dry-run: new window so `/wall` stays. */
-export async function ensureWallapopPage(): Promise<Page> {
-  return ensureWorkerWindow("publish")
+export async function ensureWallapopPage(port?: number): Promise<Page> {
+  return ensureWorkerWindow("publish", port)
 }
 
 export async function closeSoldJobPages(port?: number): Promise<void> {
@@ -187,4 +241,28 @@ export async function closeWorkerSlotPages(
   clearWorkerPage(slot, port)
   if (!page || isClosedPage(page)) return
   await page.close().catch(() => {})
+}
+
+/**
+ * Developer window on this account's Chrome. Jobs keep their own windows.
+ * This one stays until the developer closes it; then Chrome may quit if idle.
+ */
+export async function openDevWatchWindow(port: number): Promise<void> {
+  const existing = peekWatchPage(port)
+  if (existing) {
+    await fitAccountWindows(existing.context())
+    await existing.bringToFront().catch(() => {})
+    return
+  }
+  const handle = await ensureCdpAttached(port)
+  const page = await openOwnedWindow(handle, "session", port, "watch", (opened) => {
+    pinWatchPage(opened, port)
+    opened.once("close", () => {
+      releaseWatchPage(opened, port)
+      void quitChromeIfNoWorkerSlots(port)
+    })
+  })
+  await page.bringToFront().catch(() => {})
+  await navigateViaAssign(page, WALLAPOP_WALL_URL)
+  log("info", "wallapop_dev_watch_opened", { port, url: page.url() })
 }

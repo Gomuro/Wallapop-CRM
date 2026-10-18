@@ -6,6 +6,7 @@ import {
   productMissingRequiredWallapopBrand,
   WALLAPOP_BRAND_REQUIRED_MESSAGE,
 } from "../../../lib/inventory/wallapop-brand"
+import { wallapopItemUrlOrNull } from "../../../lib/inventory/wallapop-item-url"
 import { productListingApiPutBodySchema } from "../../../lib/validations/listing"
 import {
   DEFAULT_ACCOUNT_MISSING_MESSAGE,
@@ -14,7 +15,10 @@ import {
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import { listingJsonSelect, toListingJson } from "../lib/listing-json"
-import { rescheduleAutopostLoop } from "../lib/wallapop-autopost"
+import {
+  rescheduleAutopostLoop,
+  scheduleAccountAutopost,
+} from "../lib/wallapop-autopost"
 import { paramId } from "./products"
 
 function sendZod(res: Response, error: ZodError) {
@@ -225,6 +229,96 @@ export async function putProductListing(req: Request, res: Response) {
       data: { status: "ACTIVE" },
     })
     await rescheduleAutopostLoop()
+  }
+  res.json({ listing: toListingJson(listing) })
+}
+
+export async function queueProductOnAccount(req: Request, res: Response) {
+  const productId = paramId(req)
+  const accountId =
+    typeof req.body?.accountId === "string" ? req.body.accountId.trim() : ""
+  if (!productId || !accountId) {
+    sendError(res, 400, "VALIDATION_ERROR", "Falta la cuenta.")
+    return
+  }
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+  const account = await prisma.account.findUnique({
+    where: { id: accountId },
+    select: { id: true, isDefault: true, autopostEnabled: true },
+  })
+  if (!account) {
+    sendError(res, 404, "NOT_FOUND", "Cuenta no encontrada.")
+    return
+  }
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: { id: true, status: true },
+  })
+  if (!product) {
+    sendError(res, 404, "NOT_FOUND", "Producto no encontrado.")
+    return
+  }
+  if (product.status === "SOLD" || product.status === "INACTIVE") {
+    sendError(
+      res,
+      409,
+      "NOT_PUBLISHABLE",
+      "Este producto no se puede publicar porque está vendido o inactivo.",
+    )
+    return
+  }
+  if (
+    await rejectReadyToPostWithoutBrand(
+      prisma,
+      productId,
+      { status: "READY_TO_POST" },
+      res,
+    )
+  ) {
+    return
+  }
+  const existing = await prisma.productListing.findUnique({
+    where: { productId_accountId: { productId, accountId } },
+    select: { status: true, externalUrl: true },
+  })
+  const live =
+    existing != null &&
+    (existing.status === "POSTING" ||
+      existing.status === "ACTIVE" ||
+      existing.status === "RESERVED" ||
+      wallapopItemUrlOrNull(existing.externalUrl) != null)
+  if (live) {
+    sendError(
+      res,
+      409,
+      "ALREADY_POSTED",
+      "Este producto ya está publicado o se está publicando en esta cuenta.",
+    )
+    return
+  }
+  const listing = await prisma.productListing.upsert({
+    where: { productId_accountId: { productId, accountId } },
+    create: {
+      product: { connect: { id: productId } },
+      account: { connect: { id: accountId } },
+      status: "READY_TO_POST",
+      externalUrl: null,
+      shippingEnabled: true,
+    },
+    update: { status: "READY_TO_POST", externalUrl: null },
+    select: listingJsonSelect,
+  })
+  await prisma.product.updateMany({
+    where: { id: productId, status: { not: "SOLD" } },
+    data: { status: "ACTIVE" },
+  })
+  if (account.autopostEnabled) {
+    if (account.isDefault) await rescheduleAutopostLoop()
+    else await scheduleAccountAutopost(account.id)
   }
   res.json({ listing: toListingJson(listing) })
 }

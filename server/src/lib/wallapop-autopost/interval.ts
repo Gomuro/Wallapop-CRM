@@ -55,14 +55,20 @@ function isPositiveIntervalMs(value: number | null | undefined): value is number
 
 export async function resolveAutopostInterval(
   prisma?: PrismaClient | null,
+  accountId?: string,
 ): Promise<AutopostIntervalResolution> {
   const client = prisma === undefined ? getPrisma() : prisma
   let storedIntervalMs: number | null = null
   if (client) {
-    const account = await client.account.findFirst({
-      where: { isDefault: true },
-      select: { autopostIntervalMs: true },
-    })
+    const account = accountId
+      ? await client.account.findUnique({
+          where: { id: accountId },
+          select: { autopostIntervalMs: true },
+        })
+      : await client.account.findFirst({
+          where: { isDefault: true },
+          select: { autopostIntervalMs: true },
+        })
     if (isPositiveIntervalMs(account?.autopostIntervalMs)) {
       storedIntervalMs = account.autopostIntervalMs
     }

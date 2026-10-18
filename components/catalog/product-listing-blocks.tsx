@@ -1,6 +1,7 @@
 import {
   DevolucionButton,
   EliminarWallapopButton,
+  QueueAccountButton,
   RequeueListingButton,
 } from "@/components/product-form/listing-actions"
 import { SoldSyncButton } from "@/components/product-form/product-actions"
@@ -73,8 +74,96 @@ function ListingActions({
   )
 }
 
+function ListingBlock({
+  product,
+  listing,
+  heading,
+}: {
+  product: InventoryProduct
+  listing: InventoryListing
+  heading: string
+}) {
+  const first = isFirstAccountListing(product, listing)
+  return (
+    <ListingDetailSection
+      heading={heading}
+      productId={first ? product.id : undefined}
+      listing={listing}
+      listingActive={computeListingActive(listing)}
+      shippingIncomplete={first && !product.shippingPublishReady}
+      productSold={
+        product.status === "SOLD" &&
+        canStartDevolucionOnListing(product, listing)
+      }
+      warehouseStatus={product.status}
+    >
+      <ListingActions product={product} listing={listing} />
+    </ListingDetailSection>
+  )
+}
+
+function UnpublishedAccount({
+  productId,
+  accountId,
+  name,
+}: {
+  productId: string
+  accountId: string
+  name: string
+}) {
+  return (
+    <ListingDetailSection heading={name} listing={null}>
+      <QueueAccountButton
+        productId={productId}
+        accountId={accountId}
+        accountLabel={name}
+      />
+    </ListingDetailSection>
+  )
+}
+
 export function ProductListingBlocks({ product }: { product: InventoryProduct }) {
   const listings = blocksFor(product)
+  const states = product.accountStates
+  if (states && states.length > 0) {
+    return (
+      <div className="space-y-4">
+        {states.map((state) => {
+          const listing =
+            listings.find((row) => row.accountId === state.accountId) ?? null
+          if (!listing) {
+            if (product.status === "SOLD" || product.status === "INACTIVE") {
+              return (
+                <ListingDetailSection
+                  key={state.accountId}
+                  heading={state.accountName}
+                  listing={null}
+                  warehouseStatus={product.status}
+                />
+              )
+            }
+            return (
+              <UnpublishedAccount
+                key={state.accountId}
+                productId={product.id}
+                accountId={state.accountId}
+                name={state.accountName}
+              />
+            )
+          }
+          return (
+            <ListingBlock
+              key={listing.id || state.accountId}
+              product={product}
+              listing={listing}
+              heading={listing.accountName?.trim() || state.accountName}
+            />
+          )
+        })}
+      </div>
+    )
+  }
+
   if (listings.length === 0) {
     return (
       <ListingDetailSection
@@ -90,27 +179,14 @@ export function ProductListingBlocks({ product }: { product: InventoryProduct })
 
   return (
     <div className="space-y-4">
-      {listings.map((listing) => {
-        const label = listing.accountName?.trim() || "Cuenta"
-        const first = isFirstAccountListing(product, listing)
-        return (
-          <div key={listing.id || listing.accountId} className="space-y-2">
-            <ListingDetailSection
-              heading={label}
-              productId={first ? product.id : undefined}
-              listing={listing}
-              listingActive={computeListingActive(listing)}
-              shippingIncomplete={first && !product.shippingPublishReady}
-              productSold={
-                product.status === "SOLD" &&
-                canStartDevolucionOnListing(product, listing)
-              }
-              warehouseStatus={product.status}
-            />
-            <ListingActions product={product} listing={listing} />
-          </div>
-        )
-      })}
+      {listings.map((listing) => (
+        <ListingBlock
+          key={listing.id || listing.accountId}
+          product={product}
+          listing={listing}
+          heading={listing.accountName?.trim() || "Cuenta"}
+        />
+      ))}
     </div>
   )
 }

@@ -18,6 +18,7 @@ import {
   isAnyWorkerSlotBusy,
   isKeepChromeWarm,
 } from "./busy"
+import { peekWatchPage } from "./worker-pages"
 
 async function sendCdpBrowserClose(
   browser: WallapopBrowserHandle["browser"],
@@ -83,9 +84,17 @@ export async function quitChromeIfNoWorkerSlots(port?: number): Promise<void> {
     log("info", "wallapop_chrome_kept_warm")
     return
   }
+  if (peekWatchPage(port)) {
+    log("info", "wallapop_chrome_kept_watch")
+    return
+  }
   await beginChromeQuit(async () => {
     if (isAnyWorkerSlotBusy(port)) {
       log("info", "wallapop_chrome_kept_other_slot", { busy: true })
+      return
+    }
+    if (peekWatchPage(port)) {
+      log("info", "wallapop_chrome_kept_watch")
       return
     }
     await quitWallapopChrome(port)

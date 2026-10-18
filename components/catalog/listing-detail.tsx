@@ -3,12 +3,13 @@ import { ExternalLinkIcon } from "lucide-react"
 
 import { ClearListingLinkButton } from "@/components/catalog/clear-listing-link-button"
 import { ListingStatusBadge } from "@/components/catalog/listing-status-badge"
+import { Badge } from "@/components/ui/badge"
 import { formatListingPostedAt } from "@/lib/inventory/format"
 import { isLiveOnWallapopStatus } from "@/lib/inventory/listing-active"
 import { SHIPPING_NOT_READY_MESSAGE } from "@/lib/inventory/shipping-for-publish"
 import type { InventoryListing, InventoryProduct } from "@/lib/inventory/types"
 import { wallapopItemUrlOrNull } from "@/lib/inventory/wallapop-item-url"
-import { typeMeta, typeSection } from "@/lib/ui/type"
+import { typeSection } from "@/lib/ui/type"
 
 function MetaRow({
   label,
@@ -124,6 +125,7 @@ export function ListingDetailSection({
   productSold = false,
   warehouseStatus,
   heading = "Anuncio en Wallapop",
+  children,
 }: {
   productId?: string
   listing: InventoryListing | null
@@ -132,6 +134,7 @@ export function ListingDetailSection({
   productSold?: boolean
   warehouseStatus?: InventoryProduct["status"]
   heading?: string
+  children?: ReactNode
 }) {
   const itemUrl = wallapopItemUrlOrNull(listing?.externalUrl)
   const junkUrl = Boolean(listing?.externalUrl) && !itemUrl
@@ -140,24 +143,20 @@ export function ListingDetailSection({
   const showPostedAt =
     Boolean(listing?.lastPostedAt) &&
     (posted || listing?.status === "DEACTIVATED")
-
-  if (!listing) {
-    return (
-      <section>
-        <p className={typeSection}>{heading}</p>
-        <p className="mt-1 text-sm text-muted-foreground">
-          Aún no está en Wallapop.
-        </p>
-      </section>
-    )
-  }
+  const estado = listing
+    ? listingEstadoLabel(
+        listing,
+        posted,
+        productSold,
+        warehouseStatus === "INACTIVE",
+      )
+    : "Sin publicar"
 
   return (
-    <section>
-      <p className={typeSection}>{heading}</p>
-      <div className="mt-2 overflow-hidden rounded-xl ring-1 ring-border">
-        <div className="flex items-center justify-between gap-2 bg-muted/50 px-3 py-2.5">
-          <span className={typeMeta}>Wallapop</span>
+    <section className="overflow-hidden rounded-xl ring-1 ring-border">
+      <div className="flex items-center justify-between gap-2 border-b bg-muted/40 px-3 py-2.5">
+        <p className={typeSection}>{heading}</p>
+        {listing ? (
           <ListingStatusBadge
             product={{
               listing,
@@ -166,32 +165,34 @@ export function ListingDetailSection({
             }}
             className="shrink-0"
           />
-        </div>
-        <div className="divide-y divide-border px-3">
-          <MetaRow label="Estado">
-            {listingEstadoLabel(
-              listing,
-              posted,
-              productSold,
-              warehouseStatus === "INACTIVE",
-            )}
+        ) : (
+          <Badge variant="outline" className="shrink-0">
+            Sin publicar
+          </Badge>
+        )}
+      </div>
+      <div className="divide-y divide-border px-3">
+        <MetaRow label="Estado">{estado}</MetaRow>
+        <MetaRow label="Enlace">
+          <ListingLinkValue itemUrl={itemUrl} junkUrl={junkUrl} />
+        </MetaRow>
+        {showPostedAt && listing?.lastPostedAt ? (
+          <MetaRow label="Publicado">
+            {formatListingPostedAt(listing.lastPostedAt)}
           </MetaRow>
-          <MetaRow label="Enlace">
-            <ListingLinkValue itemUrl={itemUrl} junkUrl={junkUrl} />
-          </MetaRow>
-          {showPostedAt && listing.lastPostedAt ? (
-            <MetaRow label="Publicado">
-              {formatListingPostedAt(listing.lastPostedAt)}
-            </MetaRow>
-          ) : null}
-        </div>
+        ) : null}
+      </div>
+      {listing ? (
         <ListingHints
           junkUrl={junkUrl}
           ready={ready}
           productId={productId}
           shippingIncomplete={shippingIncomplete}
         />
-      </div>
+      ) : null}
+      {children ? (
+        <div className="space-y-2 px-3 pb-3 empty:hidden">{children}</div>
+      ) : null}
     </section>
   )
 }

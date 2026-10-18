@@ -71,10 +71,19 @@ export type ApiProductWarehouse = {
   soldPrice: number | null
 }
 
+export type ApiAccountGlance = {
+  accountId: string
+  accountName: string
+  isDefault: boolean
+  status: ListingStatusRead | null
+  externalUrl: string | null
+}
+
 export type ApiProductMedia = {
   images: ApiProductImage[]
   listing: ApiListing | null
   listings?: ApiListing[]
+  accounts?: ApiAccountGlance[]
   soldAccountId?: string | null
 }
 
@@ -105,6 +114,7 @@ export type ApiProductListListing = {
   listing?: ApiListing | null
   lastPostedAt: string | null
   shippingPublishReady: boolean
+  accounts?: ApiAccountGlance[]
 }
 
 export type ApiProductListItem = ApiProductListIdentity &

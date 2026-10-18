@@ -61,7 +61,7 @@ export function TestPublishButton({
         </p>
       ) : (
         <p className="text-xs text-muted-foreground">
-          Rellena el formulario en Chrome y para antes de Publicar.
+          Solo la cuenta predeterminada. Rellena el formulario en Chrome y para antes de Publicar.
         </p>
       )}
       {success ? (

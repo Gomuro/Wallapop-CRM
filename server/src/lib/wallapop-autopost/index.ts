@@ -1,11 +1,15 @@
 import type { PrismaClient } from "../../../generated/prisma/client"
 
 import { getRecentAutopostSkips } from "../autopost-recent-skips"
+import { chromePortForAccount } from "../account-chrome"
 import { findDefaultAccountId } from "../default-account"
 import { getPrisma } from "../db"
 import { log, serializeError } from "../log"
 import { isBrowserPublishBusy } from "../wallapop-cdp"
-import { getWallapopSessionSnapshot } from "../wallapop-session"
+import {
+  getWallapopSessionSnapshot,
+  peekWallapopSession,
+} from "../wallapop-session"
 import { recoverStalePostingListings } from "../wallapop-posting-watchdog"
 import { runProductPublish } from "../../routes/product-publish"
 import {
@@ -52,6 +56,30 @@ let nextAutopostTickAtMs: number | null = null
 /** True from the moment a tick starts until it finishes, including the Chrome upload. */
 let autopostTickRunning = false
 
+type AccountAutopostDesk = {
+  generation: number
+  timer: ReturnType<typeof setTimeout> | null
+  nextAt: number | null
+  running: boolean
+}
+
+const accountAutopost = new Map<string, AccountAutopostDesk>()
+
+function extraDesk(accountId: string): AccountAutopostDesk {
+  let row = accountAutopost.get(accountId)
+  if (!row) {
+    row = { generation: 0, timer: null, nextAt: null, running: false }
+    accountAutopost.set(accountId, row)
+  }
+  return row
+}
+
+function accountNextTickAt(accountId: string): string | null {
+  const nextAt = extraDesk(accountId).nextAt
+  if (nextAt == null) return null
+  return new Date(nextAt).toISOString()
+}
+
 /** ISO timestamp of the next scheduled queue tick, or null if the loop is not scheduling. */
 export function getNextAutopostTickAt(): string | null {
   if (nextAutopostTickAtMs == null) return null
@@ -62,15 +90,24 @@ export function isAutopostTickRunning(): boolean {
   return autopostTickRunning
 }
 
-export async function loadAutopostStatus(prisma: PrismaClient) {
-  const resolution = await resolveAutopostInterval(prisma)
-  const account = await prisma.account.findFirst({
-    where: { isDefault: true },
-    select: { autopostEnabled: true },
-  })
-  const last = await prisma.productListing.findFirst({
+export async function loadAutopostStatus(
+  prisma: PrismaClient,
+  accountId?: string,
+) {
+  const account = accountId
+    ? await prisma.account.findUnique({
+        where: { id: accountId },
+        select: { id: true, isDefault: true, autopostEnabled: true },
+      })
+    : await prisma.account.findFirst({
+        where: { isDefault: true },
+        select: { id: true, isDefault: true, autopostEnabled: true },
+      })
+  const resolution = await resolveAutopostInterval(prisma, account?.id)
+  const last = account
+    ? await prisma.productListing.findFirst({
     where: {
-      account: { isDefault: true },
+      accountId: account.id,
       lastPostedAt: { not: null },
     },
     orderBy: { lastPostedAt: "desc" },
@@ -79,18 +116,31 @@ export async function loadAutopostStatus(prisma: PrismaClient) {
       product: { select: { title: true } },
     },
   })
+    : null
   const enabled = account?.autopostEnabled === true
-  const readyToPostCount = await prisma.productListing.count({
-    where: { status: "READY_TO_POST", account: { isDefault: true } },
-  })
+  const readyToPostCount = account
+    ? await prisma.productListing.count({
+        where: { status: "READY_TO_POST", accountId: account.id },
+      })
+    : 0
+  const nextTickAt = !enabled
+    ? null
+    : account?.isDefault === false
+      ? accountNextTickAt(account.id)
+      : getNextAutopostTickAt()
+  const publishing =
+    enabled &&
+    (account?.isDefault === false
+      ? extraDesk(account.id).running
+      : autopostTickRunning)
   return toAutopostStatusJson(resolution, {
     enabled,
     lastPublication:
       last?.lastPostedAt != null
         ? { at: last.lastPostedAt.toISOString(), title: last.product.title }
         : null,
-    nextTickAt: enabled ? getNextAutopostTickAt() : null,
-    publishing: enabled && autopostTickRunning,
+    nextTickAt,
+    publishing,
     readyToPostCount,
     recentSkips: getRecentAutopostSkips(),
   })
@@ -148,6 +198,7 @@ export function startWallapopAutopostLoop(): void {
       livePublish: isAutopostLivePublishEnabled(),
     })
     void scheduleNextAsync()
+    void scheduleEnabledAccountAutopost()
   } catch (error) {
     log("error", "wallapop_autopost_start_failed", serializeError(error))
   }
@@ -328,5 +379,111 @@ export async function runAutopostTick(
     return true
   }
   await publishPickedAutopostListing(picked.listing, publishProduct)
+  return true
+}
+
+async function scheduleEnabledAccountAutopost(): Promise<void> {
+  const prisma = getPrisma()
+  if (!prisma) return
+  const rows = await prisma.account.findMany({
+    where: { isDefault: false, autopostEnabled: true },
+    select: { id: true },
+  })
+  for (const row of rows) {
+    await scheduleAccountAutopost(row.id)
+  }
+}
+
+export function pauseAccountAutopost(accountId: string): void {
+  const desk = accountAutopost.get(accountId)
+  if (!desk) return
+  desk.generation += 1
+  if (desk.timer != null) clearTimeout(desk.timer)
+  desk.timer = null
+  desk.nextAt = null
+}
+
+export async function scheduleAccountAutopost(accountId: string): Promise<void> {
+  const prisma = getPrisma()
+  if (!prisma) return
+  const account = await prisma.account.findUnique({
+    where: { id: accountId },
+    select: { isDefault: true, autopostEnabled: true },
+  })
+  if (!account || account.isDefault) {
+    await rescheduleAutopostLoop()
+    return
+  }
+  if (!account.autopostEnabled) return
+  const desk = extraDesk(accountId)
+  const generation = ++desk.generation
+  if (desk.timer != null) clearTimeout(desk.timer)
+  const resolution = await resolveAutopostInterval(prisma, accountId)
+  const delayMs = autopostDelayWithJitter(resolution.effectiveIntervalMs)
+  desk.nextAt = Date.now() + delayMs
+  desk.timer = setTimeout(() => {
+    if (generation !== desk.generation) return
+    desk.timer = null
+    desk.nextAt = null
+    desk.running = true
+    void runAccountAutopostTick(accountId)
+      .then(async (keepGoing) => {
+        if (keepGoing && generation === desk.generation) {
+          await scheduleAccountAutopost(accountId)
+        }
+      })
+      .catch((error) => {
+        log("error", "wallapop_autopost_tick_failed", serializeError(error))
+      })
+      .finally(() => {
+        desk.running = false
+      })
+  }, delayMs)
+}
+
+async function runAccountAutopostTick(accountId: string): Promise<boolean> {
+  const prisma = getPrisma()
+  if (!prisma) return false
+  await recoverStalePostingOnTick(prisma)
+  if (!isAutopostLivePublishEnabled()) return true
+  const account = await prisma.account.findUnique({
+    where: { id: accountId },
+    select: { autopostEnabled: true },
+  })
+  if (!account?.autopostEnabled) return true
+  if (peekWallapopSession(accountId).status !== "ACTIVE") {
+    log("info", "wallapop_autopost_skip_session", {
+      accountId,
+      status: peekWallapopSession(accountId).status,
+    })
+    return true
+  }
+  const port = await chromePortForAccount(accountId)
+  if (isBrowserPublishBusy(port)) {
+    log("info", "wallapop_autopost_skip_busy", { accountId, busy: "publish" })
+    return true
+  }
+  const picked = await pickNextAutopostListing(prisma, accountId)
+  if (!picked.listing) {
+    logAutopostIdlePick(picked)
+    return picked.scanned !== 0
+  }
+  log("info", "wallapop_autopost_pick", {
+    accountId,
+    listingId: picked.listing.id,
+    productId: picked.listing.productId,
+  })
+  const result = await runProductPublish(picked.listing.productId, {
+    dryRun: false,
+    accountId,
+  })
+  if (!result.ok) {
+    log("warn", "wallapop_autopost_publish_failed", {
+      accountId,
+      listingId: picked.listing.id,
+      code: result.code,
+      message: result.message,
+    })
+  }
   return true
 }

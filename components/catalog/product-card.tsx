@@ -10,7 +10,13 @@ import {
 import { Badge } from "@/components/ui/badge"
 import { Card } from "@/components/ui/card"
 import { ListingStatusBadge } from "@/components/catalog/listing-status-badge"
-import { formatEuro, formatListingPostedAt, statusLabel } from "@/lib/inventory/format"
+import {
+  accountGlanceIsLive,
+  accountGlanceLabel,
+  formatEuro,
+  formatListingPostedAt,
+  statusLabel,
+} from "@/lib/inventory/format"
 import {
   SHIPPING_INCOMPLETE_BADGE,
   showShippingIncompleteBadge,
@@ -139,12 +145,45 @@ function ProductCardFrame({
   )
 }
 
+function AccountMarks({
+  product,
+  focusAccountId,
+}: {
+  product: InventoryProduct
+  focusAccountId?: string | null
+}) {
+  const states = product.accountStates
+  if (!states || states.length === 0) return null
+  return (
+    <ul className="mt-1 flex flex-col gap-0.5">
+      {states.map((row) => {
+        const focused = focusAccountId === row.accountId
+        const live = accountGlanceIsLive(row)
+        return (
+          <li
+            key={row.accountId}
+            className={cn(
+              "flex items-baseline justify-between gap-2 text-[11px] leading-4",
+              focused ? "font-medium" : "text-muted-foreground",
+              focused && live && "text-foreground",
+            )}
+          >
+            <span className="min-w-0 truncate">{row.accountName}</span>
+            <span className="shrink-0">{accountGlanceLabel(row)}</span>
+          </li>
+        )
+      })}
+    </ul>
+  )
+}
+
 export function ProductCard({
   product,
   view,
   priority = false,
   selecting = false,
   selected = false,
+  focusAccountId = null,
   onToggle,
   onHold,
 }: {
@@ -153,6 +192,7 @@ export function ProductCard({
   priority?: boolean
   selecting?: boolean
   selected?: boolean
+  focusAccountId?: string | null
   onToggle?: () => void
   onHold?: () => void
 }) {
@@ -205,6 +245,9 @@ export function ProductCard({
               <ListingStatusBadge product={product} />
               <ShippingIncompleteBadge product={product} />
             </div>
+            {selecting ? (
+              <AccountMarks product={product} focusAccountId={focusAccountId} />
+            ) : null}
             {product.listing?.lastPostedAt ? (
               <p className="mt-1 text-xs text-muted-foreground">
                 Publicado{" "}
@@ -224,6 +267,7 @@ export function ProductCard({
       priority={priority}
       selecting={selecting}
       selected={selected}
+      focusAccountId={focusAccountId}
       onToggle={onToggle}
       onHold={onHold}
     />
@@ -236,6 +280,7 @@ function GridProductCard({
   priority,
   selecting,
   selected,
+  focusAccountId,
   onToggle,
   onHold,
 }: {
@@ -244,6 +289,7 @@ function GridProductCard({
   priority: boolean
   selecting: boolean
   selected: boolean
+  focusAccountId?: string | null
   onToggle?: () => void
   onHold?: () => void
 }) {
@@ -289,6 +335,9 @@ function GridProductCard({
             <ListingStatusBadge product={product} />
             <ShippingIncompleteBadge product={product} />
           </div>
+          {selecting ? (
+            <AccountMarks product={product} focusAccountId={focusAccountId} />
+          ) : null}
           {product.listing?.lastPostedAt ? (
             <p className="text-xs text-muted-foreground">
               Publicado {formatListingPostedAt(product.listing.lastPostedAt)}

@@ -7,7 +7,7 @@ import {
   findDefaultAccountId,
 } from "../lib/default-account"
 import { getPrisma } from "../lib/db"
-import { toListingJson } from "../lib/listing-json"
+import { listingJsonSelect, toListingJson } from "../lib/listing-json"
 import { getWallapopSessionSnapshot } from "../lib/wallapop-session"
 import { wallapopStandardWeightBandFromCrm } from "../lib/wallapop-weight-band"
 import { categoryBreadcrumbLabelsEs } from "../lib/category-breadcrumb"
@@ -20,7 +20,7 @@ import { wallapopItemUrlOrNull } from "../../../lib/inventory/wallapop-item-url"
 import { loadProductCard } from "./products"
 
 export const ALREADY_POSTED_MESSAGE =
-  "Este producto ya está publicado o se está publicando en la cuenta predeterminada."
+  "Este producto ya está publicado o se está publicando en esta cuenta."
 
 function isPublishDryRun(): boolean {
   return process.env.WALLAPOP_PUBLISH_DRY_RUN !== "false"
@@ -56,6 +56,8 @@ export function listingBlocksDryRun(
 export type RunProductPublishOptions = {
   /** Force dry-run (HTTP body). Env `WALLAPOP_PUBLISH_DRY_RUN !== "false"` still applies. */
   dryRun?: boolean
+  /** Publish this account's queue row. Omit = the default account. */
+  accountId?: string
 }
 
 export type RunProductPublishOk = {
@@ -130,19 +132,32 @@ async function guardPublishAccountAndListing(
   prisma: PrismaDb,
   product: ProductCard,
   dryRun: boolean,
+  accountId?: string,
 ): Promise<RunProductPublishErr | { ok: true; accountId: string }> {
-  const accountId = await findDefaultAccountId(prisma)
-  if (!accountId) {
+  const resolved = accountId ?? (await findDefaultAccountId(prisma))
+  if (!resolved) {
     return publishFail(404, "NOT_FOUND", DEFAULT_ACCOUNT_MISSING_MESSAGE)
   }
-  const listing = product.listings[0]
+  const listing =
+    (await prisma.productListing.findUnique({
+      where: { productId_accountId: { productId: product.id, accountId: resolved } },
+      select: listingJsonSelect,
+    })) ?? undefined
   const blocked = dryRun
     ? listingBlocksDryRun(listing)
     : listingBlocksLivePublish(listing)
+  if (!listing) {
+    return publishFail(
+      409,
+      "NO_LISTING",
+      "Este producto no está en la cola de esta cuenta.",
+    )
+  }
   if (blocked) {
     return publishFail(409, "ALREADY_POSTED", ALREADY_POSTED_MESSAGE)
   }
-  return { ok: true, accountId }
+  product.listings = listing ? [listing] : []
+  return { ok: true, accountId: resolved }
 }
 
 async function resolvePublishImages(
@@ -262,8 +277,10 @@ async function resolvePublishShipping(
   return { ok: true, ...measures }
 }
 
-async function guardPublishSession(): Promise<RunProductPublishErr | { ok: true }> {
-  const session = await getWallapopSessionSnapshot()
+async function guardPublishSession(
+  accountId?: string,
+): Promise<RunProductPublishErr | { ok: true }> {
+  const session = await getWallapopSessionSnapshot(accountId)
   if (session.status !== "ACTIVE") {
     return publishFail(
       409,
@@ -285,13 +302,14 @@ export async function prepareProductPublish(
     loaded.prisma,
     loaded.product,
     dryRun,
+    options.accountId,
   )
   if (!account.ok) return account
   const assets = await resolvePublishImages(loaded.prisma, loaded.product)
   if (!assets.ok) return assets
   const shipping = await resolvePublishShipping(loaded.prisma, loaded.product, dryRun)
   if (!shipping.ok) return shipping
-  const session = await guardPublishSession()
+  const session = await guardPublishSession(account.accountId)
   if (!session.ok) return session
   return {
     ok: true,

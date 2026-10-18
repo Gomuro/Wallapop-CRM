@@ -1,5 +1,7 @@
 import type { PrismaClient } from "../../generated/prisma/client"
 
+import { chromePortForAccount } from "../lib/account-chrome"
+import { findDefaultAccountId } from "../lib/default-account"
 import { listingJsonSelect, toListingJson } from "../lib/listing-json"
 import { log, serializeError } from "../lib/log"
 import { isBrowserBusyError, isPublishAbortedError } from "../lib/wallapop-cdp"
@@ -155,6 +157,7 @@ async function loadCategoryUploadFields(ready: PublishReady) {
 async function playwrightProductPublish(ready: PublishReady) {
   const uploadFields = await loadCategoryUploadFields(ready)
   return publishWallapopInBrowser({
+    cdpPort: await chromePortForAccount(ready.accountId),
     title: ready.product.title,
     description: ready.product.description,
     price: decimalToNumber(ready.product.price),
@@ -186,8 +189,11 @@ async function verifyProductPublish(
     return { ok: true, dryRun: true, listing: null, step: result.step }
   }
   let externalUrl = wallapopItemUrlOrNull(result.externalUrl)
-  const listingId = ready.product.listings[0]?.id
-  if (!externalUrl && listingId) {
+  const listingId = ready.product.listings.find(
+    (row) => row.accountId === ready.accountId,
+  )?.id
+  const defaultAccountId = await findDefaultAccountId(ready.prisma)
+  if (!externalUrl && listingId && ready.accountId === defaultAccountId) {
     externalUrl = await liveHrefForListing(ready.prisma, listingId)
     if (externalUrl) {
       log("info", "wallapop_publish_item_url_from_profile", { externalUrl })

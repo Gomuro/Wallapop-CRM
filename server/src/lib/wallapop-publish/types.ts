@@ -75,6 +75,8 @@ export type PublishWallapopCopy = {
   /** Spanish breadcrumb root → leaf from CRM `Category.path`. */
   categoryLabels: string[];
   dryRun: boolean;
+  /** Chrome debugging port for this account. Omit = the first account. */
+  cdpPort?: number;
 };
 
 export type PublishWallapopShipping = {

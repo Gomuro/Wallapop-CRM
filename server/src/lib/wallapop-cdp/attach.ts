@@ -46,6 +46,10 @@ function profileDirForPort(port: number): string {
   return path.resolve(process.env.USERPROFILE ?? "", name)
 }
 
+/** Every account's Chrome uses this window. Profiles otherwise restore different sizes. */
+export const ACCOUNT_WINDOW_WIDTH = 1440
+export const ACCOUNT_WINDOW_HEIGHT = 900
+
 const CHROME_LAUNCH_EXTRA_ARGS = [
   "--disable-background-timer-throttling",
   "--disable-backgrounding-occluded-windows",
@@ -53,6 +57,8 @@ const CHROME_LAUNCH_EXTRA_ARGS = [
   "--disable-features=CalculateNativeWinOcclusion",
   "--no-first-run",
   "--no-default-browser-check",
+  `--window-size=${ACCOUNT_WINDOW_WIDTH},${ACCOUNT_WINDOW_HEIGHT}`,
+  "--window-position=0,0",
 ] as const
 
 export type WallapopBrowserHandle = {
