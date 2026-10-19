@@ -140,6 +140,12 @@ export function accountGlanceIsLive(row: AccountListingGlance): boolean {
   return row.status === "ACTIVE" && wallapopItemUrlOrNull(row.externalUrl) != null
 }
 
+export function accountGlanceAlreadyQueued(row: AccountListingGlance): boolean {
+  if (row.status == null) return false
+  if (row.status === "READY_TO_POST" || row.status === "POSTING") return true
+  return accountGlanceIsLive(row)
+}
+
 export function listingBadgeVariant(
   listing: { status: ListingStatusRead } | null | undefined,
   listingActive?: boolean,

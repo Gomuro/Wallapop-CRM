@@ -20,6 +20,7 @@ import {
   stopAccountAutopost,
   stopDefaultAccountAutopost,
 } from "./accounts"
+import { getQueueNewProducts, putQueueNewProducts } from "./queue-new-products"
 import { listBrands } from "./brands"
 import { getDevMonitor, postDevAccountWatch, putDevMonitor } from "./dev-monitor"
 import {
@@ -89,6 +90,8 @@ catalog.put("/dev/monitor", putDevMonitor)
 catalog.post("/dev/accounts/:id/watch", postDevAccountWatch)
 
 catalog.get("/accounts", listAccounts)
+catalog.get("/accounts/queue-new-products", getQueueNewProducts)
+catalog.put("/accounts/queue-new-products", putQueueNewProducts)
 catalog.post("/accounts", createAccount)
 catalog.get("/accounts/default", getDefaultAccount)
 catalog.patch("/accounts/default/autopost", patchDefaultAccountAutopost)

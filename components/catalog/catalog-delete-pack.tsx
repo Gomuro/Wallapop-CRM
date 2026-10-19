@@ -12,7 +12,7 @@ import {
 } from "@/lib/api/catalog-delete"
 import { getAccountAutopost } from "@/lib/api/wallapop-account"
 import { catalogDeleteNeedsWallapop } from "@/lib/inventory/listing-active"
-import { accountGlanceIsLive } from "@/lib/inventory/format"
+import { accountGlanceAlreadyQueued } from "@/lib/inventory/format"
 import type { AccountListingGlance, InventoryProduct } from "@/lib/inventory/types"
 import { cn } from "@/lib/utils"
 
@@ -27,9 +27,8 @@ function accountsInView(products: InventoryProduct[]): AccountListingGlance[] {
 
 function staysOnAccount(product: InventoryProduct, accountId: string): boolean {
   const row = product.accountStates?.find((state) => state.accountId === accountId)
-  if (!row || row.status == null) return false
-  if (row.status === "READY_TO_POST" || row.status === "POSTING") return true
-  return accountGlanceIsLive(row)
+  if (!row) return false
+  return accountGlanceAlreadyQueued(row)
 }
 
 export function CatalogDeletePack({
@@ -42,6 +41,8 @@ export function CatalogDeletePack({
   onSelectedChange,
   onRemoved,
   onQueued,
+  onSelectAll,
+  selectAllPending = false,
   children,
 }: {
   products: InventoryProduct[]
@@ -53,6 +54,8 @@ export function CatalogDeletePack({
   onSelectedChange: (next: Set<string>) => void
   onRemoved: (ids: string[]) => void
   onQueued: (ids: string[], accountId: string) => void
+  onSelectAll: () => void
+  selectAllPending?: boolean
   children: ReactNode
 }) {
   const router = useRouter()
@@ -177,6 +180,14 @@ export function CatalogDeletePack({
       {children}
       {selecting ? (
         <div className="sticky bottom-3 z-30 mt-4 flex flex-col gap-2 rounded-2xl bg-background/95 p-3 shadow-lg ring-1 ring-border backdrop-blur">
+          <button
+            type="button"
+            className="h-11 w-full rounded-full bg-muted text-sm font-semibold disabled:opacity-50"
+            disabled={selectAllPending || products.length === 0}
+            onClick={onSelectAll}
+          >
+            {selectAllPending ? "Cargando el catálogo…" : "Seleccionar todo"}
+          </button>
           {accounts.length > 0 ? (
             <div className="flex gap-2 overflow-x-auto pb-1">
               {accounts.map((account) => {

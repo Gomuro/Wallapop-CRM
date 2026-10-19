@@ -245,9 +245,10 @@ export function ProductCard({
               <ListingStatusBadge product={product} />
               <ShippingIncompleteBadge product={product} />
             </div>
-            {selecting ? (
-              <AccountMarks product={product} focusAccountId={focusAccountId} />
-            ) : null}
+            <AccountMarks
+              product={product}
+              focusAccountId={selecting ? focusAccountId : null}
+            />
             {product.listing?.lastPostedAt ? (
               <p className="mt-1 text-xs text-muted-foreground">
                 Publicado{" "}
@@ -335,9 +336,10 @@ function GridProductCard({
             <ListingStatusBadge product={product} />
             <ShippingIncompleteBadge product={product} />
           </div>
-          {selecting ? (
-            <AccountMarks product={product} focusAccountId={focusAccountId} />
-          ) : null}
+          <AccountMarks
+            product={product}
+            focusAccountId={selecting ? focusAccountId : null}
+          />
           {product.listing?.lastPostedAt ? (
             <p className="text-xs text-muted-foreground">
               Publicado {formatListingPostedAt(product.listing.lastPostedAt)}

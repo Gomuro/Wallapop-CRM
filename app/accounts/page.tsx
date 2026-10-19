@@ -1,6 +1,7 @@
 import { AccountList } from "@/components/accounts/account-list"
 import { DatabaseBackupCard } from "@/components/accounts/database-backup-card"
 import { DevMonitorSwitch } from "@/components/accounts/dev-monitor-switch"
+import { QueueNewProductsSwitch } from "@/components/accounts/queue-new-products-switch"
 import { PageContainer } from "@/components/shell/page-container"
 import { ThemeToggle } from "@/components/theme/theme-toggle"
 import { typeScreen } from "@/lib/ui/type"
@@ -12,6 +13,7 @@ export default function AccountsPage() {
         <h1 className={typeScreen}>Cuentas</h1>
         <ThemeToggle variant="row" />
         {process.env.NODE_ENV === "development" ? <DevMonitorSwitch /> : null}
+        <QueueNewProductsSwitch />
         <AccountList />
         <DatabaseBackupCard />
       </div>

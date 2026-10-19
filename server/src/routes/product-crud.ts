@@ -14,7 +14,8 @@ import {
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import { isUniqueConstraint, prismaErrorCode } from "../lib/prisma-error"
-import { rescheduleAutopostLoop } from "../lib/wallapop-autopost"
+import { readQueueNewProductAllAccounts } from "../lib/queue-new-products"
+import { rescheduleAutopostLoop, scheduleAccountAutopost } from "../lib/wallapop-autopost"
 import {
   buildListWhere,
   loadProductCard,
@@ -141,17 +142,36 @@ async function insertProductWithListing(
   body: CreateProductBody,
   defaultAccountId: string,
 ) {
-  return prisma.$transaction(async (tx) => {
+  const queueAll =
+    body.status === "ACTIVE" && (await readQueueNewProductAllAccounts(prisma))
+  const accounts = queueAll
+    ? await prisma.account.findMany({
+        select: { id: true, isDefault: true, autopostEnabled: true },
+      })
+    : []
+  const accountIds =
+    accounts.length > 0
+      ? accounts.map((account) => account.id)
+      : [defaultAccountId]
+  if (!accountIds.includes(defaultAccountId)) accountIds.unshift(defaultAccountId)
+
+  const productId = await prisma.$transaction(async (tx) => {
     const product = await tx.product.create({ data: productCreateData(body) })
-    await tx.productListing.create({
-      data: {
+    await tx.productListing.createMany({
+      data: accountIds.map((accountId) => ({
         productId: product.id,
-        accountId: defaultAccountId,
-        status: "READY_TO_POST",
-      },
+        accountId,
+        status: "READY_TO_POST" as const,
+      })),
     })
     return product.id
   })
+  return {
+    productId,
+    autopostAccountIds: accounts
+      .filter((account) => account.autopostEnabled && !account.isDefault)
+      .map((account) => account.id),
+  }
 }
 
 function sendCreateProductError(res: Response, error: unknown): boolean {
@@ -193,12 +213,15 @@ export async function createProduct(req: Request, res: Response) {
 
   try {
     const created = await insertProductWithListing(prisma, body, defaultAccountId)
-    const product = await loadProductCard(prisma, created)
+    const product = await loadProductCard(prisma, created.productId)
     if (!product) {
       sendError(res, 500, "INTERNAL", "Product was not saved.")
       return
     }
     await rescheduleAutopostLoop()
+    for (const accountId of created.autopostAccountIds) {
+      await scheduleAccountAutopost(accountId)
+    }
     res.status(201).json({ product: toProductJson(product) })
   } catch (error) {
     if (!sendCreateProductError(res, error)) throw error

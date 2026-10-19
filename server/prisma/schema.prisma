@@ -197,3 +197,10 @@ model ProductListing {
   @@index([status])
   @@map("product_listings")
 }
+
+model OperatorSetting {
+  id                           String  @id
+  queueNewProductAllAccounts   Boolean @default(false) @map("queue_new_product_all_accounts")
+
+  @@map("operator_settings")
+}

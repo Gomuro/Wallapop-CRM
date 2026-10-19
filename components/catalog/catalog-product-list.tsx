@@ -7,6 +7,7 @@ import { loadCatalogPage } from "@/app/actions/products"
 import { ProductCard } from "@/components/catalog/product-card"
 import { CatalogDeletePack } from "@/components/catalog/catalog-delete-pack"
 import { rememberOfflineProducts } from "@/lib/offline/cache"
+import { accountGlanceAlreadyQueued } from "@/lib/inventory/format"
 import { CATALOG_PAGE_SIZE } from "@/lib/inventory/types"
 import type { CatalogListingFilter, InventoryProduct } from "@/lib/inventory/types"
 import type { ProductStatus } from "@/lib/validations"
@@ -18,6 +19,16 @@ function mergeUnique(
   const ids = new Set(current.map((product) => product.id))
   const extra = incoming.filter((product) => !ids.has(product.id))
   return extra.length > 0 ? [...current, ...extra] : current
+}
+
+function queueableIds(products: InventoryProduct[], accountId: string | null) {
+  if (!accountId) return products.map((product) => product.id)
+  return products
+    .filter((product) => {
+      const row = product.accountStates?.find((state) => state.accountId === accountId)
+      return !row || !accountGlanceAlreadyQueued(row)
+    })
+    .map((product) => product.id)
 }
 
 function toggleId(selected: Set<string>, id: string) {
@@ -143,6 +154,7 @@ export function CatalogProductList({
   const [selecting, setSelecting] = useState(false)
   const [selected, setSelected] = useState<Set<string>>(new Set())
   const [queueAccountId, setQueueAccountId] = useState<string | null>(null)
+  const [selectingAll, setSelectingAll] = useState(false)
   const sentinelRef = useRef<HTMLDivElement>(null)
   const inFlight = useRef(false)
   const generation = useRef(0)
@@ -153,6 +165,56 @@ export function CatalogProductList({
 
   const displayed = mergeUnique(items, extraProducts)
   const hasMore = !done && items.length < total
+
+  async function selectAll() {
+    if (selectingAll || inFlight.current) return
+    setSelectingAll(true)
+    setSelecting(true)
+    inFlight.current = true
+    const gen = generation.current
+    let collected = items
+    let nextPage = page
+    let finished = done || collected.length >= total
+    try {
+      while (!finished) {
+        const result = await loadCatalogPage({
+          page: nextPage + 1,
+          q,
+          status,
+          listing,
+        })
+        if (gen !== generation.current) return
+        if (!result.ok) {
+          setError(result.error)
+          break
+        }
+        if (result.products.length === 0) {
+          finished = true
+          break
+        }
+        collected = mergeUnique(collected, result.products)
+        nextPage = result.page
+        finished =
+          collected.length >= result.total ||
+          result.products.length < CATALOG_PAGE_SIZE
+      }
+      if (gen !== generation.current) return
+      setItems(collected)
+      setPage(nextPage)
+      if (finished) setDone(true)
+      const shown = mergeUnique(collected, extraProducts)
+      setSelected(new Set(queueableIds(shown, queueAccountId)))
+    } catch {
+      if (gen === generation.current) {
+        setError("No se han podido cargar más productos.")
+      }
+    } finally {
+      if (gen === generation.current) {
+        inFlight.current = false
+        setSelectingAll(false)
+      }
+    }
+  }
 
   useEffect(() => {
     if (!hasMore || loading || error) return
@@ -218,6 +280,10 @@ export function CatalogProductList({
       onRemoved={(ids) => {
         setItems((prev) => prev.filter((product) => !ids.includes(product.id)))
       }}
+      onSelectAll={() => {
+        void selectAll()
+      }}
+      selectAllPending={selectingAll}
       onQueued={(ids, accountId) => {
         const queued = new Set(ids)
         setItems((prev) =>
