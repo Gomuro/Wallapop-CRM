@@ -125,7 +125,7 @@ async function portsByAccount(): Promise<Map<string, number>> {
   const prisma = getPrisma()
   if (!prisma) return new Map()
   const accounts = await prisma.account.findMany({
-    select: { id: true, isDefault: true, createdAt: true },
+    select: { id: true, chromeSlot: true },
   })
   const places = assignChromePlaces(accounts)
   const ports = new Map<string, number>()

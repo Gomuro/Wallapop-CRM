@@ -50,7 +50,7 @@ export async function postDevAccountWatch(req: Request, res: Response) {
     return
   }
   const accounts = await prisma.account.findMany({
-    select: { id: true, isDefault: true, createdAt: true },
+    select: { id: true, chromeSlot: true },
   })
   const port = assignChromePlaces(accounts).get(accountId)?.port
   if (port == null) {

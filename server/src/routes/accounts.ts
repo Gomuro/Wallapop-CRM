@@ -8,9 +8,14 @@ import {
   wallapop2faSchema,
   wallapopConnectSchema,
 } from "../../../lib/validations/account"
-import { assignChromePlaces, chromePortForAccount } from "../lib/account-chrome"
+import {
+  assignChromePlaces,
+  chromePortForAccount,
+  nextChromeSlot,
+} from "../lib/account-chrome"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
+import { isUniqueConstraint } from "../lib/prisma-error"
 import { log, serializeError } from "../lib/log"
 import { linkQueuedListingsAlreadyLive } from "../lib/wallapop-already-live"
 import {
@@ -23,13 +28,20 @@ import {
 import {
   connectWallapopSession,
   disconnectWallapopSession,
+  dropWallapopSession,
   getWallapopSession,
   getWallapopSessionSnapshot,
   peekWallapopSession,
   submitWallapopSession2fa,
   type WallapopSessionSnapshot,
 } from "../lib/wallapop-session"
-import { isBrowserBusyError, abortInFlightPublish } from "../lib/wallapop-cdp"
+import {
+  abortInFlightPublish,
+  closeWallapopBrowser,
+  getBrowserBusy,
+  isBrowserBusyError,
+  setKeepChromeWarm,
+} from "../lib/wallapop-cdp"
 import { listWorkerJobs } from "../lib/wallapop-worker-jobs"
 
 function toAccountJson(row: {
@@ -111,17 +123,30 @@ export async function createAccount(req: Request, res: Response) {
     return
   }
 
-  const created = await prisma.account.create({
-    data: {
-      name: body.name,
-      status: body.status,
-      isDefault: false,
-      city: body.city ?? null,
-      postalCode: body.postalCode ?? null,
-    },
-  })
+  let created
+  try {
+    created = await prisma.$transaction(async (tx) => {
+      const taken = await tx.account.findMany({ select: { chromeSlot: true } })
+      return tx.account.create({
+        data: {
+          name: body.name,
+          status: body.status,
+          isDefault: false,
+          city: body.city ?? null,
+          postalCode: body.postalCode ?? null,
+          chromeSlot: nextChromeSlot(taken.map((row) => row.chromeSlot)),
+        },
+      })
+    })
+  } catch (error) {
+    if (isUniqueConstraint(error)) {
+      sendError(res, 409, "CHROME_SLOT", "No se pudo crear la cuenta. Inténtalo otra vez.")
+      return
+    }
+    throw error
+  }
   const accounts = await prisma.account.findMany({
-    select: { id: true, isDefault: true, createdAt: true },
+    select: { id: true, chromeSlot: true },
   })
   res.status(201).json({
     account: withChromePlace(toAccountJson(created), assignChromePlaces(accounts)),
@@ -369,6 +394,102 @@ export async function connectAccount2fa(req: Request, res: Response) {
   }
 
   res.json(toSessionJson(result.session))
+}
+
+async function restorePausedAutopost(wasDefault: boolean, accountId: string) {
+  if (wasDefault) await rescheduleAutopostLoop()
+  else await scheduleAccountAutopost(accountId)
+}
+
+const LAST_ACCOUNT_MESSAGE =
+  "Tiene que quedar al menos una cuenta. Si esta está bloqueada, desconéctala e inicia sesión con el email nuevo en esta misma ficha."
+
+/** Remove the CRM card. Warehouse products stay. Wallapop ads are not deleted. */
+export async function deleteAccount(req: Request, res: Response) {
+  const accountId = routeAccountId(req.params.id)
+  if (!accountId) {
+    sendError(res, 404, "NOT_FOUND", "Cuenta no encontrada.")
+    return
+  }
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+  const total = await prisma.account.count()
+  if (total <= 1) {
+    sendError(res, 409, "LAST_ACCOUNT", LAST_ACCOUNT_MESSAGE)
+    return
+  }
+  const account = await prisma.account.findUnique({
+    where: { id: accountId },
+    select: { id: true, isDefault: true },
+  })
+  if (!account) {
+    sendError(res, 404, "NOT_FOUND", "Cuenta no encontrada.")
+    return
+  }
+  const port = await chromePortForAccount(account.id)
+  if (getBrowserBusy(port) !== "idle") {
+    sendError(
+      res,
+      409,
+      "BROWSER_BUSY",
+      "Esta cuenta está usando Chrome. Espera a que termine y vuelve a borrar.",
+    )
+    return
+  }
+  const wasDefault = account.isDefault
+  if (wasDefault) pauseAutopostSchedule()
+  else pauseAccountAutopost(account.id)
+  setKeepChromeWarm(false, port)
+  try {
+    await closeWallapopBrowser(port)
+  } catch (error) {
+    await restorePausedAutopost(wasDefault, account.id)
+    if (isBrowserBusyError(error)) {
+      sendError(res, 409, "BROWSER_BUSY", error.message)
+      return
+    }
+    throw error
+  }
+  dropWallapopSession(account.id)
+  let promotedId: string | null = null
+  try {
+    promotedId = await prisma.$transaction(async (tx) => {
+      let nextId: string | null = null
+      if (account.isDefault) {
+        const next = await tx.account.findFirst({
+          where: { id: { not: account.id } },
+          orderBy: { createdAt: "asc" },
+          select: { id: true },
+        })
+        if (!next) throw new Error("LAST_ACCOUNT")
+        nextId = next.id
+        pauseAccountAutopost(next.id)
+        await tx.account.update({
+          where: { id: account.id },
+          data: { isDefault: false, autopostEnabled: false },
+        })
+        await tx.account.update({
+          where: { id: next.id },
+          data: { isDefault: true },
+        })
+      }
+      await tx.account.delete({ where: { id: account.id } })
+      return nextId
+    })
+  } catch (error) {
+    await restorePausedAutopost(wasDefault, account.id)
+    if (error instanceof Error && error.message === "LAST_ACCOUNT") {
+      sendError(res, 409, "LAST_ACCOUNT", LAST_ACCOUNT_MESSAGE)
+      return
+    }
+    throw error
+  }
+  if (promotedId) await rescheduleAutopostLoop()
+  log("info", "account_deleted", { accountId: account.id, promotedId })
+  res.json({ ok: true })
 }
 
 export async function disconnectAccount(req: Request, res: Response) {

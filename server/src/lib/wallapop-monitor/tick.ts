@@ -161,7 +161,7 @@ export async function runWallapopMonitorTick(): Promise<void> {
   const prisma = getPrisma();
   if (!prisma) return;
   const accounts = await prisma.account.findMany({
-    select: { id: true, isDefault: true, createdAt: true },
+    select: { id: true, chromeSlot: true },
   });
   const places = assignChromePlaces(accounts);
   const active = accounts.filter(

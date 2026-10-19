@@ -9,21 +9,20 @@ import { getPrisma } from "./db"
 
 type AccountRow = {
   id: string
-  isDefault: boolean
-  createdAt: Date
+  chromeSlot: number
+}
+
+/** Next free slot. Freed slots stay free so a new account does not reuse a profile. */
+export function nextChromeSlot(slots: number[]): number {
+  if (slots.length === 0) return 0
+  return Math.max(...slots) + 1
 }
 
 export function assignChromePlaces(rows: AccountRow[]): Map<string, ChromePlace> {
   const places = new Map<string, ChromePlace>()
   for (const row of rows) {
-    if (row.isDefault) places.set(row.id, chromePlaceAt(0))
+    places.set(row.id, chromePlaceAt(row.chromeSlot))
   }
-  const others = rows
-    .filter((row) => !row.isDefault)
-    .sort((a, b) => a.createdAt.getTime() - b.createdAt.getTime())
-  others.forEach((row, index) => {
-    places.set(row.id, chromePlaceAt(index + 1))
-  })
   return places
 }
 
@@ -31,7 +30,7 @@ export async function chromePortForAccount(accountId: string): Promise<number> {
   const prisma = getPrisma()
   if (!prisma) return FIRST_ACCOUNT_CDP_PORT
   const accounts = await prisma.account.findMany({
-    select: { id: true, isDefault: true, createdAt: true },
+    select: { id: true, chromeSlot: true },
   })
   return assignChromePlaces(accounts).get(accountId)?.port ?? FIRST_ACCOUNT_CDP_PORT
 }

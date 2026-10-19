@@ -48,6 +48,14 @@ function emptySession(): SessionState {
   }
 }
 
+/** Forget an in-memory login after the account row is removed. */
+export function dropWallapopSession(accountId: string): void {
+  const gen = (generations.get(accountId) ?? 0) + 1
+  generations.set(accountId, gen)
+  sessions.delete(accountId)
+  if (defaultAccountId === accountId) defaultAccountId = null
+}
+
 function sessionRow(accountId: string): SessionState {
   let row = sessions.get(accountId)
   if (!row) {
@@ -73,7 +81,7 @@ async function resolveAccountTarget(accountId?: string): Promise<{
   const prisma = getPrisma()
   if (!prisma) throw new Error("Database is not configured.")
   const accounts = await prisma.account.findMany({
-    select: { id: true, isDefault: true, createdAt: true },
+    select: { id: true, isDefault: true, createdAt: true, chromeSlot: true },
   })
   const fallback = accounts.find((row) => row.isDefault) ?? accounts[0]
   if (!fallback) throw new Error("Default account is not configured.")
@@ -210,7 +218,7 @@ export async function rehydrateSavedAccountSessions(): Promise<void> {
   const prisma = getPrisma()
   if (!prisma) return
   const accounts = await prisma.account.findMany({
-    select: { id: true, isDefault: true, createdAt: true },
+    select: { id: true, isDefault: true, createdAt: true, chromeSlot: true },
   })
   const places = assignChromePlaces(accounts)
   await Promise.all(

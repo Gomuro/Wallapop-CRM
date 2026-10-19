@@ -171,6 +171,7 @@ async function seedDatabase(rows: FlatCategory[]) {
           name: DEFAULT_ACCOUNT_NAME,
           status: "ACTIVE",
           isDefault: true,
+          chromeSlot: 0,
         },
       })
     }

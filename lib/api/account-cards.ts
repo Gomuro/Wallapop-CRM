@@ -11,6 +11,12 @@ export async function listAccountCards(): Promise<ApiAccountCard[]> {
   return body.accounts
 }
 
+export async function deleteAccountCard(id: string): Promise<void> {
+  await apiClientFetch(`/accounts/${encodeURIComponent(id)}`, {
+    method: "DELETE",
+  })
+}
+
 export async function createAccountCard(name: string): Promise<ApiAccountCard> {
   const body = await apiClientFetch<{ account: ApiAccountCard }>("/accounts", {
     method: "POST",

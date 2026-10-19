@@ -1,8 +1,11 @@
 "use client"
 
 import Link from "next/link"
+import { useRouter } from "next/navigation"
 import { useCallback, useEffect, useState } from "react"
 import { ChevronLeftIcon, ChevronRightIcon, LoaderCircleIcon } from "lucide-react"
+
+import { ConfirmAction } from "@/components/confirm-action"
 
 import { AutopostIntervalForm } from "@/components/accounts/autopost-interval-form"
 import { ConnectAccountForm } from "@/components/accounts/connect-account-form"
@@ -29,6 +32,7 @@ import {
 } from "@/lib/accounts/chrome-place"
 import {
   createAccountCard,
+  deleteAccountCard,
   listAccountCards,
   type ApiAccountCard,
 } from "@/lib/api/account-cards"
@@ -76,6 +80,67 @@ function AccountSummary({ account }: { account: ApiAccountCard }) {
   )
 }
 
+function DeleteAccountButton({
+  accountId,
+  accountName,
+}: {
+  accountId: string
+  accountName: string
+}) {
+  const router = useRouter()
+  const [open, setOpen] = useState(false)
+  const [error, setError] = useState<string | null>(null)
+  const [pending, setPending] = useState(false)
+
+  async function confirm() {
+    setError(null)
+    setPending(true)
+    try {
+      await deleteAccountCard(accountId)
+      router.push("/accounts")
+      router.refresh()
+    } catch (caught) {
+      setError(
+        caught instanceof ApiError
+          ? caught.message
+          : "No se pudo eliminar la cuenta.",
+      )
+      setPending(false)
+    }
+  }
+
+  return (
+    <div className="border-t px-4 py-4">
+      <ConfirmAction
+        open={open}
+        onOpenChange={(next) => {
+          if (pending) return
+          setOpen(next)
+          if (!next) setError(null)
+        }}
+        triggerLabel="Eliminar cuenta"
+        triggerClassName="h-12 w-full"
+        triggerVariant="destructive"
+        title={`Eliminar ${accountName}`}
+        description="Se borra esta ficha del CRM. Los productos del almacén se quedan. Los anuncios en Wallapop no se tocan. El Chrome de esta cuenta no pasa a otra ficha. Si era la principal, la cuenta más antigua pasa a ser principal."
+        confirmLabel="Eliminar cuenta"
+        pendingLabel="Eliminando…"
+        confirmVariant="destructive"
+        error={error}
+        notice={
+          <p className="text-sm font-bold uppercase leading-snug text-destructive" role="note">
+            Si la eliminas, asegúrate. Esta ficha no se puede recuperar.
+          </p>
+        }
+        pending={pending}
+        onConfirm={() => {
+          void confirm()
+        }}
+      />
+    </div>
+  )
+}
+
 function AccountBody({ account }: { account: ApiAccountCard }) {
   return (
     <Card className="w-full gap-0">
@@ -96,6 +161,7 @@ function AccountBody({ account }: { account: ApiAccountCard }) {
       </CardContent>
       <ConnectAccountForm embedded accountId={account.id} />
       <AutopostIntervalForm embedded accountId={account.id} />
+      <DeleteAccountButton accountId={account.id} accountName={account.name} />
     </Card>
   )
 }

@@ -1,6 +1,7 @@
 /**
  * One Wallapop account, one Chrome. Ports are pinned: 9222, then 9232, 9242.
- * The first profile folder stays ChromeCDP-Persistent. Not a database column.
+ * Slot 0 keeps the profile folder ChromeCDP-Persistent.
+ * The slot is stored on the account. Deleting a card does not slide the others down.
  */
 export const FIRST_ACCOUNT_CDP_PORT = 9222
 export const FIRST_ACCOUNT_PROFILE_NAME = "ChromeCDP-Persistent"
@@ -11,7 +12,7 @@ export type ChromePlace = {
   profileName: string
 }
 
-/** Index 0 is the principal account. Later accounts step the port by 10. */
+/** Slot 0 is port 9222. Later slots step the port by 10. */
 export function chromePlaceAt(index: number): ChromePlace {
   const place = Number.isInteger(index) && index > 0 ? index : 0
   if (place === 0) {

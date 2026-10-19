@@ -3,6 +3,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest"
 import request from "supertest"
 
 import { createApp } from "../src/app"
+import { nextChromeSlot } from "../src/lib/account-chrome"
 import { getPrisma } from "../src/lib/db"
 import { findDefaultAccountId } from "../src/lib/default-account"
 import { deactivateListingAfterEliminar } from "../src/lib/product-eliminar"
@@ -25,6 +26,20 @@ import {
   seedCredentials,
   tinyPngBuffer,
 } from "./helpers"
+
+async function createSideAccount(name: string) {
+  const prisma = getPrisma()
+  if (!prisma) throw new Error("Database is not configured.")
+  const taken = await prisma.account.findMany({ select: { chromeSlot: true } })
+  return prisma.account.create({
+    data: {
+      name,
+      isDefault: false,
+      chromeSlot: nextChromeSlot(taken.map((row) => row.chromeSlot)),
+    },
+    select: { id: true },
+  })
+}
 
 describe("API v1 integration (Express + Postgres)", () => {
   let app: Express
@@ -1176,10 +1191,7 @@ describe("API v1 integration (Express + Postgres)", () => {
           },
         ]
         for (const neighbor of neighbors) {
-          const account = await prisma.account.create({
-            data: { name: neighbor.name, isDefault: false },
-            select: { id: true },
-          })
+          const account = await createSideAccount(neighbor.name)
           neighborIds.push(account.id)
           await prisma.productListing.create({
             data: {
@@ -1252,10 +1264,7 @@ describe("API v1 integration (Express + Postgres)", () => {
           externalUrl: "https://es.wallapop.com/item/sold-requeue-default",
         })
         expect(put.status).toBe(200)
-        const account = await prisma.account.create({
-          data: { name: `Vendedor ${sku}`, isDefault: false },
-          select: { id: true },
-        })
+        const account = await createSideAccount(`Vendedor ${sku}`)
         neighborId = account.id
         await prisma.productListing.create({
           data: {
@@ -1285,10 +1294,7 @@ describe("API v1 integration (Express + Postgres)", () => {
         expect(soldByAccount.get(sellerId!)).toBe("ACTIVE")
         expect(soldByAccount.get(neighborId)).toBe("DEACTIVATED")
 
-        const takenDown = await prisma.account.create({
-          data: { name: `Retirada ${sku}`, isDefault: false },
-          select: { id: true },
-        })
+        const takenDown = await createSideAccount(`Retirada ${sku}`)
         takenDownId = takenDown.id
         await prisma.productListing.create({
           data: {
@@ -1383,10 +1389,7 @@ describe("API v1 integration (Express + Postgres)", () => {
       })
       expect(created.status).toBe(201)
       const id = created.body.product?.id as string
-      const neighbor = await prisma.account.create({
-        data: { name: "Sur bloque", isDefault: false },
-        select: { id: true },
-      })
+      const neighbor = await createSideAccount("Sur bloque")
       try {
         await prisma.productListing.create({
           data: {
@@ -1421,10 +1424,7 @@ describe("API v1 integration (Express + Postgres)", () => {
       const prisma = getPrisma()
       expect(prisma).toBeTruthy()
       if (!prisma) return
-      const neighbor = await prisma.account.create({
-        data: { name: "Sur chrome", isDefault: false },
-        select: { id: true },
-      })
+      const neighbor = await createSideAccount("Sur chrome")
       try {
         for (const path of [
           "/api/v1/products/missing-product/wallapop-sold",
