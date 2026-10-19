@@ -410,7 +410,7 @@ async function readAllPages(
   page: Page,
   tab: string,
   confirmHrefs?: string[],
-): Promise<{ rows: PublishedCatalogRow[]; total: number | null } | null> {
+): Promise<{ rows: ProCatalogRow[]; total: number | null } | null> {
   await openTab(page, tab)
   if (tab === "Activos" && confirmHrefs && confirmHrefs.length > 0) {
     const appeared = await waitForActivosHrefs(page, confirmHrefs)
