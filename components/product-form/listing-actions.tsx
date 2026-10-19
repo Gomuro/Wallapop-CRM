@@ -253,8 +253,8 @@ export function DevolucionButton({
       title={withAccount("Devolución", accountLabel)}
       description={
         hasItemUrl
-          ? "Se borrará el anuncio vendido de esta cuenta y solo esta cuenta volverá a En venta y a la cola. Las demás cuentas no se publican. No se crea un producto nuevo."
-          : "Esta cuenta ya no tiene URL pública. Solo ella volverá a En venta y a la cola. Las demás cuentas no se publican. No se crea un producto nuevo."
+          ? "Se borrará el anuncio vendido de esta cuenta. El producto vuelve a En venta y cada cuenta que ya no tiene anuncio vuelve a la cola. Las que siguen publicadas no cambian. No se crea un producto nuevo."
+          : "Esta cuenta ya no tiene anuncio. El producto vuelve a En venta y cada cuenta que ya no tiene anuncio vuelve a la cola. Las que siguen publicadas no cambian. No se crea un producto nuevo."
       }
       confirmLabel="Confirmar devolución"
       pendingLabel={hasItemUrl ? "En Wallapop…" : "Guardando…"}

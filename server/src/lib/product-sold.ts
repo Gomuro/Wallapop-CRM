@@ -85,9 +85,11 @@ async function requeueSellerListing(
 }
 
 /**
- * After a return: same product leaves SOLD and the selling account's listing
- * goes back to READY_TO_POST with no /item/ URL. Other accounts stay put.
- * Does not create a second warehouse row.
+ * After a return the warehouse is ACTIVE again. The selling account goes
+ * back to the queue. Every other listing already taken down (DEACTIVATED)
+ * goes back too, so a sibling Eliminar is republished. A listing that is
+ * still live stays as it is. Accounts with no row are not created, except
+ * the selling account when it has none. Does not create a second warehouse row.
  */
 export async function requeueSoldProductAfterReturn(
   prisma: PrismaDb,
@@ -113,6 +115,16 @@ export async function requeueSoldProductAfterReturn(
       },
     })
     await requeueSellerListing(tx, productId, accountId)
+    await tx.productListing.updateMany({
+      where: { productId, status: "DEACTIVATED" },
+      data: {
+        status: "READY_TO_POST",
+        externalUrl: null,
+        externalItemId: null,
+        postingAttempts: 0,
+        lastPublishError: null,
+      },
+    })
     return { kind: "ok" }
   })
 }

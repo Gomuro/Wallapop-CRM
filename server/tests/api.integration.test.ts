@@ -1224,7 +1224,7 @@ describe("API v1 integration (Express + Postgres)", () => {
       }
     })
 
-    it("requeues only the account recorded on the sale", async () => {
+    it("requeues the seller and every taken-down account", async () => {
       const prisma = getPrisma()
       expect(prisma).toBeTruthy()
       if (!prisma) return
@@ -1235,7 +1235,7 @@ describe("API v1 integration (Express + Postgres)", () => {
       const created = await agent.post("/api/v1/products").send({
         sku,
         title: "Sold requeue account",
-        description: "Return touches the seller only",
+        description: "Return requeues taken-down accounts",
         price: 14,
         currency: "EUR",
         categoryId,
@@ -1245,6 +1245,7 @@ describe("API v1 integration (Express + Postgres)", () => {
       expect(created.status).toBe(201)
       const id = created.body.product?.id as string
       let neighborId = ""
+      let takenDownId = ""
       try {
         const put = await agent.put(`/api/v1/products/${id}/listing`).send({
           status: "ACTIVE",
@@ -1284,6 +1285,20 @@ describe("API v1 integration (Express + Postgres)", () => {
         expect(soldByAccount.get(sellerId!)).toBe("ACTIVE")
         expect(soldByAccount.get(neighborId)).toBe("DEACTIVATED")
 
+        const takenDown = await prisma.account.create({
+          data: { name: `Retirada ${sku}`, isDefault: false },
+          select: { id: true },
+        })
+        takenDownId = takenDown.id
+        await prisma.productListing.create({
+          data: {
+            productId: id,
+            accountId: takenDownId,
+            status: "DEACTIVATED",
+            externalUrl: null,
+          },
+        })
+
         const requeued = await requeueSoldProductAfterReturn(prisma, id)
         expect(requeued.kind).toBe("ok")
         const afterReturn = await prisma.product.findUnique({
@@ -1309,10 +1324,13 @@ describe("API v1 integration (Express + Postgres)", () => {
         )
         expect(returned.get(neighborId)?.status).toBe("READY_TO_POST")
         expect(returned.get(neighborId)?.externalUrl).toBeNull()
+        expect(returned.get(takenDownId)?.status).toBe("READY_TO_POST")
+        expect(returned.get(takenDownId)?.externalUrl).toBeNull()
       } finally {
         await prisma.product.delete({ where: { id } }).catch(() => undefined)
-        if (neighborId) {
-          await prisma.account.deleteMany({ where: { id: neighborId } })
+        const accountIds = [neighborId, takenDownId].filter(Boolean)
+        if (accountIds.length > 0) {
+          await prisma.account.deleteMany({ where: { id: { in: accountIds } } })
         }
       }
     })
