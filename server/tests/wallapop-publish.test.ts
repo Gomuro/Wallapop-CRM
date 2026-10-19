@@ -4,7 +4,9 @@ import path from "node:path"
 import { chromium, type Page } from "playwright"
 import { describe, expect, it } from "vitest"
 
+import type { CategoryUploadField } from "../../lib/inventory/category-upload-fields"
 import { productListingApiPutBodySchema } from "../../lib/validations/listing"
+import { ensureExtraUploadFields } from "../src/lib/wallapop-publish/extra-fields"
 import { selectConsumerGoods } from "../src/lib/wallapop-publish/flow"
 import { dismissSearchOverlay } from "../src/lib/wallapop-publish/nav"
 import {
@@ -33,7 +35,30 @@ import {
   roleRadioIsChecked,
   type PublishedCatalogItem,
 } from "../src/lib/wallapop-publish"
+import { WallapopPublishError } from "../src/lib/wallapop-publish/types"
 import { shouldRevertPublishClaim } from "../src/routes/product-publish"
+
+const colorField: CategoryUploadField = {
+  id: "color",
+  type: "list",
+  required: true,
+  label: "Color",
+  min: 1,
+  max: 2,
+  options: [{ id: "black", title: "Negro" }],
+  source: null,
+}
+
+const COLOR_LIST_HTML = `
+  <walla-dropdown data-testid="color">
+    <div role="button">Color*</div>
+    <div class="walla-dropdown__floating-area" style="display:block;height:80px">
+      <walla-dropdown-item role="option" aria-label="Negro" style="display:block;height:40px">
+        <input id="black" type="checkbox">
+      </walla-dropdown-item>
+      <walla-button id="ok" style="display:block;width:200px;height:40px"></walla-button>
+    </div>
+  </walla-dropdown>`
 
 describe("crmTitleMatchesForm", () => {
   it("treats whitespace as the same title", () => {
@@ -736,6 +761,90 @@ describe("upload vertical choice", () => {
       expect(
         await page.evaluate(() => document.body.dataset.searchInput ?? ""),
       ).toBe("")
+    } finally {
+      await browser.close()
+    }
+  })
+})
+
+describe("upload Color field", () => {
+  it("continues when Wallapop never shows Color", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(
+        `<!DOCTYPE html><body><section>Envío Estado</section></body>`,
+      )
+      await expect(
+        ensureExtraUploadFields(page, [colorField], { color: ["black"] }),
+      ).resolves.toBeUndefined()
+    } finally {
+      await browser.close()
+    }
+  }, 15_000)
+
+  it("selects Negro and clicks the shadow Seleccionar button", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><body id="root"></body>`)
+      const done = ensureExtraUploadFields(page, [colorField], {
+        color: ["black"],
+      })
+      await page.waitForTimeout(800)
+      await page.evaluate((html) => {
+        document.body.insertAdjacentHTML("beforeend", html)
+        const button = document.querySelector("#ok")
+        if (!button) return
+        const root = button.attachShadow({ mode: "open" })
+        root.innerHTML = "<span>Seleccionar</span>"
+        button.addEventListener("click", () => {
+          button.setAttribute("data-clicked", "1")
+        })
+      }, COLOR_LIST_HTML)
+      await done
+      expect(await page.locator("#ok").getAttribute("data-clicked")).toBe("1")
+    } finally {
+      await browser.close()
+    }
+  })
+
+  it("still fails when Color is open but Negro is not in the list", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><body>
+        <walla-dropdown data-testid="color">
+          <div role="button">Color*</div>
+          <div class="walla-dropdown__floating-area" style="display:block;height:40px">
+            <walla-dropdown-item role="option" aria-label="Blanco" style="display:block;height:40px">
+              <input id="white" type="checkbox">
+            </walla-dropdown-item>
+          </div>
+        </walla-dropdown>
+      </body>`)
+      await expect(
+        ensureExtraUploadFields(page, [colorField], { color: ["black"] }),
+      ).rejects.toBeInstanceOf(WallapopPublishError)
+    } finally {
+      await browser.close()
+    }
+  })
+
+  it("still fails when a required field other than Color is missing", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><body></body>`)
+      const material: CategoryUploadField = {
+        ...colorField,
+        id: "material",
+        label: "Material",
+        options: [{ id: "other", title: "Otro" }],
+      }
+      await expect(
+        ensureExtraUploadFields(page, [material], { material: ["other"] }),
+      ).rejects.toBeInstanceOf(WallapopPublishError)
     } finally {
       await browser.close()
     }

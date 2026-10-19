@@ -44,6 +44,12 @@ const OPEN_FIELD_JS = `((id, label) => {
   return true;
 })`;
 
+const HOST_PRESENT_JS = `((id, label) => Boolean(${FIND_HOST_JS}(id, label)))`;
+
+/** Category extras (Color) mount after the leaf is chosen. */
+const COLOR_HOST_WAIT_MS = 4_000;
+const COLOR_HOST_POLL_MS = 250;
+
 function openPanel(page: Page) {
   return page
     .locator(".walla-dropdown__floating-area")
@@ -86,6 +92,21 @@ async function confirmDropdownPanel(
   });
   if ((await confirm.count()) > 0) {
     await confirm.first().click({ force: true });
+    return;
+  }
+  const hosts = panel.locator("walla-button");
+  const count = await hosts.count();
+  for (let i = 0; i < count; i++) {
+    const host = hosts.nth(i);
+    const text = await host.evaluate(
+      (el) =>
+        (el.shadowRoot?.textContent || el.textContent || "")
+          .replace(/\s+/g, " ")
+          .trim(),
+    );
+    if (!/^(Seleccionar|Aplicar)$/i.test(text)) continue;
+    await host.click({ force: true });
+    return;
   }
 }
 
@@ -112,6 +133,26 @@ async function clickFieldOptions(
   return n;
 }
 
+async function fieldHostPresent(
+  page: Page,
+  id: string,
+  label: string,
+): Promise<boolean> {
+  return (await page.evaluate(
+    `${HOST_PRESENT_JS}(${JSON.stringify(id)}, ${JSON.stringify(label)})`,
+  )) as boolean;
+}
+
+/** Color is required in CRM, but some leaves never render the dropdown. */
+async function waitForColorHost(page: Page, label: string): Promise<boolean> {
+  const deadline = Date.now() + COLOR_HOST_WAIT_MS;
+  while (Date.now() <= deadline) {
+    if (await fieldHostPresent(page, "color", label)) return true;
+    await page.waitForTimeout(COLOR_HOST_POLL_MS);
+  }
+  return false;
+}
+
 async function fillOneExtraField(
   page: Page,
   field: CategoryUploadField,
@@ -119,6 +160,23 @@ async function fillOneExtraField(
 ): Promise<void> {
   const titles = titlesForIds(field, ids);
   await closeOpenDropdowns(page);
+  if (
+    field.id === "color" &&
+    !(await fieldHostPresent(page, field.id, field.label))
+  ) {
+    const appeared = await waitForColorHost(page, field.label);
+    if (!appeared) {
+      log("info", "wallapop_publish_extra_field", {
+        id: field.id,
+        opened: false,
+        clicked: 0,
+        titles,
+        ids,
+        skipped: "host_absent",
+      });
+      return;
+    }
+  }
   const opened = (await page.evaluate(
     `${OPEN_FIELD_JS}(${JSON.stringify(field.id)}, ${JSON.stringify(field.label)})`,
   )) as boolean;
