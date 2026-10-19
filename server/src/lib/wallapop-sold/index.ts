@@ -23,6 +23,7 @@ export {
 } from "./click"
 export {
   firstSoldCatalogHrefMatches,
+  soldCatalogHrefMatches,
   SOLD_CATALOG_ROWS_EVAL,
 } from "./verify"
 

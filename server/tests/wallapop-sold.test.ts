@@ -12,6 +12,7 @@ import {
   CLICK_MARK_AS_SOLD_EVAL,
   FIND_SELLER_SOLD_EVAL,
   firstSoldCatalogHrefMatches,
+  soldCatalogHrefMatches,
   SOLD_CATALOG_ROWS_EVAL,
 } from "../src/lib/wallapop-sold"
 import {
@@ -144,5 +145,18 @@ describe("sold DOM fixtures", () => {
     } finally {
       await browser.close()
     }
+  })
+
+  it("accepts a sold href that is not the first Vendidos row", () => {
+    expect(
+      soldCatalogHrefMatches(
+        [
+          { href: "https://es.wallapop.com/item/other-1", sold: true },
+          { href: MESA, sold: true },
+        ],
+        MESA,
+      ),
+    ).toBe(true)
+    expect(soldCatalogHrefMatches([{ href: MESA, sold: false }], MESA)).toBe(false)
   })
 })

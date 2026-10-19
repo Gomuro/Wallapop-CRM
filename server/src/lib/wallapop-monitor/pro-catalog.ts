@@ -36,7 +36,8 @@ const PAGE_KIND_EVAL = `(() => {
   return "unknown"
 })()`
 
-const ROWS_EVAL = `(() => {
+/** Pro table row. A sale is only `badgetype="sold"`, the same badge as the classic Vendidos list. */
+export const PRO_CATALOG_ROWS_EVAL = `(() => {
   function walk(root, visit) {
     if (!root || !root.querySelectorAll) return
     root.querySelectorAll("*").forEach((el) => {
@@ -48,6 +49,7 @@ const ROWS_EVAL = `(() => {
   document.querySelectorAll('tr[id^="CatalogItem_"]').forEach((row) => {
     let href = ""
     let reserved = false
+    let sold = false
     walk(row, (node) => {
       if (
         !href &&
@@ -56,14 +58,12 @@ const ROWS_EVAL = `(() => {
       ) {
         href = String(node.href)
       }
-      if (
-        node.tagName === "WALLAPOP-BADGE" &&
-        node.getAttribute("badgetype") === "reserved"
-      ) {
-        reserved = true
-      }
+      if (node.tagName !== "WALLAPOP-BADGE") return
+      const kind = node.getAttribute("badgetype")
+      if (kind === "reserved") reserved = true
+      if (kind === "sold") sold = true
     })
-    if (href) rows.push({ href, reserved })
+    if (href) rows.push({ href, reserved, sold })
   })
   const info = document.querySelector(
     "tsl-pagination-actions .PaginationActions__info",
@@ -98,8 +98,10 @@ const CLICK_NEXT_EVAL = `(() => {
   return true
 })()`
 
+type ProCatalogRow = PublishedCatalogRow & { sold: boolean }
+
 type PageShot = {
-  rows: PublishedCatalogRow[]
+  rows: ProCatalogRow[]
   pager: string
 }
 
@@ -282,7 +284,7 @@ export async function wallapopCatalogKind(
 }
 
 async function readShot(page: Page): Promise<PageShot> {
-  const shot = (await page.evaluate(ROWS_EVAL)) as PageShot | null
+  const shot = (await page.evaluate(PRO_CATALOG_ROWS_EVAL)) as PageShot | null
   return { rows: shot?.rows ?? [], pager: shot?.pager ?? "" }
 }
 
@@ -417,7 +419,7 @@ async function readAllPages(
       appeared,
     })
   }
-  const seen = new Map<string, PublishedCatalogRow>()
+  const seen = new Map<string, ProCatalogRow>()
   let total: number | null = null
   let pager = ""
   for (let i = 0; i < MAX_PAGES; i += 1) {
@@ -445,11 +447,15 @@ async function readAllPages(
     })
     return null
   }
+  const values = [...seen.values()]
   log("info", "wallapop_monitor_pro_tab", {
     tab,
     rows: seen.size,
     total,
-    reserved: [...seen.values()].filter((row) => row.reserved).length,
+    reserved: values.filter((row) => row.reserved).length,
+    ...(tab === "Vendidos"
+      ? { soldBadges: values.filter((row) => row.sold).length }
+      : {}),
   })
   return { rows: [...seen.values()], total }
 }
@@ -469,6 +475,8 @@ export async function scrapeProCatalogs(
   if (!inactivos) return null
   return {
     published: activos.rows,
-    sold: vendidos.rows.map((row) => ({ href: row.href, sold: true })),
+    sold: vendidos.rows
+      .filter((row) => row.sold)
+      .map((row) => ({ href: row.href, sold: true as const })),
   }
 }

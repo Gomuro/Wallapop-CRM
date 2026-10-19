@@ -12,7 +12,7 @@ import {
   SoldStep,
   WallapopSoldError,
 } from "./types"
-import { vendidosFirstRowMatches } from "./verify"
+import { vendidosFirstRowMatches, vendidosHrefMatches } from "./verify"
 
 async function requireSellerSoldButton(page: Page): Promise<void> {
   const found = await findSellerSoldButton(page)
@@ -27,16 +27,21 @@ async function requireSellerSoldButton(page: Page): Promise<void> {
 async function confirmAndVerifyVendidos(
   itemPage: Page,
   itemUrl: string,
+  matchAnywhere: boolean,
 ): Promise<void> {
   const modalPage = await clickSellerSoldAndWaitTab(itemPage)
   await clickMarkAsSoldConfirm(modalPage)
   await modalPage.waitForTimeout(2_000)
   await gotoVendidosCatalog(modalPage)
-  const matched = await vendidosFirstRowMatches(modalPage, itemUrl)
+  const matched = matchAnywhere
+    ? await vendidosHrefMatches(modalPage, itemUrl)
+    : await vendidosFirstRowMatches(modalPage, itemUrl)
   if (!matched) {
     throw new WallapopSoldError(
       "vendidos",
-      "El anuncio no apareció el primero en Vendidos.",
+      matchAnywhere
+        ? "El anuncio no apareció en Vendidos."
+        : "El anuncio no apareció el primero en Vendidos.",
     )
   }
 }
@@ -54,7 +59,7 @@ export async function runSoldAfterAttach(
     return { dryRun: true, step: "before_confirm", itemUrl: input.itemUrl }
   }
   mark("confirm")
-  await confirmAndVerifyVendidos(page, input.itemUrl)
+  await confirmAndVerifyVendidos(page, input.itemUrl, input.matchAnywhere === true)
   mark("sold")
   return { dryRun: false, step: "sold", itemUrl: input.itemUrl }
 }

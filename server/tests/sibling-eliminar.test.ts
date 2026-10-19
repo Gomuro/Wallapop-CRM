@@ -1,14 +1,14 @@
 import { describe, expect, it } from "vitest"
 
-import { siblingEliminarTargets } from "../src/lib/sibling-eliminar"
+import { siblingSoldTargets } from "../src/lib/sibling-eliminar"
 
 const VEVOR = "https://es.wallapop.com/item/vevor-cambiador-1313941336"
 const OTHER = "https://es.wallapop.com/item/otro-anuncio-1310000001"
 
-describe("siblingEliminarTargets", () => {
-  it("keeps the selling account and takes the other live ads", () => {
+describe("siblingSoldTargets", () => {
+  it("keeps the selling account and marks the other live ads sold", () => {
     expect(
-      siblingEliminarTargets(
+      siblingSoldTargets(
         [
           {
             accountId: "default",
@@ -44,9 +44,9 @@ describe("siblingEliminarTargets", () => {
     ])
   })
 
-  it("does not eliminar the account that recorded the sale", () => {
+  it("does not mark the account that recorded the sale", () => {
     expect(
-      siblingEliminarTargets(
+      siblingSoldTargets(
         [
           {
             accountId: "default",

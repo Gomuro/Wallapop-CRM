@@ -2,8 +2,7 @@ import { wallapopEsItemUrlOrNull } from "../../../lib/inventory/wallapop-item-ur
 import { assignChromePlaces } from "./account-chrome"
 import { getPrisma } from "./db"
 import { log, serializeError } from "./log"
-import { deactivateListingAfterEliminar } from "./product-eliminar"
-import { eliminarWallapopInBrowser } from "./wallapop-eliminar"
+import { markWallapopSoldInBrowser } from "./wallapop-sold"
 
 const LIVE_LISTING = new Set(["ACTIVE", "RESERVED"])
 
@@ -13,20 +12,20 @@ export type SiblingListing = {
   externalUrl: string | null
 }
 
-export type SiblingEliminarTarget = {
+export type SiblingSoldTarget = {
   accountId: string
   itemUrl: string
 }
 
 /**
- * Live ads on the other accounts. The account that just sold is left alone:
- * its row is already deactivated, and Eliminar is not how a sale is recorded.
+ * Live ads on the other accounts. The account that just sold is left alone.
+ * Those ads are marked sold too. They are not deleted.
  */
-export function siblingEliminarTargets(
+export function siblingSoldTargets(
   listings: SiblingListing[],
   soldAccountId: string | null,
-): SiblingEliminarTarget[] {
-  const targets: SiblingEliminarTarget[] = []
+): SiblingSoldTarget[] {
+  const targets: SiblingSoldTarget[] = []
   const seen = new Set<string>()
   for (const listing of listings) {
     if (soldAccountId && listing.accountId === soldAccountId) continue
@@ -54,24 +53,25 @@ function enqueueOnPort(port: number, run: () => Promise<void>): void {
   )
 }
 
-async function runSiblingEliminar(
+async function runSiblingSold(
   productId: string,
-  target: SiblingEliminarTarget,
+  target: SiblingSoldTarget,
   port: number,
 ): Promise<void> {
-  log("info", "wallapop_sibling_eliminar_start", {
+  log("info", "wallapop_sibling_sold_start", {
     productId,
     accountId: target.accountId,
     port,
     itemUrl: target.itemUrl,
   })
-  const result = await eliminarWallapopInBrowser({
+  const result = await markWallapopSoldInBrowser({
     itemUrl: target.itemUrl,
     dryRun: false,
     cdpPort: port,
+    matchAnywhere: true,
   })
-  if (result.dryRun || result.step !== "eliminated") {
-    log("warn", "wallapop_sibling_eliminar_not_done", {
+  if (result.dryRun || result.step !== "sold") {
+    log("warn", "wallapop_sibling_sold_not_done", {
       productId,
       accountId: target.accountId,
       step: result.step,
@@ -81,36 +81,35 @@ async function runSiblingEliminar(
   }
   const prisma = getPrisma()
   if (!prisma) return
-  const updated = await deactivateListingAfterEliminar(
-    prisma,
-    productId,
-    target.accountId,
-  )
-  log("info", "wallapop_sibling_eliminar_done", {
+  const updated = await prisma.productListing.updateMany({
+    where: { productId, accountId: target.accountId },
+    data: { status: "DEACTIVATED" },
+  })
+  log("info", "wallapop_sibling_sold_done", {
     productId,
     accountId: target.accountId,
-    updated,
+    updated: updated.count,
   })
 }
 
 function enqueueSibling(
   productId: string,
-  target: SiblingEliminarTarget,
+  target: SiblingSoldTarget,
   port: number,
 ): void {
   const key = `${productId}:${target.accountId}`
   if (inflight.has(key)) return
   inflight.add(key)
-  log("info", "wallapop_sibling_eliminar_queued", {
+  log("info", "wallapop_sibling_sold_queued", {
     productId,
     accountId: target.accountId,
     port,
   })
   enqueueOnPort(port, async () => {
     try {
-      await runSiblingEliminar(productId, target, port)
+      await runSiblingSold(productId, target, port)
     } catch (error) {
-      log("error", "wallapop_sibling_eliminar_failed", {
+      log("error", "wallapop_sibling_sold_failed", {
         productId,
         accountId: target.accountId,
         port,
@@ -134,8 +133,8 @@ async function portsByAccount(): Promise<Map<string, number>> {
   return ports
 }
 
-/** After this account's sale, Eliminar the same product on every other live ad. */
-export async function scheduleSiblingEliminar(
+/** After this account's sale, mark the same product sold on every other live ad. */
+export async function scheduleSiblingSold(
   productId: string,
   soldAccountId: string,
 ): Promise<void> {
@@ -151,10 +150,10 @@ export async function scheduleSiblingEliminar(
   })
   if (!product) return
   const ports = await portsByAccount()
-  for (const target of siblingEliminarTargets(product.listings, soldAccountId)) {
+  for (const target of siblingSoldTargets(product.listings, soldAccountId)) {
     const port = ports.get(target.accountId)
     if (port == null) {
-      log("warn", "wallapop_sibling_eliminar_no_port", {
+      log("warn", "wallapop_sibling_sold_no_port", {
         productId,
         accountId: target.accountId,
       })
@@ -167,6 +166,7 @@ export async function scheduleSiblingEliminar(
 /**
  * Sold products whose other accounts still have a live /item/.
  * A sale recorded before this follow-up, or a failed click, is picked up here.
+ * The ad stays on Wallapop. It is marked sold, not deleted.
  */
 export async function scheduleOpenSiblingAdsForSoldProducts(): Promise<void> {
   const prisma = getPrisma()
@@ -186,7 +186,7 @@ export async function scheduleOpenSiblingAdsForSoldProducts(): Promise<void> {
   })
   const ports = await portsByAccount()
   for (const product of products) {
-    for (const target of siblingEliminarTargets(
+    for (const target of siblingSoldTargets(
       product.listings,
       product.soldAccountId,
     )) {

@@ -4,7 +4,7 @@ import { findDefaultAccountId } from "./default-account"
 import { getPrisma } from "./db"
 import { log } from "./log"
 
-/** Not on Wallapop yet. A sale must take these off the queue. Live ads stay for Eliminar. */
+/** Not on Wallapop yet. A sale takes these off the queue. Live ads are marked sold and keep their URL. */
 const QUEUE_LISTING_STATUSES = ["READY_TO_POST", "POSTING"] as const
 
 const OFF_QUEUE_DATA = {

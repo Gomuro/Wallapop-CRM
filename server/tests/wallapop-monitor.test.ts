@@ -21,7 +21,7 @@ import {
   planMonitorUpdates,
   PUBLISHED_CATALOG_ROWS_EVAL,
 } from "../src/lib/wallapop-monitor"
-import { parseProPager } from "../src/lib/wallapop-monitor/pro-catalog"
+import { parseProPager, PRO_CATALOG_ROWS_EVAL } from "../src/lib/wallapop-monitor/pro-catalog"
 import { parseSnapshotText } from "../scripts/apply-catalog-url-snapshot"
 
 const ARMARIO = "https://es.wallapop.com/item/armario-escobero-1308052780"
@@ -132,6 +132,17 @@ describe("planMonitorUpdates", () => {
     expect(plan.orphanPublished).toEqual([publishedDuringScrape])
   })
 
+  it("treats a Vendidos row without a sale as a removed ad, not a sale", () => {
+    const plan = planMonitorUpdates(
+      [{ href: ARMARIO, reserved: false }],
+      [{ href: MESA, sold: false }],
+      listings,
+    )
+    expect(plan.toSoldProductIds).toEqual([])
+    expect(plan.toDeactivated).toEqual(["l-silla", "l-mesa"])
+    expect(plan.toReserved).toEqual([])
+  })
+
   it("logs catalog hrefs that are not in CRM instead of auto-SOLD", () => {
     const plan = planMonitorUpdates(
       [{ href: "https://es.wallapop.com/item/orphan-9", reserved: true }],
@@ -172,6 +183,35 @@ describe("published catalog DOM", () => {
       expect(byKey.get(wallapopItemPathKey(ARMARIO))).toBe(true)
       expect(byKey.get(wallapopItemPathKey(SILLA))).toBe(false)
       expect(byKey.get(wallapopItemPathKey(MESA))).toBe(true)
+    } finally {
+      await browser.close()
+    }
+  })
+
+  it("reads a pro Vendidos row as sold only when the sold badge is there", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`
+        <table>
+          <tr id="CatalogItem_a">
+            <td><a href="https://es.wallapop.com/item/sold-one-111">a</a>
+            <wallapop-badge badgetype="sold"></wallapop-badge></td>
+          </tr>
+          <tr id="CatalogItem_b">
+            <td><a href="https://es.wallapop.com/item/gone-one-222">b</a></td>
+          </tr>
+        </table>
+        <tsl-pagination-actions><span class="PaginationActions__info">1 - 2 de 2</span></tsl-pagination-actions>
+      `)
+      const shot = (await page.evaluate(PRO_CATALOG_ROWS_EVAL)) as {
+        rows: { href: string; sold: boolean }[]
+      }
+      const bySold = new Map(
+        shot.rows.map((row) => [wallapopItemPathKey(row.href), row.sold]),
+      )
+      expect(bySold.get(wallapopItemPathKey("https://es.wallapop.com/item/sold-one-111"))).toBe(true)
+      expect(bySold.get(wallapopItemPathKey("https://es.wallapop.com/item/gone-one-222"))).toBe(false)
     } finally {
       await browser.close()
     }

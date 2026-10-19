@@ -21,6 +21,8 @@ export type MarkWallapopSoldInput = {
   itemUrl: string
   dryRun: boolean
   cdpPort?: number
+  /** Sibling follow-up: the ad may not be the first Vendidos row. */
+  matchAnywhere?: boolean
 }
 
 export type MarkWallapopSoldResult = {

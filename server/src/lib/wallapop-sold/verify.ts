@@ -35,6 +35,18 @@ export function firstSoldCatalogHrefMatches(
   return wallapopItemPathKey(first.href) === wanted
 }
 
+/** The href is somewhere in Vendidos with the sold badge. Not required to be the first row. */
+export function soldCatalogHrefMatches(
+  rows: SoldCatalogRow[],
+  wantedUrl: string,
+): boolean {
+  const wanted = wallapopItemPathKey(wantedUrl)
+  if (!wanted) return false
+  return rows.some(
+    (row) => row.sold && wallapopItemPathKey(row.href) === wanted,
+  )
+}
+
 export async function scrapeSoldCatalogRows(
   page: Page,
 ): Promise<SoldCatalogRow[]> {
@@ -46,6 +58,20 @@ export async function scrapeSoldCatalogRows(
     })
     return []
   }
+}
+
+export async function vendidosHrefMatches(
+  page: Page,
+  itemUrl: string,
+): Promise<boolean> {
+  const rows = await scrapeSoldCatalogRows(page)
+  const ok = soldCatalogHrefMatches(rows, itemUrl)
+  log(ok ? "info" : "warn", "wallapop_sold_vendidos_verify", {
+    ok,
+    anywhere: true,
+    scanned: rows.length,
+  })
+  return ok
 }
 
 export async function vendidosFirstRowMatches(

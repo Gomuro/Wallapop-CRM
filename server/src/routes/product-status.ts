@@ -14,7 +14,7 @@ import {
 } from "../../../lib/inventory/listing-active"
 import { findDefaultAccountId, DEFAULT_ACCOUNT_MISSING_MESSAGE } from "../lib/default-account"
 import { markProductSoldTx, type SoldTxResult } from "../lib/product-sold"
-import { scheduleSiblingEliminar } from "../lib/sibling-eliminar"
+import { scheduleSiblingSold } from "../lib/sibling-eliminar"
 import { dequeueInactiveWarehouseQueue } from "../lib/warehouse-inactive"
 import { prismaErrorCode } from "../lib/prisma-error"
 import { loadProductCard, paramId, sendZod, toProductJson } from "./product-json"
@@ -175,7 +175,7 @@ export async function postProductSold(req: Request, res: Response) {
     throw error
   }
   if (sendSoldTxResult(res, txResult)) return
-  void scheduleSiblingEliminar(id, accountId)
+  void scheduleSiblingSold(id, accountId)
 
   const product = await loadProductCard(prisma, id)
   if (!product) {
