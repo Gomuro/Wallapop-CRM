@@ -2,6 +2,29 @@ import type { Prisma } from "../../generated/prisma/client"
 
 import { findDefaultAccountId } from "./default-account"
 import { getPrisma } from "./db"
+import { log } from "./log"
+
+/** Not on Wallapop yet. A sale must take these off the queue. Live ads stay for Eliminar. */
+const QUEUE_LISTING_STATUSES = ["READY_TO_POST", "POSTING"] as const
+
+const OFF_QUEUE_DATA = {
+  status: "DEACTIVATED" as const,
+  externalUrl: null,
+  externalItemId: null,
+  postingAttempts: 0,
+  lastPublishError: null,
+}
+
+export function siblingQueueOffWhere(
+  productId: string,
+  soldAccountId: string | null,
+): Prisma.ProductListingWhereInput {
+  return {
+    productId,
+    status: { in: [...QUEUE_LISTING_STATUSES] },
+    ...(soldAccountId ? { accountId: { not: soldAccountId } } : {}),
+  }
+}
 
 type PrismaDb = NonNullable<ReturnType<typeof getPrisma>>
 type SoldTx = Prisma.TransactionClient
@@ -25,10 +48,13 @@ export async function markProductSoldTx(
   return prisma.$transaction(async (tx) => {
     const existing = await tx.product.findUnique({
       where: { id },
-      select: { id: true, status: true, price: true },
+      select: { id: true, status: true, price: true, soldAccountId: true },
     })
     if (!existing) return { kind: "not_found" }
-    if (existing.status === "SOLD") return { kind: "already_sold" }
+    if (existing.status === "SOLD") {
+      await pullSiblingQueueInTx(tx, id, existing.soldAccountId)
+      return { kind: "already_sold" }
+    }
     await tx.product.update({
       where: { id },
       data: {
@@ -42,8 +68,45 @@ export async function markProductSoldTx(
       where: { productId: id, accountId: body.accountId },
       data: { status: "DEACTIVATED" },
     })
+    await pullSiblingQueueInTx(tx, id, body.accountId)
     return { kind: "ok" }
   })
+}
+
+async function pullSiblingQueueInTx(
+  tx: SoldTx,
+  productId: string,
+  soldAccountId: string | null,
+): Promise<void> {
+  await tx.productListing.updateMany({
+    where: siblingQueueOffWhere(productId, soldAccountId),
+    data: OFF_QUEUE_DATA,
+  })
+}
+
+/** Sold rows still sitting in another account's queue. Monitor picks these up. */
+export async function pullQueuedListingsForSoldProducts(): Promise<number> {
+  const prisma = getPrisma()
+  if (!prisma) return 0
+  const products = await prisma.product.findMany({
+    where: {
+      status: "SOLD",
+      listings: { some: { status: { in: [...QUEUE_LISTING_STATUSES] } } },
+    },
+    select: { id: true, soldAccountId: true },
+  })
+  let cleared = 0
+  for (const product of products) {
+    const result = await prisma.productListing.updateMany({
+      where: siblingQueueOffWhere(product.id, product.soldAccountId),
+      data: OFF_QUEUE_DATA,
+    })
+    cleared += result.count
+  }
+  if (cleared > 0) {
+    log("info", "wallapop_sold_queue_cleared", { count: cleared })
+  }
+  return cleared
 }
 
 async function recordedOrDefaultAccountId(

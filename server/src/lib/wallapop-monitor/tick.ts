@@ -3,6 +3,7 @@ import type { Page } from "playwright";
 import { assignChromePlaces } from "../account-chrome";
 import { getPrisma } from "../db";
 import { log, serializeError } from "../log";
+import { pullQueuedListingsForSoldProducts } from "../product-sold";
 import { scheduleOpenSiblingAdsForSoldProducts } from "../sibling-eliminar";
 import {
   closeWorkerSlotPages,
@@ -155,6 +156,7 @@ async function runMonitorAfterAttach(accountId: string, port: number): Promise<v
 }
 
 export async function runWallapopMonitorTick(): Promise<void> {
+  void pullQueuedListingsForSoldProducts();
   void scheduleOpenSiblingAdsForSoldProducts();
   const prisma = getPrisma();
   if (!prisma) return;
