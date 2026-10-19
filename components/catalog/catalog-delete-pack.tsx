@@ -1,6 +1,6 @@
 "use client"
 
-import { useEffect, useState, type ReactNode } from "react"
+import { useEffect, useRef, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 
 import { ConfirmAction } from "@/components/confirm-action"
@@ -68,6 +68,7 @@ export function CatalogDeletePack({
   const [queuePending, setQueuePending] = useState(false)
   const [queueNote, setQueueNote] = useState<string | null>(null)
   const [autopostOn, setAutopostOn] = useState(false)
+  const queueAbort = useRef<AbortController | null>(null)
   const accounts = accountsInView(products)
   const queueAccount = accounts.find((row) => row.accountId === queueAccountId) ?? null
   const chosen = products.filter((product) => selected.has(product.id))
@@ -75,6 +76,7 @@ export function CatalogDeletePack({
     ? chosen.filter((product) => !staysOnAccount(product, queueAccount.accountId))
     : []
   const already = chosen.length - toQueue.length
+  const soldInQueue = toQueue.filter((product) => product.status === "SOLD").length
 
   async function deleteSelected() {
     const queue = products.filter((product) => selected.has(product.id))
@@ -138,12 +140,19 @@ export function CatalogDeletePack({
 
   async function queueSelected() {
     if (!queueAccount) return
+    const controller = new AbortController()
+    queueAbort.current = controller
     setQueueError(null)
     setQueuePending(true)
     const queued: string[] = []
     let skipped = 0
+    let stopped = false
     try {
       for (let index = 0; index < toQueue.length; index += 1) {
+        if (controller.signal.aborted) {
+          stopped = true
+          break
+        }
         const product = toQueue[index]
         if (!product) continue
         setQueueNote(`${index + 1} de ${toQueue.length}: ${product.title}`)
@@ -151,9 +160,14 @@ export function CatalogDeletePack({
           await apiClientFetch(`/products/${encodeURIComponent(product.id)}/queue`, {
             method: "POST",
             body: JSON.stringify({ accountId: queueAccount.accountId }),
+            signal: controller.signal,
           })
           queued.push(product.id)
         } catch (caught) {
+          if (controller.signal.aborted) {
+            stopped = true
+            break
+          }
           if (caught instanceof ApiError && caught.status === 409) {
             skipped += 1
             continue
@@ -162,17 +176,26 @@ export function CatalogDeletePack({
         }
       }
     } catch (caught) {
-      setQueueError(caught instanceof ApiError ? caught.message : "No se ha podido poner en cola.")
+      if (!controller.signal.aborted) {
+        setQueueError(caught instanceof ApiError ? caught.message : "No se ha podido poner en cola.")
+      } else {
+        stopped = true
+      }
     } finally {
+      if (queueAbort.current === controller) queueAbort.current = null
       setQueuePending(false)
       setQueueNote(null)
     }
-    if (queued.length === 0) return
-    onQueued(queued, queueAccount.accountId)
-    if (skipped === 0 && queued.length === toQueue.length) {
+    if (queued.length > 0) onQueued(queued, queueAccount.accountId)
+    if (queued.length === 0 && skipped > 0 && !stopped) {
+      setQueueError(
+        "Esos productos ya están publicados, se están publicando o están inactivos en esta cuenta.",
+      )
+    }
+    if (stopped || (skipped === 0 && queued.length === toQueue.length)) {
       setQueueOpen(false)
     }
-    router.refresh()
+    if (queued.length > 0 || stopped) router.refresh()
   }
 
   return (
@@ -213,7 +236,11 @@ export function CatalogDeletePack({
           <ConfirmAction
             open={queueOpen}
             onOpenChange={(next) => {
-              if (queuePending) return
+              if (!next && queuePending) {
+                queueAbort.current?.abort()
+                setQueueNote("Cancelando…")
+                return
+              }
               setQueueOpen(next)
               if (!next) {
                 setQueueError(null)
@@ -250,6 +277,18 @@ export function CatalogDeletePack({
             confirmLabel="Poner en cola"
             pendingLabel="Guardando…"
             error={queueError}
+            notice={
+              soldInQueue > 0 ? (
+                <p
+                  className="text-sm font-bold uppercase leading-snug text-destructive"
+                  role="note"
+                >
+                  {soldInQueue === 1
+                    ? "Cuidado: 1 vendido también entra en la cola y puede publicarse otra vez."
+                    : `Cuidado: ${soldInQueue} vendidos también entran en la cola y pueden publicarse otra vez.`}
+                </p>
+              ) : null
+            }
             pending={queuePending}
             onConfirm={() => {
               void queueSelected()

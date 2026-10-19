@@ -233,6 +233,31 @@ export async function putProductListing(req: Request, res: Response) {
   res.json({ listing: toListingJson(listing) })
 }
 
+/** Live or in-flight ads stay. A sold row can return to the queue even if its old /item/ link is still saved. */
+export function listingBlocksManualQueue(
+  productStatus: string,
+  listing: { status: string; externalUrl: string | null } | null,
+): boolean {
+  if (!listing) return false
+  if (
+    listing.status === "POSTING" ||
+    listing.status === "ACTIVE" ||
+    listing.status === "RESERVED"
+  ) {
+    return true
+  }
+  if (productStatus === "SOLD") return false
+  return wallapopItemUrlOrNull(listing.externalUrl) != null
+}
+
+const QUEUE_LISTING_DATA = {
+  status: "READY_TO_POST" as const,
+  externalUrl: null,
+  externalItemId: null,
+  postingAttempts: 0,
+  lastPublishError: null,
+}
+
 export async function queueProductOnAccount(req: Request, res: Response) {
   const productId = paramId(req)
   const accountId =
@@ -262,12 +287,12 @@ export async function queueProductOnAccount(req: Request, res: Response) {
     sendError(res, 404, "NOT_FOUND", "Producto no encontrado.")
     return
   }
-  if (product.status === "SOLD" || product.status === "INACTIVE") {
+  if (product.status === "INACTIVE") {
     sendError(
       res,
       409,
       "NOT_PUBLISHABLE",
-      "Este producto no se puede publicar porque está vendido o inactivo.",
+      "Este producto no se puede publicar porque está inactivo.",
     )
     return
   }
@@ -285,13 +310,7 @@ export async function queueProductOnAccount(req: Request, res: Response) {
     where: { productId_accountId: { productId, accountId } },
     select: { status: true, externalUrl: true },
   })
-  const live =
-    existing != null &&
-    (existing.status === "POSTING" ||
-      existing.status === "ACTIVE" ||
-      existing.status === "RESERVED" ||
-      wallapopItemUrlOrNull(existing.externalUrl) != null)
-  if (live) {
+  if (listingBlocksManualQueue(product.status, existing)) {
     sendError(
       res,
       409,
@@ -300,21 +319,35 @@ export async function queueProductOnAccount(req: Request, res: Response) {
     )
     return
   }
-  const listing = await prisma.productListing.upsert({
-    where: { productId_accountId: { productId, accountId } },
-    create: {
-      product: { connect: { id: productId } },
-      account: { connect: { id: accountId } },
-      status: "READY_TO_POST",
-      externalUrl: null,
-      shippingEnabled: true,
-    },
-    update: { status: "READY_TO_POST", externalUrl: null },
-    select: listingJsonSelect,
-  })
-  await prisma.product.updateMany({
-    where: { id: productId, status: { not: "SOLD" } },
-    data: { status: "ACTIVE" },
+  const listing = await prisma.$transaction(async (tx) => {
+    const row = await tx.productListing.upsert({
+      where: { productId_accountId: { productId, accountId } },
+      create: {
+        product: { connect: { id: productId } },
+        account: { connect: { id: accountId } },
+        ...QUEUE_LISTING_DATA,
+        shippingEnabled: true,
+      },
+      update: QUEUE_LISTING_DATA,
+      select: listingJsonSelect,
+    })
+    if (product.status === "SOLD") {
+      await tx.product.update({
+        where: { id: productId },
+        data: {
+          status: "ACTIVE",
+          soldAt: null,
+          soldPrice: null,
+          soldAccountId: null,
+        },
+      })
+    } else {
+      await tx.product.updateMany({
+        where: { id: productId, status: { not: "SOLD" } },
+        data: { status: "ACTIVE" },
+      })
+    }
+    return row
   })
   if (account.autopostEnabled) {
     if (account.isDefault) await rescheduleAutopostLoop()

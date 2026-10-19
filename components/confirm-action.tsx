@@ -28,7 +28,7 @@ import {
 } from "@/components/ui/drawer"
 import { useIsMd } from "@/lib/ui/media"
 
-type TriggerVariant = "default" | "secondary" | "ghost"
+type TriggerVariant = "default" | "secondary" | "ghost" | "destructive"
 
 export function ConfirmAction({
   open,
@@ -40,6 +40,7 @@ export function ConfirmAction({
   cancelLabel = "Cancelar",
   pendingLabel,
   error,
+  notice,
   pending,
   onConfirm,
   triggerClassName,
@@ -56,6 +57,7 @@ export function ConfirmAction({
   cancelLabel?: string
   pendingLabel?: string
   error: string | null
+  notice?: ReactNode
   pending?: boolean
   onConfirm: () => void
   triggerClassName: string
@@ -99,6 +101,7 @@ export function ConfirmAction({
             <DialogTitle>{title}</DialogTitle>
             <DialogDescription>{description}</DialogDescription>
           </DialogHeader>
+          {notice}
           <ConfirmError error={error} />
           <DialogFooter>
             <DialogClose render={<Button variant="outline" className="h-11" />}>
@@ -121,6 +124,7 @@ export function ConfirmAction({
           <DrawerTitle>{title}</DrawerTitle>
           <DrawerDescription>{description}</DrawerDescription>
         </DrawerHeader>
+        {notice ? <div className="px-4">{notice}</div> : null}
         <ConfirmError error={error} className="px-4" />
         <DrawerFooter>
           {confirm}

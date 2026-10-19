@@ -1,41 +1,46 @@
-"use client"
+"use client";
 
-import { useEffect, useRef, useState } from "react"
-import { LoaderCircleIcon } from "lucide-react"
+import { useEffect, useRef, useState } from "react";
+import { LoaderCircleIcon } from "lucide-react";
 
-import { loadCatalogPage } from "@/app/actions/products"
-import { ProductCard } from "@/components/catalog/product-card"
-import { CatalogDeletePack } from "@/components/catalog/catalog-delete-pack"
-import { rememberOfflineProducts } from "@/lib/offline/cache"
-import { accountGlanceAlreadyQueued } from "@/lib/inventory/format"
-import { CATALOG_PAGE_SIZE } from "@/lib/inventory/types"
-import type { CatalogListingFilter, InventoryProduct } from "@/lib/inventory/types"
-import type { ProductStatus } from "@/lib/validations"
+import { loadCatalogPage } from "@/app/actions/products";
+import { ProductCard } from "@/components/catalog/product-card";
+import { CatalogDeletePack } from "@/components/catalog/catalog-delete-pack";
+import { rememberOfflineProducts } from "@/lib/offline/cache";
+import { accountGlanceAlreadyQueued } from "@/lib/inventory/format";
+import { CATALOG_PAGE_SIZE } from "@/lib/inventory/types";
+import type {
+  CatalogListingFilter,
+  InventoryProduct,
+} from "@/lib/inventory/types";
+import type { ProductStatus } from "@/lib/validations";
 
 function mergeUnique(
   current: InventoryProduct[],
   incoming: InventoryProduct[],
 ) {
-  const ids = new Set(current.map((product) => product.id))
-  const extra = incoming.filter((product) => !ids.has(product.id))
-  return extra.length > 0 ? [...current, ...extra] : current
+  const ids = new Set(current.map((product) => product.id));
+  const extra = incoming.filter((product) => !ids.has(product.id));
+  return extra.length > 0 ? [...current, ...extra] : current;
 }
 
 function queueableIds(products: InventoryProduct[], accountId: string | null) {
-  if (!accountId) return products.map((product) => product.id)
+  if (!accountId) return products.map((product) => product.id);
   return products
     .filter((product) => {
-      const row = product.accountStates?.find((state) => state.accountId === accountId)
-      return !row || !accountGlanceAlreadyQueued(row)
+      const row = product.accountStates?.find(
+        (state) => state.accountId === accountId,
+      );
+      return !row || !accountGlanceAlreadyQueued(row);
     })
-    .map((product) => product.id)
+    .map((product) => product.id);
 }
 
 function toggleId(selected: Set<string>, id: string) {
-  const next = new Set(selected)
-  if (next.has(id)) next.delete(id)
-  else next.add(id)
-  return next
+  const next = new Set(selected);
+  if (next.has(id)) next.delete(id);
+  else next.add(id);
+  return next;
 }
 
 function CatalogMoreStatus({
@@ -43,9 +48,9 @@ function CatalogMoreStatus({
   error,
   onRetry,
 }: {
-  loading: boolean
-  error: string | null
-  onRetry: () => void
+  loading: boolean;
+  error: string | null;
+  onRetry: () => void;
 }) {
   if (loading) {
     return (
@@ -56,9 +61,9 @@ function CatalogMoreStatus({
         <LoaderCircleIcon className="size-4 animate-spin" />
         Cargando más…
       </p>
-    )
+    );
   }
-  if (!error) return null
+  if (!error) return null;
   return (
     <div className="flex flex-col items-center gap-2 py-3" role="alert">
       <p className="text-sm text-destructive">{error}</p>
@@ -70,7 +75,7 @@ function CatalogMoreStatus({
         Reintentar
       </button>
     </div>
-  )
+  );
 }
 
 function CatalogProductGrid({
@@ -82,13 +87,13 @@ function CatalogProductGrid({
   onToggle,
   onHold,
 }: {
-  products: InventoryProduct[]
-  view: "grid" | "list"
-  selecting: boolean
-  selected: Set<string>
-  focusAccountId: string | null
-  onToggle: (id: string) => void
-  onHold: (id: string) => void
+  products: InventoryProduct[];
+  view: "grid" | "list";
+  selecting: boolean;
+  selected: Set<string>;
+  focusAccountId: string | null;
+  onToggle: (id: string) => void;
+  onHold: (id: string) => void;
 }) {
   if (view === "grid") {
     return (
@@ -107,7 +112,7 @@ function CatalogProductGrid({
           />
         ))}
       </div>
-    )
+    );
   }
 
   return (
@@ -126,7 +131,7 @@ function CatalogProductGrid({
         />
       ))}
     </div>
-  )
+  );
 }
 
 export function CatalogProductList({
@@ -138,43 +143,43 @@ export function CatalogProductList({
   view,
   extraProducts = [],
 }: {
-  initialProducts: InventoryProduct[]
-  total: number
-  q: string
-  status: "ALL" | ProductStatus
-  listing?: CatalogListingFilter
-  view: "grid" | "list"
-  extraProducts?: InventoryProduct[]
+  initialProducts: InventoryProduct[];
+  total: number;
+  q: string;
+  status: "ALL" | ProductStatus;
+  listing?: CatalogListingFilter;
+  view: "grid" | "list";
+  extraProducts?: InventoryProduct[];
 }) {
-  const [items, setItems] = useState(initialProducts)
-  const [page, setPage] = useState(1)
-  const [loading, setLoading] = useState(false)
-  const [done, setDone] = useState(initialProducts.length >= total)
-  const [error, setError] = useState<string | null>(null)
-  const [selecting, setSelecting] = useState(false)
-  const [selected, setSelected] = useState<Set<string>>(new Set())
-  const [queueAccountId, setQueueAccountId] = useState<string | null>(null)
-  const [selectingAll, setSelectingAll] = useState(false)
-  const sentinelRef = useRef<HTMLDivElement>(null)
-  const inFlight = useRef(false)
-  const generation = useRef(0)
+  const [items, setItems] = useState(initialProducts);
+  const [page, setPage] = useState(1);
+  const [loading, setLoading] = useState(false);
+  const [done, setDone] = useState(initialProducts.length >= total);
+  const [error, setError] = useState<string | null>(null);
+  const [selecting, setSelecting] = useState(false);
+  const [selected, setSelected] = useState<Set<string>>(new Set());
+  const [queueAccountId, setQueueAccountId] = useState<string | null>(null);
+  const [selectingAll, setSelectingAll] = useState(false);
+  const sentinelRef = useRef<HTMLDivElement>(null);
+  const inFlight = useRef(false);
+  const generation = useRef(0);
 
   useEffect(() => {
-    rememberOfflineProducts(items)
-  }, [items])
+    rememberOfflineProducts(items);
+  }, [items]);
 
-  const displayed = mergeUnique(items, extraProducts)
-  const hasMore = !done && items.length < total
+  const displayed = mergeUnique(items, extraProducts);
+  const hasMore = !done && items.length < total;
 
   async function selectAll() {
-    if (selectingAll || inFlight.current) return
-    setSelectingAll(true)
-    setSelecting(true)
-    inFlight.current = true
-    const gen = generation.current
-    let collected = items
-    let nextPage = page
-    let finished = done || collected.length >= total
+    if (selectingAll || inFlight.current) return;
+    setSelectingAll(true);
+    setSelecting(true);
+    inFlight.current = true;
+    const gen = generation.current;
+    let collected = items;
+    let nextPage = page;
+    let finished = done || collected.length >= total;
     try {
       while (!finished) {
         const result = await loadCatalogPage({
@@ -182,91 +187,91 @@ export function CatalogProductList({
           q,
           status,
           listing,
-        })
-        if (gen !== generation.current) return
+        });
+        if (gen !== generation.current) return;
         if (!result.ok) {
-          setError(result.error)
-          break
+          setError(result.error);
+          break;
         }
         if (result.products.length === 0) {
-          finished = true
-          break
+          finished = true;
+          break;
         }
-        collected = mergeUnique(collected, result.products)
-        nextPage = result.page
+        collected = mergeUnique(collected, result.products);
+        nextPage = result.page;
         finished =
           collected.length >= result.total ||
-          result.products.length < CATALOG_PAGE_SIZE
+          result.products.length < CATALOG_PAGE_SIZE;
       }
-      if (gen !== generation.current) return
-      setItems(collected)
-      setPage(nextPage)
-      if (finished) setDone(true)
-      const shown = mergeUnique(collected, extraProducts)
-      setSelected(new Set(queueableIds(shown, queueAccountId)))
+      if (gen !== generation.current) return;
+      setItems(collected);
+      setPage(nextPage);
+      if (finished) setDone(true);
+      const shown = mergeUnique(collected, extraProducts);
+      setSelected(new Set(queueableIds(shown, queueAccountId)));
     } catch {
       if (gen === generation.current) {
-        setError("No se han podido cargar más productos.")
+        setError("No se han podido cargar más productos.");
       }
     } finally {
       if (gen === generation.current) {
-        inFlight.current = false
-        setSelectingAll(false)
+        inFlight.current = false;
+        setSelectingAll(false);
       }
     }
   }
 
   useEffect(() => {
-    if (!hasMore || loading || error) return
-    const node = sentinelRef.current
-    if (!node) return
+    if (!hasMore || loading || error) return;
+    const node = sentinelRef.current;
+    if (!node) return;
 
     const observer = new IntersectionObserver(
       (entries) => {
-        if (!entries[0]?.isIntersecting || inFlight.current) return
-        const nextPage = page + 1
-        const gen = generation.current
-        inFlight.current = true
-        setLoading(true)
+        if (!entries[0]?.isIntersecting || inFlight.current) return;
+        const nextPage = page + 1;
+        const gen = generation.current;
+        inFlight.current = true;
+        setLoading(true);
         void loadCatalogPage({ page: nextPage, q, status, listing })
           .then((result) => {
-            if (gen !== generation.current) return
-            inFlight.current = false
-            setLoading(false)
+            if (gen !== generation.current) return;
+            inFlight.current = false;
+            setLoading(false);
             if (!result.ok) {
-              setError(result.error)
-              return
+              setError(result.error);
+              return;
             }
             if (result.products.length === 0) {
-              setDone(true)
-              return
+              setDone(true);
+              return;
             }
-            setPage(result.page)
-            let nextLength = 0
+            setPage(result.page);
+            let nextLength = 0;
             setItems((prev) => {
-              const next = mergeUnique(prev, result.products)
-              nextLength = next.length
-              return next
-            })
+              const next = mergeUnique(prev, result.products);
+              nextLength = next.length;
+              return next;
+            });
             if (
               nextLength >= result.total ||
               result.products.length < CATALOG_PAGE_SIZE
             ) {
-              setDone(true)
+              setDone(true);
             }
           })
           .catch(() => {
-            if (gen !== generation.current) return
-            inFlight.current = false
-            setLoading(false)
-            setError("No se han podido cargar más productos.")
-          })
+            if (gen !== generation.current) return;
+            inFlight.current = false;
+            setLoading(false);
+            setError("No se han podido cargar más productos.");
+          });
       },
       { rootMargin: "240px 0px" },
-    )
-    observer.observe(node)
-    return () => observer.disconnect()
-  }, [hasMore, loading, error, page, q, status, listing])
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [hasMore, loading, error, page, q, status, listing]);
 
   return (
     <CatalogDeletePack
@@ -278,27 +283,30 @@ export function CatalogProductList({
       onSelectingChange={setSelecting}
       onSelectedChange={setSelected}
       onRemoved={(ids) => {
-        setItems((prev) => prev.filter((product) => !ids.includes(product.id)))
+        setItems((prev) => prev.filter((product) => !ids.includes(product.id)));
       }}
       onSelectAll={() => {
-        void selectAll()
+        void selectAll();
       }}
       selectAllPending={selectingAll}
       onQueued={(ids, accountId) => {
-        const queued = new Set(ids)
+        const queued = new Set(ids);
         setItems((prev) =>
           prev.map((product) => {
-            if (!queued.has(product.id)) return product
+            if (!queued.has(product.id)) return product;
             return {
               ...product,
+              status: product.status === "SOLD" ? "ACTIVE" : product.status,
+              soldAccountId:
+                product.status === "SOLD" ? null : product.soldAccountId,
               accountStates: product.accountStates?.map((state) =>
                 state.accountId === accountId
                   ? { ...state, status: "READY_TO_POST", externalUrl: null }
                   : state,
               ),
-            }
+            };
           }),
-        )
+        );
       }}
     >
       <CatalogProductGrid
@@ -309,14 +317,14 @@ export function CatalogProductList({
         focusAccountId={queueAccountId}
         onToggle={(id) =>
           setSelected((prev) => {
-            const next = toggleId(prev, id)
-            if (next.size === 0) setSelecting(false)
-            return next
+            const next = toggleId(prev, id);
+            if (next.size === 0) setSelecting(false);
+            return next;
           })
         }
         onHold={(id) => {
-          setSelecting(true)
-          setSelected(new Set([id]))
+          setSelecting(true);
+          setSelected(new Set([id]));
         }}
       />
       {hasMore ? <div ref={sentinelRef} className="h-8" aria-hidden /> : null}
@@ -326,5 +334,5 @@ export function CatalogProductList({
         onRetry={() => setError(null)}
       />
     </CatalogDeletePack>
-  )
+  );
 }
