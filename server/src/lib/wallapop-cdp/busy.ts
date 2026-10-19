@@ -139,6 +139,29 @@ export function waitForChromeQuit(port = firstCdpPort()): Promise<void> {
   return desk(port).chromeQuit ?? Promise.resolve()
 }
 
+/** Bound a CDP call. A hung Browser.close must not pin the next publish. */
+export function promiseWithin<T>(
+  promise: Promise<T>,
+  ms: number,
+  label: string,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const timer = setTimeout(() => {
+      reject(new Error(`${label} timed out after ${ms}ms`))
+    }, ms)
+    promise.then(
+      (value) => {
+        clearTimeout(timer)
+        resolve(value)
+      },
+      (error: unknown) => {
+        clearTimeout(timer)
+        reject(error)
+      },
+    )
+  })
+}
+
 /** One quit at a time. Caller must have already seen idle worker slots. */
 export function beginChromeQuit(
   fn: () => Promise<void>,

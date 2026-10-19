@@ -17,8 +17,13 @@ import {
   getBrowserBusy,
   isAnyWorkerSlotBusy,
   isKeepChromeWarm,
+  promiseWithin,
 } from "./busy"
 import { peekWatchPage } from "./worker-pages"
+
+/** CDP Browser.close after a good publish has hung with no further log. */
+const CDP_QUIT_MS = 8_000
+const BROWSER_CLOSE_MS = 3_000
 
 async function sendCdpBrowserClose(
   browser: WallapopBrowserHandle["browser"],
@@ -46,15 +51,24 @@ export async function quitWallapopChrome(port?: number): Promise<void> {
   setWallapopHandle(null, port)
   if (current) {
     try {
-      await sendCdpBrowserClose(current.browser)
+      await promiseWithin(
+        sendCdpBrowserClose(current.browser),
+        CDP_QUIT_MS,
+        "Browser.close",
+      )
     } catch (error) {
       log("warn", "wallapop_chrome_cdp_quit_failed", {
+        port: port ?? null,
         message: error instanceof Error ? error.message : String(error),
       })
-      await current.browser.close().catch(() => {})
+      await promiseWithin(
+        current.browser.close(),
+        BROWSER_CLOSE_MS,
+        "browser.close",
+      ).catch(() => {})
     }
   }
-  killSpawnedChrome(port)
+  await killSpawnedChrome(port)
 }
 
 /**

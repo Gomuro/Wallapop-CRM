@@ -18,7 +18,9 @@ import {
   firstCdpPort,
 } from "../../../../lib/accounts/chrome-place"
 import { log } from "../log"
-import { waitForChromeQuit } from "./busy"
+import { promiseWithin, waitForChromeQuit } from "./busy"
+
+const CDP_CONNECT_TIMEOUT_MS = 15_000
 
 export const CDP_PORT = firstCdpPort()
 export const CDP_URL =
@@ -178,16 +180,31 @@ function spawnRealChrome(proxy?: string | null, port = CDP_PORT): ChildProcess {
   return child
 }
 
-export function killSpawnedChrome(port = CDP_PORT): void {
+function taskkillPid(pid: number): Promise<void> {
+  return new Promise((resolve) => {
+    const killer = spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
+      stdio: "ignore",
+      windowsHide: true,
+    })
+    const timer = setTimeout(resolve, 5_000)
+    killer.on("exit", () => {
+      clearTimeout(timer)
+      resolve()
+    })
+    killer.on("error", () => {
+      clearTimeout(timer)
+      resolve()
+    })
+  })
+}
+
+export async function killSpawnedChrome(port = CDP_PORT): Promise<void> {
   const child = chromeProcesses.get(port) ?? null
   chromeProcesses.delete(port)
   if (child?.pid == null) return
   try {
     if (process.platform === "win32") {
-      spawn("taskkill", ["/PID", String(child.pid), "/T", "/F"], {
-        stdio: "ignore",
-        windowsHide: true,
-      })
+      await taskkillPid(child.pid)
     } else {
       try {
         process.kill(child.pid, "SIGTERM")
@@ -195,10 +212,11 @@ export function killSpawnedChrome(port = CDP_PORT): void {
         child.kill("SIGTERM")
       }
     }
-    log("info", "wallapop_chrome_process_killed", { pid: child.pid })
+    log("info", "wallapop_chrome_process_killed", { pid: child.pid, port })
   } catch (error) {
     log("warn", "wallapop_chrome_process_kill_failed", {
       pid: child.pid,
+      port,
       message: error instanceof Error ? error.message : String(error),
     })
   }
@@ -221,13 +239,21 @@ async function connectOverCdp(cdpUrl: string) {
         const ws = new URL(json.webSocketDebuggerUrl)
         ws.hostname = http.hostname
         ws.port = http.port
-        return chromium.connectOverCDP(ws.toString())
+        return await promiseWithin(
+          chromium.connectOverCDP(ws.toString()),
+          CDP_CONNECT_TIMEOUT_MS,
+          "CDP websocket",
+        )
       }
     }
-  } catch {
-    // fall through to browserURL
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("timed out")) throw error
   }
-  return chromium.connectOverCDP(cdpUrl)
+  return promiseWithin(
+    chromium.connectOverCDP(cdpUrl),
+    CDP_CONNECT_TIMEOUT_MS,
+    "CDP",
+  )
 }
 
 export async function connectCdpHandle(port = CDP_PORT): Promise<WallapopBrowserHandle> {

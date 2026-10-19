@@ -12,6 +12,7 @@ import {
   isKeepChromeWarm,
   setKeepChromeWarm,
   beginChromeQuit,
+  promiseWithin,
   waitForChromeQuit,
   isClosedPage,
   isHandleAlive,
@@ -367,6 +368,12 @@ describe("worker slots", () => {
     expect(isKeepChromeWarm()).toBe(false)
     setKeepChromeWarm(true)
     expect(isKeepChromeWarm()).toBe(true)
+  })
+
+  it("abandons a CDP call that never returns", async () => {
+    await expect(
+      promiseWithin(new Promise(() => {}), 20, "Browser.close"),
+    ).rejects.toThrow(/Browser\.close timed out/)
   })
 
   it("lets a new attach wait out an in-flight chrome quit", async () => {

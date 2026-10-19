@@ -42,6 +42,7 @@ export {
   setKeepChromeWarm,
   waitForChromeQuit,
   beginChromeQuit,
+  promiseWithin,
   isInFlightPublishAborted,
   isPublishAbortedError,
   PublishAbortedError,
