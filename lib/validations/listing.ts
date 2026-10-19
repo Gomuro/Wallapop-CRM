@@ -36,6 +36,7 @@ export const productListingUpdateSchema = productListingCreateSchema
 
 export const productListingApiPutBodySchema = z
   .object({
+    accountId: z.string().trim().min(1).optional(),
     externalUrl: z
       .union([z.string(), z.null()])
       .optional()

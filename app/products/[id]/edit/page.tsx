@@ -5,7 +5,7 @@ import { ChevronLeftIcon } from "lucide-react"
 import { updateProductAction } from "@/app/actions/products"
 import { ApiUnavailable } from "@/components/api/api-unavailable"
 import { ProductLoadError } from "@/components/catalog/product-load-error"
-import { ListingFields } from "@/components/product-form/listing-fields"
+import { ListingFieldsList } from "@/components/product-form/listing-fields"
 import { ProductForm } from "@/components/product-form/product-form"
 import { Button } from "@/components/ui/button"
 import { apiUnavailableReason } from "@/lib/api/availability"
@@ -75,11 +75,7 @@ export default async function EditProductPage({
           submitLabel="Guardar"
         />
         <div className="px-4 pb-8 md:px-8 lg:mx-auto lg:max-w-xl lg:px-0">
-          <ListingFields
-            productId={product.id}
-            listing={product.listing}
-            warehouseStatus={product.status}
-          />
+          <ListingFieldsList product={product} />
         </div>
       </div>
     </>

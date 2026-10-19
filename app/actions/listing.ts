@@ -66,10 +66,13 @@ export async function updateProductListingAction(
   formData: FormData,
 ): Promise<ListingActionState> {
   const body = formToListingBody(formData)
+  const accountId = String(formData.get("accountId") ?? "").trim()
   if (Object.keys(body).length === 0) {
     return { success: true }
   }
-  const parsed = productListingApiPutBodySchema.safeParse(body)
+  const parsed = productListingApiPutBodySchema.safeParse(
+    accountId ? { ...body, accountId } : body,
+  )
   if (!parsed.success) {
     return {
       error: "Revisa los campos marcados.",

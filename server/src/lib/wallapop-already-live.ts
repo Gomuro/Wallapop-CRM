@@ -1,6 +1,7 @@
 import type { ListingStatus, PrismaClient } from "../../generated/prisma/client"
 
 import { wallapopItemUrlOrNull } from "../../../lib/inventory/wallapop-item-url"
+import { findDefaultAccountId } from "./default-account"
 import { log } from "./log"
 import { listingJsonSelect, toListingJson } from "./listing-json"
 import {
@@ -19,10 +20,10 @@ const TRUTH_FROM = new Set([
   "RESERVED",
 ])
 
-let cachedSellerUserId: string | null = null
+const sellerUserIdByAccount = new Map<string, string>()
 
 export function resetSellerUserIdCacheForTests(): void {
-  cachedSellerUserId = null
+  sellerUserIdByAccount.clear()
 }
 
 export async function loadCrmLiveRows(prisma: PrismaClient): Promise<CrmLiveRow[]> {
@@ -48,12 +49,14 @@ export async function loadCrmLiveRows(prisma: PrismaClient): Promise<CrmLiveRow[
 
 async function resolveSellerUserId(
   prisma: PrismaClient,
+  accountId: string,
   fetchImpl: typeof fetch,
 ): Promise<string | null> {
-  if (cachedSellerUserId) return cachedSellerUserId
+  const cached = sellerUserIdByAccount.get(accountId)
+  if (cached) return cached
   const row = await prisma.productListing.findFirst({
     where: {
-      account: { isDefault: true },
+      accountId,
       externalUrl: { contains: "/item/" },
     },
     select: { externalUrl: true },
@@ -67,28 +70,62 @@ async function resolveSellerUserId(
   })
   if (!response.ok) return null
   const userId = sellerUserIdFromItemHtml(await response.text())
-  if (userId) cachedSellerUserId = userId
+  if (userId) sellerUserIdByAccount.set(accountId, userId)
   return userId
+}
+
+async function loadSellerCatalog(
+  prisma: PrismaClient,
+  accountId: string,
+): Promise<LiveCatalogItem[] | null> {
+  try {
+    const userId = await resolveSellerUserId(prisma, accountId, fetch)
+    if (!userId) {
+      log("warn", "wallapop_live_catalog_no_seller", { accountId })
+      return null
+    }
+    const items = await fetchSellerPublishedItems(userId)
+    log("info", "wallapop_live_catalog", { accountId, count: items.length })
+    return items
+  } catch (error) {
+    log("warn", "wallapop_live_catalog_failed", {
+      accountId,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
 }
 
 async function loadDefaultSellerCatalog(
   prisma: PrismaClient,
 ): Promise<LiveCatalogItem[] | null> {
-  try {
-    const userId = await resolveSellerUserId(prisma, fetch)
-    if (!userId) {
-      log("warn", "wallapop_live_catalog_no_seller")
-      return null
-    }
-    const items = await fetchSellerPublishedItems(userId)
-    log("info", "wallapop_live_catalog", { count: items.length })
-    return items
-  } catch (error) {
-    log("warn", "wallapop_live_catalog_failed", {
-      message: error instanceof Error ? error.message : String(error),
-    })
-    return null
-  }
+  const accountId = await findDefaultAccountId(prisma)
+  if (!accountId) return null
+  return loadSellerCatalog(prisma, accountId)
+}
+
+async function loadAccountLiveRows(
+  prisma: PrismaClient,
+  accountId: string,
+): Promise<CrmLiveRow[]> {
+  const rows = await prisma.productListing.findMany({
+    where: { accountId },
+    select: {
+      id: true,
+      status: true,
+      externalUrl: true,
+      product: { select: { sku: true, title: true, price: true, status: true } },
+    },
+  })
+  return rows.map((row) => ({
+    listingId: row.id,
+    sku: row.product.sku,
+    title: row.product.title,
+    price: Number(row.product.price.toString()),
+    productStatus: row.product.status,
+    listingStatus: row.status,
+    externalUrl: row.externalUrl,
+  }))
 }
 
 async function writeLiveMark(
@@ -157,14 +194,19 @@ export async function syncListingsWithLiveCatalog(
   return summary
 }
 
-/** Public profile href for this listing, including one still in POSTING. */
+/** Public profile href for this listing, including one still in POSTING. Any account. */
 export async function liveHrefForListing(
   prisma: PrismaClient,
   listingId: string,
 ): Promise<string | null> {
-  const items = await loadDefaultSellerCatalog(prisma)
+  const listing = await prisma.productListing.findUnique({
+    where: { id: listingId },
+    select: { accountId: true },
+  })
+  if (!listing) return null
+  const items = await loadSellerCatalog(prisma, listing.accountId)
   if (!items) return null
-  const rows = await loadCrmLiveRows(prisma)
+  const rows = await loadAccountLiveRows(prisma, listing.accountId)
   const planned = rows.map((row) =>
     row.listingId === listingId
       ? { ...row, listingStatus: "READY_TO_POST", productStatus: "ACTIVE" }

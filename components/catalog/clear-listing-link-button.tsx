@@ -13,9 +13,11 @@ import { actionFailureMessage, isNextRedirect } from "@/lib/api/action-error"
 
 export function ClearListingLinkButton({
   productId,
+  accountId,
   variant = "outline",
 }: {
   productId: string
+  accountId?: string
   variant?: "default" | "outline" | "secondary"
 }) {
   const router = useRouter()
@@ -39,6 +41,7 @@ export function ClearListingLinkButton({
 
   return (
     <form action={formAction}>
+      {accountId ? <input type="hidden" name="accountId" value={accountId} /> : null}
       <input type="hidden" name="listingStatus" value="READY_TO_POST" />
       <input type="hidden" name="externalUrl" value="" />
       <Button

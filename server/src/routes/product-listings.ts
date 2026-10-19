@@ -207,8 +207,26 @@ export async function putProductListing(req: Request, res: Response) {
     sendError(res, 500, "INTERNAL", "Database is not configured.")
     return
   }
-  const accountId = await requireDefaultAccountId(prisma, res)
-  if (!accountId) return
+  const requestedAccountId = body.accountId?.trim() ?? ""
+  const account = requestedAccountId
+    ? await prisma.account.findUnique({
+        where: { id: requestedAccountId },
+        select: { id: true, isDefault: true },
+      })
+    : await prisma.account.findFirst({
+        where: { isDefault: true },
+        select: { id: true, isDefault: true },
+      })
+  if (!account) {
+    sendError(
+      res,
+      404,
+      "NOT_FOUND",
+      requestedAccountId ? "Cuenta no encontrada." : DEFAULT_ACCOUNT_MISSING_MESSAGE,
+    )
+    return
+  }
+  const accountId = account.id
   if (!(await assertProductExists(prisma, productId, res))) return
   if (await rejectReadyToPostWithoutBrand(prisma, productId, body, res)) return
   if (
@@ -228,7 +246,8 @@ export async function putProductListing(req: Request, res: Response) {
       where: { id: productId, status: { not: "SOLD" } },
       data: { status: "ACTIVE" },
     })
-    await rescheduleAutopostLoop()
+    if (account.isDefault) await rescheduleAutopostLoop()
+    else await scheduleAccountAutopost(account.id)
   }
   res.json({ listing: toListingJson(listing) })
 }

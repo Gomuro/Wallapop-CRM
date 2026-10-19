@@ -1,7 +1,6 @@
 import type { PrismaClient } from "../../generated/prisma/client"
 
 import { chromePortForAccount } from "../lib/account-chrome"
-import { findDefaultAccountId } from "../lib/default-account"
 import { listingJsonSelect, toListingJson } from "../lib/listing-json"
 import { log, serializeError } from "../lib/log"
 import { isBrowserBusyError, isPublishAbortedError } from "../lib/wallapop-cdp"
@@ -192,11 +191,13 @@ async function verifyProductPublish(
   const listingId = ready.product.listings.find(
     (row) => row.accountId === ready.accountId,
   )?.id
-  const defaultAccountId = await findDefaultAccountId(ready.prisma)
-  if (!externalUrl && listingId && ready.accountId === defaultAccountId) {
+  if (!externalUrl && listingId) {
     externalUrl = await liveHrefForListing(ready.prisma, listingId)
     if (externalUrl) {
-      log("info", "wallapop_publish_item_url_from_profile", { externalUrl })
+      log("info", "wallapop_publish_item_url_from_profile", {
+        accountId: ready.accountId,
+        externalUrl,
+      })
     }
   }
   const published = await activatePostingListing(

@@ -50,13 +50,21 @@ function writableListingStatus(
   return "READY_TO_POST"
 }
 
-function ListingShippingToggle({ defaultEnabled }: { defaultEnabled: boolean }) {
+function ListingShippingToggle({
+  defaultEnabled,
+  scope,
+}: {
+  defaultEnabled: boolean
+  scope: string
+}) {
+  const switchId = `shippingEnabledSwitch-${scope}`
+  const hintId = `shippingEnabled-hint-${scope}`
   const [enabled, setEnabled] = useState(defaultEnabled)
   return (
     <div className="flex items-center justify-between gap-3">
       <div className="min-w-0 space-y-0.5">
-        <Label htmlFor="shippingEnabledSwitch">Envío</Label>
-        <p id="shippingEnabled-hint" className="text-xs text-muted-foreground">
+        <Label htmlFor={switchId}>Envío</Label>
+        <p id={hintId} className="text-xs text-muted-foreground">
           {enabled
             ? "El comprador puede pedir envío por Wallapop."
             : "Solo recogida. No hace falta peso."}
@@ -64,10 +72,10 @@ function ListingShippingToggle({ defaultEnabled }: { defaultEnabled: boolean }) 
       </div>
       <button
         type="button"
-        id="shippingEnabledSwitch"
+        id={switchId}
         role="switch"
         aria-checked={enabled}
-        aria-describedby="shippingEnabled-hint"
+        aria-describedby={hintId}
         onClick={() => setEnabled((on) => !on)}
         className={cn(
           "relative h-7 w-12 shrink-0 rounded-full transition-colors",
@@ -96,19 +104,24 @@ export function ListingUrlField({
   junkUrl,
   isPosting,
   fieldError,
+  scope,
 }: {
   listing: InventoryListing
   itemUrl: string | null
   junkUrl: boolean
   isPosting: boolean
   fieldError?: string
+  scope: string
 }) {
+  const fieldId = `externalUrl-${scope}`
+  const errorId = `externalUrl-error-${scope}`
+  const hintId = `externalUrl-hint-${scope}`
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="externalUrl">Enlace de Wallapop</Label>
+      <Label htmlFor={fieldId}>Enlace de Wallapop</Label>
       <Input
         key={listing.externalUrl ?? "empty"}
-        id="externalUrl"
+        id={fieldId}
         name="externalUrl"
         type="text"
         inputMode="url"
@@ -117,14 +130,14 @@ export function ListingUrlField({
         defaultValue={itemUrl ?? (junkUrl ? listing.externalUrl ?? "" : "")}
         className="h-11 scroll-mt-28"
         aria-invalid={Boolean(fieldError)}
-        aria-describedby={fieldError ? "externalUrl-error" : "externalUrl-hint"}
+        aria-describedby={fieldError ? errorId : hintId}
       />
       {fieldError ? (
-        <p id="externalUrl-error" className="text-xs text-destructive" role="alert">
+        <p id={errorId} className="text-xs text-destructive" role="alert">
           {fieldError}
         </p>
       ) : (
-        <p id="externalUrl-hint" className="text-xs text-muted-foreground">
+        <p id={hintId} className="text-xs text-muted-foreground">
           {isPosting
             ? "Vacío no quita el enlace que ya está guardado."
             : "Solo vale un enlace /item/…. Vacío o cualquier otra URL se borra."}
@@ -139,19 +152,22 @@ export function ListingStatusFields({
   pending,
   status,
   onStatusChange,
+  scope,
 }: {
   isPosting: boolean
   pending: boolean
   status: ListingStatus
   onStatusChange: (value: ListingStatus) => void
+  scope: string
 }) {
+  const statusId = `listingStatus-${scope}`
   if (isPosting) {
     return (
       <div className="space-y-1.5">
-        <Label htmlFor="listingStatus">Estado del anuncio</Label>
+        <Label htmlFor={statusId}>Estado del anuncio</Label>
         <input type="hidden" name="keepUrlIfEmpty" value="1" />
         <Input
-          id="listingStatus"
+          id={statusId}
           readOnly
           disabled
           value={listingStatusLabel("POSTING")}
@@ -189,7 +205,7 @@ export function ListingStatusFields({
 
   return (
     <div className="space-y-1.5">
-      <Label htmlFor="listingStatus">Estado del anuncio</Label>
+      <Label htmlFor={statusId}>Estado del anuncio</Label>
       <Select
         value={status}
         onValueChange={(value) => value && onStatusChange(value as ListingStatus)}
@@ -199,7 +215,7 @@ export function ListingStatusFields({
         )}
       >
         <SelectTrigger
-          id="listingStatus"
+          id={statusId}
           className="h-11 w-full data-[size=default]:h-11"
         >
           <SelectValue />
@@ -227,6 +243,8 @@ export function ListingFormBody({
   onStatusChange,
   formAction,
   state,
+  accountId,
+  scope,
 }: {
   listing: InventoryListing
   itemUrl: string | null
@@ -237,25 +255,31 @@ export function ListingFormBody({
   onStatusChange: (value: ListingStatus) => void
   formAction: (payload: FormData) => void
   state: ListingActionState
+  accountId: string
+  scope: string
 }) {
   return (
     <form action={formAction} noValidate className="space-y-3">
+      {accountId ? <input type="hidden" name="accountId" value={accountId} /> : null}
       <ListingUrlField
         listing={listing}
         itemUrl={itemUrl}
         junkUrl={junkUrl}
         isPosting={isPosting}
         fieldError={state.fieldErrors?.externalUrl}
+        scope={scope}
       />
       <ListingStatusFields
         isPosting={isPosting}
         pending={pending}
         status={status}
         onStatusChange={onStatusChange}
+        scope={scope}
       />
       <ListingShippingToggle
         key={`${listing.id}-${listing.shippingEnabled ? "on" : "off"}`}
         defaultEnabled={listing.shippingEnabled !== false}
+        scope={scope}
       />
       {itemUrl ? (
         <a
@@ -270,7 +294,7 @@ export function ListingFormBody({
       ) : null}
       {state.error ? (
         <p
-          id="listing-form-error"
+          id={`listing-form-error-${scope}`}
           className="text-sm text-destructive"
           role="alert"
         >
@@ -298,14 +322,30 @@ export function ListingFormBody({
   )
 }
 
+function blankListing(accountId: string, accountName: string): InventoryListing {
+  return {
+    id: accountId,
+    accountId,
+    accountName,
+    externalUrl: null,
+    status: "READY_TO_POST",
+    lastPostedAt: null,
+    shippingEnabled: true,
+  }
+}
+
 export function ListingFields({
   productId,
   listing,
   warehouseStatus,
+  accountId,
+  accountName,
 }: {
   productId: string
   listing: InventoryListing | null
   warehouseStatus: InventoryProduct["status"]
+  accountId?: string
+  accountName?: string
 }) {
   const router = useRouter()
   const boundAction = updateProductListingAction.bind(null, productId)
@@ -334,25 +374,33 @@ export function ListingFields({
       setStatus(writableListingStatus(listing.status))
     }
   }
-  const isPosting = listing?.status === "POSTING"
-  const itemUrl = wallapopItemUrlOrNull(listing?.externalUrl)
-  const junkUrl = Boolean(listing?.externalUrl) && !itemUrl
+  const resolvedAccountId = accountId || listing?.accountId || ""
+  const resolvedName = accountName?.trim() || listing?.accountName?.trim() || ""
+  const scope = resolvedAccountId || "default"
+  const shown = listing ?? (resolvedAccountId ? blankListing(resolvedAccountId, resolvedName) : null)
+  const isPosting = shown?.status === "POSTING"
+  const itemUrl = wallapopItemUrlOrNull(shown?.externalUrl)
+  const junkUrl = Boolean(shown?.externalUrl) && !itemUrl
 
   useEffect(() => {
     if (!state.error && !state.fieldErrors) return
     const key = state.fieldErrors ? Object.keys(state.fieldErrors)[0] : undefined
+    const scoped =
+      key === "externalUrl" ? `externalUrl-${accountId || listing?.accountId || "default"}` : key
     const target =
-      (key ? document.getElementById(key) : null) ??
-      document.getElementById("listing-form-error")
+      (scoped ? document.getElementById(scoped) : null) ??
+      document.getElementById(
+        `listing-form-error-${accountId || listing?.accountId || "default"}`,
+      )
     target?.scrollIntoView({ behavior: "smooth", block: "center" })
     if (target instanceof HTMLElement) target.focus()
-  }, [state])
+  }, [state, accountId, listing?.accountId])
 
   useEffect(() => {
     if (state.success) router.refresh()
   }, [state.success, router])
 
-  if (!listing) {
+  if (!shown) {
     return (
       <Card className="gap-3 overflow-visible py-3 shadow-none">
         <CardHeader className="px-3">
@@ -372,14 +420,16 @@ export function ListingFields({
     <Card className="gap-0 overflow-hidden py-0 shadow-none">
       <CardHeader className="flex flex-row items-center justify-between gap-2 bg-muted/50 px-3 py-2.5">
         <div className="min-w-0">
-          <h2 className={typeSection}>Anuncio en Wallapop</h2>
-          <p className={typeMeta}>Se guarda aparte del producto.</p>
+          <h2 className={typeSection}>{resolvedName || "Anuncio en Wallapop"}</h2>
+          <p className={typeMeta}>
+            {resolvedName ? "Anuncio en Wallapop" : "Se guarda aparte del producto."}
+          </p>
         </div>
         <ListingStatusBadge
           product={{
             status: warehouseStatus,
-            listing,
-            listingActive: computeListingActive(listing),
+            listing: shown,
+            listingActive: computeListingActive(shown),
           }}
           className="shrink-0"
         />
@@ -392,7 +442,7 @@ export function ListingFields({
           </p>
         ) : null}
         <ListingFormBody
-          listing={listing}
+          listing={shown}
           itemUrl={itemUrl}
           junkUrl={junkUrl}
           isPosting={isPosting}
@@ -401,16 +451,75 @@ export function ListingFields({
           onStatusChange={setStatus}
           formAction={formAction}
           state={state}
+          accountId={resolvedAccountId}
+          scope={scope}
         />
         {junkUrl && !isPosting ? (
-          <ClearListingLinkButton productId={productId} />
+          <ClearListingLinkButton productId={productId} accountId={resolvedAccountId} />
         ) : null}
-        {itemUrl && listing.lastPostedAt ? (
+        {itemUrl && shown.lastPostedAt ? (
           <p className="text-xs text-muted-foreground">
-            Publicado {formatListingPostedAt(listing.lastPostedAt)}
+            Publicado {formatListingPostedAt(shown.lastPostedAt)}
           </p>
         ) : null}
       </CardContent>
     </Card>
+  )
+}
+
+function cardsFor(product: InventoryProduct): {
+  accountId: string
+  accountName: string
+  listing: InventoryListing | null
+}[] {
+  const listings =
+    product.listings && product.listings.length > 0
+      ? product.listings
+      : product.listing
+        ? [product.listing]
+        : []
+  if (product.accountStates && product.accountStates.length > 0) {
+    return product.accountStates.map((state) => ({
+      accountId: state.accountId,
+      accountName: state.accountName,
+      listing: listings.find((row) => row.accountId === state.accountId) ?? null,
+    }))
+  }
+  if (product.listing) {
+    return [
+      {
+        accountId: product.listing.accountId,
+        accountName: product.listing.accountName ?? "Cuenta",
+        listing: product.listing,
+      },
+    ]
+  }
+  return []
+}
+
+export function ListingFieldsList({ product }: { product: InventoryProduct }) {
+  const cards = cardsFor(product)
+  if (cards.length === 0) {
+    return (
+      <ListingFields
+        productId={product.id}
+        listing={null}
+        warehouseStatus={product.status}
+      />
+    )
+  }
+  return (
+    <div className="flex flex-col gap-4">
+      {cards.map((card) => (
+        <ListingFields
+          key={card.accountId || "default"}
+          productId={product.id}
+          listing={card.listing}
+          accountId={card.accountId}
+          accountName={card.accountName}
+          warehouseStatus={product.status}
+        />
+      ))}
+    </div>
   )
 }
