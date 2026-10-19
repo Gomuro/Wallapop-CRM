@@ -8,6 +8,7 @@ export type BrowserWorkerSlot =
   | "eliminar"
   | "monitor"
   | "session"
+  | "reserve"
 export type BrowserExclusiveOp = "login" | "logout"
 export type BrowserBusy = "idle" | BrowserWorkerSlot | BrowserExclusiveOp
 
@@ -17,6 +18,7 @@ const WORKER_SLOT_ORDER = [
   "eliminar",
   "monitor",
   "session",
+  "reserve",
 ] as const satisfies readonly BrowserWorkerSlot[]
 
 type Desk = {

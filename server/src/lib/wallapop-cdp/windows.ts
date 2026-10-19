@@ -84,6 +84,7 @@ const FOREGROUND_SLOTS: ReadonlySet<BrowserWorkerSlot> = new Set([
   "sold",
   "eliminar",
   "session",
+  "reserve",
 ])
 
 export function canClaimWorkerPage(input: {

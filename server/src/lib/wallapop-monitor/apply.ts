@@ -1,6 +1,7 @@
 import { getPrisma } from "../db"
 import { log } from "../log"
 import { markProductSoldTx } from "../product-sold"
+import { scheduleSiblingReserved } from "../sibling-reserve"
 import { scheduleSiblingSold } from "../sibling-eliminar"
 import type { MonitorPlan } from "./diff"
 
@@ -42,6 +43,15 @@ export async function applyMonitorPlan(
       count: updated.count,
       ids: plan.toReserved,
     })
+    if (accountId) {
+      const rows = await prisma.productListing.findMany({
+        where: { id: { in: plan.toReserved } },
+        select: { productId: true },
+      })
+      for (const productId of new Set(rows.map((row) => row.productId))) {
+        void scheduleSiblingReserved(productId, accountId)
+      }
+    }
   }
 
   if (plan.toDeactivated.length > 0) {

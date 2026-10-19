@@ -5,6 +5,7 @@ import { getPrisma } from "../db";
 import { log, serializeError } from "../log";
 import { pullQueuedListingsForSoldProducts } from "../product-sold";
 import { scheduleOpenSiblingAdsForSoldProducts } from "../sibling-eliminar";
+import { scheduleOpenSiblingAdsForReservedProducts } from "../sibling-reserve";
 import {
   closeWorkerSlotPages,
   dismissWallapopConsent,
@@ -158,6 +159,7 @@ async function runMonitorAfterAttach(accountId: string, port: number): Promise<v
 export async function runWallapopMonitorTick(): Promise<void> {
   void pullQueuedListingsForSoldProducts();
   void scheduleOpenSiblingAdsForSoldProducts();
+  void scheduleOpenSiblingAdsForReservedProducts();
   const prisma = getPrisma();
   if (!prisma) return;
   const accounts = await prisma.account.findMany({
