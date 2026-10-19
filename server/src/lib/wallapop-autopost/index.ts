@@ -20,7 +20,7 @@ import {
   resolveAutopostIntervalMs,
   toAutopostStatusJson,
 } from "./interval"
-import { pickNextAutopostListing } from "./pick"
+import { pickNextAutopostListing, queueHeldForReserveWhere } from "./pick"
 
 export {
   AUTOPOST_INTERVAL_MS_MAX,
@@ -44,6 +44,7 @@ export {
   AUTOPOST_PICK_ORDER_BY,
   autopostEligibleListingWhere,
   findNextAutopostListing,
+  queueHeldForReserveWhere,
   pickNextAutopostListing,
 } from "./pick"
 
@@ -310,6 +311,19 @@ async function autopostTickGates(
   return accountId
 }
 
+/** Queue rows are still there, but another account of the product is reserved. */
+async function queueWaitingOnReserve(
+  prisma: PrismaClient,
+  accountId: string,
+): Promise<boolean> {
+  const waiting = await prisma.productListing.count({
+    where: queueHeldForReserveWhere(accountId),
+  })
+  if (waiting === 0) return false
+  log("info", "wallapop_autopost_wait_reserved", { accountId, waiting })
+  return true
+}
+
 function logAutopostIdlePick(picked: {
   scanned: number
   skipped: number
@@ -373,6 +387,7 @@ export async function runAutopostTick(
   if (!picked.listing) {
     logAutopostIdlePick(picked)
     if (picked.scanned === 0) {
+      if (await queueWaitingOnReserve(prisma, accountId)) return true
       log("info", "wallapop_autopost_paused_empty_queue")
       return false
     }
@@ -466,7 +481,8 @@ async function runAccountAutopostTick(accountId: string): Promise<boolean> {
   const picked = await pickNextAutopostListing(prisma, accountId)
   if (!picked.listing) {
     logAutopostIdlePick(picked)
-    return picked.scanned !== 0
+    if (picked.scanned !== 0) return true
+    return queueWaitingOnReserve(prisma, accountId)
   }
   log("info", "wallapop_autopost_pick", {
     accountId,

@@ -12,6 +12,7 @@ import { log } from "../log"
 /**
  * Eligible queue row on the default account.
  * Only `READY_TO_POST` — never POSTING / ACTIVE / RESERVED / DEACTIVATED / FAILED.
+ * Skips the row while the same product is RESERVED on another account.
  * Stale POSTING is recovered by the posting watchdog before pick.
  * A leftover upload/home URL is not a published item — still eligible.
  */
@@ -24,6 +25,28 @@ export function autopostEligibleListingWhere(
     ...listingWithoutPublicItemUrlWhere,
     product: {
       status: "ACTIVE",
+      listings: {
+        none: { status: "RESERVED", accountId: { not: accountId } },
+      },
+      images: { some: {} },
+      AND: [{ brand: { not: null } }, { NOT: { brand: "" } }],
+    },
+  }
+}
+
+/** Same queue row, held because another account of this product is RESERVED. */
+export function queueHeldForReserveWhere(
+  accountId: string,
+): Prisma.ProductListingWhereInput {
+  return {
+    accountId,
+    status: "READY_TO_POST",
+    ...listingWithoutPublicItemUrlWhere,
+    product: {
+      status: "ACTIVE",
+      listings: {
+        some: { status: "RESERVED", accountId: { not: accountId } },
+      },
       images: { some: {} },
       AND: [{ brand: { not: null } }, { NOT: { brand: "" } }],
     },

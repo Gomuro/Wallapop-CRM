@@ -4,6 +4,7 @@ import {
   AUTOPOST_JITTER_FRACTION,
   autopostDelayWithJitter,
   autopostEligibleListingWhere,
+  queueHeldForReserveWhere,
   DEFAULT_AUTOPOST_INTERVAL_MS,
   isAutopostLivePublishEnabled,
   isWallapopAutopostEnabled,
@@ -186,10 +187,24 @@ describe("autopostEligibleListingWhere", () => {
     expect(autopostEligibleListingWhere("acc-1")).toMatchObject({
       accountId: "acc-1",
       status: "READY_TO_POST",
+      product: {
+        listings: {
+          none: { status: "RESERVED", accountId: { not: "acc-1" } },
+        },
+      },
       OR: [
         { externalUrl: null },
         { NOT: { externalUrl: { contains: "/item/" } } },
       ],
+    })
+    expect(queueHeldForReserveWhere("acc-1")).toMatchObject({
+      accountId: "acc-1",
+      status: "READY_TO_POST",
+      product: {
+        listings: {
+          some: { status: "RESERVED", accountId: { not: "acc-1" } },
+        },
+      },
     })
   })
 })
