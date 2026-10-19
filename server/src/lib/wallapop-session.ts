@@ -131,6 +131,22 @@ async function syncAccountStatus(
   }
 }
 
+export const WALLAPOP_LOGGED_OUT_MESSAGE =
+  "La sesión de Wallapop se ha cerrado. Entra en Cuenta e inicia sesión para publicar y reservar."
+
+/** Drop a session the server still remembers as logged in. 2FA stays open. */
+export async function markWallapopSessionLoggedOut(accountId?: string): Promise<void> {
+  const target = await resolveAccountTarget(accountId)
+  const row = sessionRow(target.accountId)
+  if (row.requires2FA || row.status === "AUTHENTICATING") return
+  if (row.error === WALLAPOP_LOGGED_OUT_MESSAGE) return
+  row.status = "DISCONNECTED"
+  row.requires2FA = false
+  row.error = WALLAPOP_LOGGED_OUT_MESSAGE
+  log("warn", "wallapop_session_logged_out", { accountId: target.accountId })
+  await syncAccountStatus(target.accountId, "INACTIVE")
+}
+
 async function rememberSavedEmail(row: SessionState, accountId: string): Promise<void> {
   if (row.email) return
   const prisma = getPrisma()

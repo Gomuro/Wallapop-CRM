@@ -5,6 +5,8 @@ import { chromium, type Page } from "playwright"
 import { describe, expect, it } from "vitest"
 
 import { productListingApiPutBodySchema } from "../../lib/validations/listing"
+import { selectConsumerGoods } from "../src/lib/wallapop-publish/flow"
+import { dismissSearchOverlay } from "../src/lib/wallapop-publish/nav"
 import {
   classifyPublishLanding,
   clickMarcaCatalogItem,
@@ -690,5 +692,52 @@ describe("Wallapop Marca DOM", () => {
       expect(result.text).toMatch(/Crear QUIRUMED/i)
       expect(await readBrandValue(page)).toBe("QUIRUMED")
     })
+  })
+})
+
+describe("upload vertical choice", () => {
+  it("clicks Algo que ya no necesito when aria-label is Consumer Goods Vertical", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><body>
+        <button aria-label="Jobs Vertical" class="UploadStepVertical__singleIcon">Empleo</button>
+        <button id="cg" aria-label="Consumer Goods Vertical" class="UploadStepVertical__multiIcons">
+          <span class="UploadStepVertical__multiIcons__title">Algo que ya no necesito</span>
+        </button>
+      </body>`)
+      await page.locator("#cg").evaluate((el) => {
+        el.addEventListener("click", () => {
+          el.setAttribute("data-clicked", "1")
+        })
+      })
+      await selectConsumerGoods(page, () => undefined)
+      expect(await page.locator("#cg").getAttribute("data-clicked")).toBe("1")
+    } finally {
+      await browser.close()
+    }
+  })
+
+  it("does not touch the header search when SearchOverlay is absent", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(
+        `<!DOCTYPE html><body><input name="search" id="q"></body>`,
+      )
+      await page.evaluate(() => {
+        document
+          .querySelector("#q")
+          ?.addEventListener("input", () => {
+            document.body.dataset.searchInput = "1"
+          })
+      })
+      await dismissSearchOverlay(page)
+      expect(
+        await page.evaluate(() => document.body.dataset.searchInput ?? ""),
+      ).toBe("")
+    } finally {
+      await browser.close()
+    }
   })
 })

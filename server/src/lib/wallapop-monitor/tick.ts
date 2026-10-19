@@ -3,19 +3,23 @@ import type { Page } from "playwright";
 import { assignChromePlaces } from "../account-chrome";
 import { getPrisma } from "../db";
 import { log, serializeError } from "../log";
+import { scheduleOpenSiblingAdsForSoldProducts } from "../sibling-eliminar";
 import {
   closeWorkerSlotPages,
   dismissWallapopConsent,
   ensureWorkerWindow,
   isBrowserBusyError,
   isLoginOr2faUrl,
+  isWallapopLoggedOutUrl,
   navigateViaAssign,
   quitChromeIfNoWorkerSlots,
   runWithBrowserBusy,
 } from "../wallapop-cdp";
 import { gotoVendidosCatalog } from "../wallapop-sold/nav";
-import { peekWallapopSession } from "../wallapop-session";
-import { scheduleOpenSiblingAdsForSoldProducts } from "../sibling-eliminar";
+import {
+  markWallapopSessionLoggedOut,
+  peekWallapopSession,
+} from "../wallapop-session";
 import { applyMonitorPlan } from "./apply";
 import { CATALOG_PUBLISHED_URL } from "./catalog";
 import { planMonitorUpdates, type MonitorCrmListing } from "./diff";
@@ -48,9 +52,14 @@ async function loadLiveListings(accountId: string): Promise<MonitorCrmListing[]>
   return listings;
 }
 
-async function scrapeCatalogs(page: Page) {
+async function scrapeCatalogs(page: Page, accountId: string, confirmHrefs?: string[]) {
   await navigateViaAssign(page, CATALOG_PUBLISHED_URL);
   await dismissWallapopConsent(page);
+  if (isWallapopLoggedOutUrl(page.url())) {
+    log("info", "wallapop_monitor_logged_out", { url: page.url(), accountId });
+    await markWallapopSessionLoggedOut(accountId);
+    return null;
+  }
   if (isLoginOr2faUrl(page.url())) {
     log("info", "wallapop_monitor_skip_login", { url: page.url() });
     return null;
@@ -62,7 +71,7 @@ async function scrapeCatalogs(page: Page) {
       log("warn", "wallapop_monitor_catalog_not_full", { url: page.url() });
       return null;
     }
-    const pro = await scrapeProCatalogs(page);
+    const pro = await scrapeProCatalogs(page, confirmHrefs);
     if (!pro) return null;
     log("info", "wallapop_monitor_published_scanned", {
       rows: pro.published.length,
@@ -113,13 +122,24 @@ async function runMonitorAfterAttach(accountId: string, port: number): Promise<v
       accountId,
       count: listings.length,
     });
-    const catalogs = await scrapeCatalogs(page);
+    let catalogs = await scrapeCatalogs(page, accountId);
     if (!catalogs) return;
-    const plan = planMonitorUpdates(
-      catalogs.published,
-      catalogs.sold,
-      listings,
-    );
+    let plan = planMonitorUpdates(catalogs.published, catalogs.sold, listings);
+    if (plan.toDeactivated.length > 0) {
+      const confirmHrefs = listings
+        .filter(
+          (listing) =>
+            plan.toDeactivated.includes(listing.id) && listing.externalUrl,
+        )
+        .map((listing) => listing.externalUrl as string);
+      log("info", "wallapop_monitor_reread_activos", {
+        accountId,
+        missing: confirmHrefs.length,
+      });
+      catalogs = await scrapeCatalogs(page, accountId, confirmHrefs);
+      if (!catalogs) return;
+      plan = planMonitorUpdates(catalogs.published, catalogs.sold, listings);
+    }
     log("info", "wallapop_monitor_plan", {
       toReserved: plan.toReserved.length,
       toActive: plan.toActive.length,

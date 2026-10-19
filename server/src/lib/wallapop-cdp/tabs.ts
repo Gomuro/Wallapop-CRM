@@ -108,6 +108,13 @@ export function isLoginOr2faUrl(url: string): boolean {
   )
 }
 
+/** Login card on es.wallapop.com. 2FA stays on accounts.wallapop.com. */
+export function isWallapopLoggedOutUrl(url: string): boolean {
+  const lower = url.toLowerCase()
+  if (isLoginOr2faUrl(lower)) return false
+  return lower.includes("/auth/onboarding") || lower.includes("/login")
+}
+
 export function isWallFeedUrl(url: string): boolean {
   const lower = url.toLowerCase()
   if (!lower.includes("es.wallapop.com")) return false

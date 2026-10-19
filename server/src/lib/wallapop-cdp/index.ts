@@ -56,6 +56,7 @@ export {
   closeWallapopBrowser,
   closeWallapopUploadTab,
   isLoginOr2faUrl,
+  isWallapopLoggedOutUrl,
   isWallFeedUrl,
   pickLiveSessionPage,
   quitChromeIfNoWorkerSlots,

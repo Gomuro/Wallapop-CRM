@@ -275,7 +275,7 @@ export async function queueProductOnAccount(req: Request, res: Response) {
     await rejectReadyToPostWithoutBrand(
       prisma,
       productId,
-      { status: "READY_TO_POST" },
+      { status: "READY_TO_POST", externalUrl: null },
       res,
     )
   ) {

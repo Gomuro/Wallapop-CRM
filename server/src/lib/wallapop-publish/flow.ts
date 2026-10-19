@@ -3,19 +3,20 @@ import type { Page } from "playwright";
 import {
   dismissWallapopConsent,
   firstVisible,
+  isWallapopLoggedOutUrl,
   navigateViaAssign,
   throwIfPublishAborted,
 } from "../wallapop-cdp";
-import { log } from "../log";
 import {
-  categoryPickerStillEmpty,
-  categorySectionVisible,
-} from "./category";
+  markWallapopSessionLoggedOut,
+  WALLAPOP_LOGGED_OUT_MESSAGE,
+} from "../wallapop-session";
+import { log } from "../log";
+import { categoryPickerStillEmpty, categorySectionVisible } from "./category";
 import { logPublishStep, snapshotPublishForm } from "./debug";
 import { fillPublishForm } from "./form";
 import {
   clickEnabledContinuar,
-  clickExactButtonText,
   dismissSearchOverlay,
   readAllVisibleButtonLabels,
   visibleButtonLabels,
@@ -43,23 +44,59 @@ export async function gotoUpload(
   await dismissSearchOverlay(page);
 }
 
+const CONSUMER_GOODS_LABEL = "Algo que ya no necesito";
+/** Live DOM 2026-10-15: aria-label replaces the visible title for getByRole. */
+const CONSUMER_GOODS_ARIA = "Consumer Goods Vertical";
+const CONSUMER_GOODS_WAIT_MS = 15_000;
+
+function consumerGoodsButton(page: Page) {
+  return page
+    .locator(`walla-button[text="${CONSUMER_GOODS_LABEL}"]`)
+    .or(page.locator(`button[aria-label="${CONSUMER_GOODS_ARIA}"]`))
+    .or(
+      page
+        .locator("button.UploadStepVertical__multiIcons")
+        .filter({ hasText: CONSUMER_GOODS_LABEL }),
+    );
+}
+
+/** Skeleton first, then either the choice or the summary field. */
+async function waitForConsumerGoods(
+  page: Page,
+): Promise<"ready" | "logged_out" | "missing"> {
+  const deadline = Date.now() + CONSUMER_GOODS_WAIT_MS;
+  const summary = page.locator(PUBLISH_SELECTORS.summary.join(",")).first();
+  while (Date.now() < deadline) {
+    throwIfPublishAborted();
+    if (isWallapopLoggedOutUrl(page.url())) return "logged_out";
+    if (page.url().includes("consumer-goods")) return "ready";
+    const button = consumerGoodsButton(page).first();
+    if (await button.isVisible().catch(() => false)) {
+      await button.click({ force: true });
+      await page.waitForTimeout(2_500);
+      return "ready";
+    }
+    if (await summary.isVisible().catch(() => false)) return "ready";
+    await page.waitForTimeout(400);
+  }
+  return "missing";
+}
+
 export async function selectConsumerGoods(
   page: Page,
   mark: SetPublishStep,
 ): Promise<void> {
   mark("consumer_goods");
   logPublishStep("consumer_goods", page, { phase: "consumer_goods_check" });
-  if (page.url().includes("consumer-goods")) return;
-  if (await clickExactButtonText(page, "Algo que ya no necesito")) return;
-  const byRole = page.getByRole("button", {
-    name: "Algo que ya no necesito",
-    exact: true,
-  });
-  if (await byRole.isVisible().catch(() => false)) {
-    await byRole.click({ force: true });
-    await page.waitForTimeout(2_500);
-    return;
+  const choice = await waitForConsumerGoods(page);
+  if (choice === "logged_out") {
+    await markWallapopSessionLoggedOut();
+    throw new WallapopPublishError(
+      "consumer_goods",
+      WALLAPOP_LOGGED_OUT_MESSAGE,
+    );
   }
+  if (choice === "ready") return;
   throw new WallapopPublishError(
     "consumer_goods",
     'No se encontró "Algo que ya no necesito".',
@@ -136,7 +173,10 @@ export async function advanceUntilPublicar(page: Page): Promise<boolean> {
   for (let round = 0; round < 14; round++) {
     throwIfPublishAborted();
     if (await finalButtonVisible(page)) {
-      logPublishStep("before_publicar", page, { phase: "publicar_visible", round });
+      logPublishStep("before_publicar", page, {
+        phase: "publicar_visible",
+        round,
+      });
       return true;
     }
     await page.evaluate(`window.scrollBy(0, 350)`);
