@@ -13,6 +13,7 @@ import { assignChromePlaces } from "../account-chrome"
 import { getPrisma } from "../db"
 import { log } from "../log"
 import { syncWallapopIdentityOnActive } from "../wallapop-account-identity"
+import { snapshotWithChromeProxy } from "./proxy"
 import {
   resolveAccountTarget,
   sessionRow,
@@ -174,7 +175,10 @@ export async function getWallapopSessionSnapshot(
 ): Promise<WallapopSessionSnapshot> {
   const target = await resolveAccountTarget(accountId)
   await rehydrateAccountSession(target.accountId, target.port)
-  return snapshotOf(sessionRow(target.accountId))
+  return snapshotWithChromeProxy(
+    target.accountId,
+    snapshotOf(sessionRow(target.accountId)),
+  )
 }
 
 /**
@@ -184,6 +188,9 @@ export async function getWallapopSessionSnapshot(
 export async function rehydrateWallapopSessionOnBoot(): Promise<WallapopSessionSnapshot> {
   const target = await resolveAccountTarget()
   await rehydrateAccountSession(target.accountId, target.port)
-  return snapshotOf(sessionRow(target.accountId))
+  return snapshotWithChromeProxy(
+    target.accountId,
+    snapshotOf(sessionRow(target.accountId)),
+  )
 }
 

@@ -1,4 +1,5 @@
 import { parseChromeProxy } from "../../../../lib/accounts/chrome-proxy"
+import { readChromeProxyForAccount, writeChromeProxyForAccount } from "../account-chrome-proxy"
 import { log } from "../log"
 import {
   closeWallapopBrowser,
@@ -7,6 +8,16 @@ import {
 } from "../wallapop-cdp"
 import { resolveAccountTarget, sessionRow, snapshotOf } from "./state"
 import type { WallapopSessionSnapshot } from "./state"
+
+export async function snapshotWithChromeProxy(
+  accountId: string,
+  session: WallapopSessionSnapshot,
+): Promise<WallapopSessionSnapshot> {
+  return {
+    ...session,
+    proxy: await readChromeProxyForAccount(accountId),
+  }
+}
 
 /**
  * Persist proxy for this Chrome slot and quit chrome.exe.
@@ -19,6 +30,7 @@ export async function applyWallapopChromeProxy(input: {
 }): Promise<WallapopSessionSnapshot> {
   const target = await resolveAccountTarget(input.accountId)
   const parsed = parseChromeProxy(input.proxy)
+  await writeChromeProxyForAccount(target.accountId, input.proxy)
   rememberChromeProxy(target.port, input.proxy)
   log("info", "wallapop_proxy_applied", {
     accountId: target.accountId,
@@ -35,5 +47,5 @@ export async function applyWallapopChromeProxy(input: {
       message: error instanceof Error ? error.message : String(error),
     })
   }
-  return snapshotOf(sessionRow(target.accountId))
+  return snapshotWithChromeProxy(target.accountId, snapshotOf(sessionRow(target.accountId)))
 }

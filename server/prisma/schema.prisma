@@ -68,6 +68,8 @@ model Account {
   // Pinned Chrome place (0 = 9222). Not reused after delete, so another account
   // does not inherit this profile.
   chromeSlot   Int             @unique @map("chrome_slot")
+  // Operator Chrome proxy (host:port:user:pass). Source of truth for spawn.
+  chromeProxy  String?         @map("chrome_proxy")
   listings     ProductListing[]
   soldProducts Product[]        @relation("ProductSoldBy")
   createdAt    DateTime         @default(now()) @map("created_at")

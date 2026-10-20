@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { chromePlaceAt } from "../../lib/accounts/chrome-place"
+import { chromePlaceAt, chromeSlotForPort } from "../../lib/accounts/chrome-place"
 import { assignChromePlaces, nextChromeSlot } from "../src/lib/account-chrome"
 
 describe("nextChromeSlot", () => {
@@ -23,5 +23,7 @@ describe("assignChromePlaces", () => {
     })
     expect(places.get("third")?.port).toBe(9242)
     expect(chromePlaceAt(0).profileName).toBe("ChromeCDP-Persistent")
+    expect(chromeSlotForPort(9222)).toBe(0)
+    expect(chromeSlotForPort(9232)).toBe(1)
   })
 })

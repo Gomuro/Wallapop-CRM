@@ -94,6 +94,7 @@ export function toSessionJson(session: WallapopSessionSnapshot) {
     status: session.status,
     requires2FA: session.requires2FA,
     email: session.email,
+    proxy: session.proxy ?? null,
     ...(session.error ? { error: session.error } : {}),
     ...(session.listingsReset ? { listingsReset: true } : {}),
   }

@@ -8,8 +8,11 @@ import {
   type Page,
 } from "playwright"
 
+import { parseChromeProxy } from "../../../../lib/accounts/chrome-proxy"
+import { writeChromeProxyForPort } from "../account-chrome-proxy"
 import {
   chromeProxyForPort,
+  hydrateChromeProxyFromAccount,
   killSpawnedChrome,
   rememberChromeProxy,
   spawnRealChrome,
@@ -214,7 +217,12 @@ export async function attachOrLaunch(
   proxyInput?: string | null,
   port = CDP_PORT,
 ): Promise<WallapopBrowserHandle> {
-  if (proxyInput !== undefined) rememberChromeProxy(port, proxyInput)
+  if (parseChromeProxy(proxyInput ?? null)) {
+    rememberChromeProxy(port, proxyInput)
+    await writeChromeProxyForPort(port, proxyInput)
+  } else {
+    await hydrateChromeProxyFromAccount(port)
+  }
   const cdpUrl = cdpUrlForPort(port)
   const stored = chromeProxyForPort(port)
   if (stored?.username) {
@@ -233,7 +241,7 @@ export async function attachOrLaunch(
     }
   }
 
-  await spawnRealChrome(proxyInput, port)
+  await spawnRealChrome(undefined, port)
   await waitForCdp(cdpUrl)
   const attached = await connectCdpHandle(port)
   log("info", "wallapop_browser_attached_after_spawn", {

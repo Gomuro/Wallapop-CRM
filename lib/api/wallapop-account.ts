@@ -15,6 +15,7 @@ export type WallapopAccountSession = {
   status: WallapopConnectionStatus
   requires2FA: boolean
   email: string | null
+  proxy?: string | null
   error?: string
   listingsReset?: boolean
 }

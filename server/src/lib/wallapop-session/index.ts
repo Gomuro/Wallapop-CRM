@@ -19,4 +19,4 @@ export {
   disconnectWallapopSession,
   submitWallapopSession2fa,
 } from "./connect"
-export { applyWallapopChromeProxy } from "./proxy"
+export { applyWallapopChromeProxy, snapshotWithChromeProxy } from "./proxy"

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest"
 
-import { parseChromeProxy } from "../../lib/accounts/chrome-proxy"
+import { formatChromeProxy, parseChromeProxy } from "../../lib/accounts/chrome-proxy"
 import {
   wallapopConnectSchema,
   wallapopProxySchema,
@@ -51,6 +51,13 @@ describe("parseChromeProxy", () => {
     expect(parseChromeProxy("")).toBeNull()
     expect(parseChromeProxy("   ")).toBeNull()
     expect(parseChromeProxy("not-a-proxy")).toBeNull()
+  })
+})
+
+describe("formatChromeProxy", () => {
+  it("round-trips vendor user:pass", () => {
+    const raw = "10.0.0.1:8080:user:p:ass"
+    expect(formatChromeProxy(parseChromeProxy(raw)!)).toBe(raw)
   })
 })
 

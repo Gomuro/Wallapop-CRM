@@ -11,9 +11,14 @@ import {
   firstCdpPort,
 } from "../../../../lib/accounts/chrome-place"
 import {
+  formatChromeProxy,
   parseChromeProxy,
   type ChromeProxyConfig,
 } from "../../../../lib/accounts/chrome-proxy"
+import {
+  readChromeProxyForPort,
+  writeChromeProxyForPort,
+} from "../account-chrome-proxy"
 import { log } from "../log"
 import { ensureLocalProxy, stopLocalProxy } from "./local-proxy"
 
@@ -83,6 +88,20 @@ export function rememberChromeProxy(
     }
   }
   return parsed
+}
+
+/** DB is source of truth. Profile json is a cache; copy it into DB once if missing. */
+export async function hydrateChromeProxyFromAccount(port: number): Promise<void> {
+  const fromDb = await readChromeProxyForPort(port)
+  if (fromDb) {
+    rememberChromeProxy(port, fromDb)
+    return
+  }
+  const fromFile = chromeProxyForPort(port)
+  if (!fromFile) return
+  const raw = formatChromeProxy(fromFile)
+  rememberChromeProxy(port, raw)
+  await writeChromeProxyForPort(port, raw)
 }
 
 export function chromeProxyForPort(port: number): ChromeProxyConfig | null {

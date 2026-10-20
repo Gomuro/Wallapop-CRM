@@ -24,6 +24,7 @@ export type { ConnectAccountSession } from "@/components/accounts/connect-accoun
 type ConnectSessionSetters = {
   setEmail: React.Dispatch<React.SetStateAction<string>>;
   setPassword: React.Dispatch<React.SetStateAction<string>>;
+  setProxy: React.Dispatch<React.SetStateAction<string>>;
   setSession: React.Dispatch<React.SetStateAction<WallapopAccountSession>>;
   setError: React.Dispatch<React.SetStateAction<string | null>>;
   setPendingKind: React.Dispatch<React.SetStateAction<PendingKind>>;
@@ -72,6 +73,9 @@ function attachWallapopStatusSync(ctx: {
         pendingKindRef.current === null
       ) {
         setters.setEmail((current) => (current.trim() ? current : next.email!));
+      }
+      if (next.proxy) {
+        setters.setProxy((current) => (current.trim() ? current : next.proxy!));
       }
     } catch {
       if (!cancelled) {
@@ -213,6 +217,8 @@ async function runApplyProxy(ctx: {
       proxy: ctx.proxy,
     });
     ctx.setters.setSession(next);
+    if (next.proxy) ctx.setters.setProxy(next.proxy);
+    else ctx.setters.setProxy("");
   } catch (err) {
     ctx.setters.setError(wallapopAccountErrorMessage(err));
   } finally {
@@ -348,6 +354,7 @@ export function useConnectAccountSession(accountId?: string): ConnectAccountSess
   const setters: ConnectSessionSetters = {
     setEmail,
     setPassword,
+    setProxy,
     setSession,
     setError,
     setPendingKind,

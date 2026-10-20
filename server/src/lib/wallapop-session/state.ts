@@ -9,6 +9,7 @@ export type WallapopSessionSnapshot = {
   email: string | null
   error?: string
   listingsReset?: boolean
+  proxy?: string | null
 }
 
 export type SessionState = {

@@ -10,6 +10,9 @@ import {
   setKeepChromeWarm,
 } from "../wallapop-cdp"
 import { log } from "../log"
+import { parseChromeProxy } from "../../../../lib/accounts/chrome-proxy"
+import { writeChromeProxyForAccount } from "../account-chrome-proxy"
+import { snapshotWithChromeProxy } from "./proxy"
 import { applyReconcileToState, bindWallapopIdentity, syncAccountStatus } from "./reconcile"
 import {
   readGeneration,
@@ -109,6 +112,9 @@ export async function connectWallapopSession(input: {
   accountId?: string
 }): Promise<ConnectSessionResult> {
   const target = await resolveAccountTarget(input.accountId)
+  if (parseChromeProxy(input.proxy ?? null)) {
+    await writeChromeProxyForAccount(target.accountId, input.proxy)
+  }
   const row = sessionRow(target.accountId)
   const prev = snapshotOf(row)
   const gen = nextGeneration(target.accountId)
@@ -117,12 +123,23 @@ export async function connectWallapopSession(input: {
   row.email = input.email
   row.error = null
   try {
-    return await finishIfStillCurrent(input, target, row, gen)
+    const result = await finishIfStillCurrent(input, target, row, gen)
+    return {
+      ...result,
+      session: await snapshotWithChromeProxy(target.accountId, result.session),
+    }
   } catch (error) {
     if (gen !== readGeneration(target.accountId)) {
-      return { ok: true, session: snapshotOf(row) }
+      return {
+        ok: true,
+        session: await snapshotWithChromeProxy(target.accountId, snapshotOf(row)),
+      }
     }
-    return finishConnectFailure(error, prev, row)
+    const failed = finishConnectFailure(error, prev, row)
+    return {
+      ...failed,
+      session: await snapshotWithChromeProxy(target.accountId, failed.session),
+    }
   }
 }
 
@@ -193,12 +210,22 @@ export async function submitWallapopSession2fa(
     }
     const result = await finish2faSuccess(row, target.accountId, target.port)
     if (result.ok) await quitChromeIfNoWorkerSlots(target.port)
-    return result
+    return {
+      ...result,
+      session: await snapshotWithChromeProxy(target.accountId, result.session),
+    }
   } catch (error) {
     if (gen !== readGeneration(target.accountId)) {
-      return { ok: true, session: snapshotOf(row) }
+      return {
+        ok: true,
+        session: await snapshotWithChromeProxy(target.accountId, snapshotOf(row)),
+      }
     }
-    return finish2faFailure(error, row)
+    const failed = finish2faFailure(error, row)
+    return {
+      ...failed,
+      session: await snapshotWithChromeProxy(target.accountId, failed.session),
+    }
   }
 }
 
@@ -226,6 +253,6 @@ export async function disconnectWallapopSession(
   row.email = null
   row.error = null
   await syncAccountStatus(target.accountId, "INACTIVE")
-  return snapshotOf(row)
+  return snapshotWithChromeProxy(target.accountId, snapshotOf(row))
 }
 

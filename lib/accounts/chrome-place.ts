@@ -30,3 +30,11 @@ export function firstCdpPort(): number {
   if (Number.isFinite(raw) && raw > 0) return raw
   return FIRST_ACCOUNT_CDP_PORT
 }
+
+/** Inverse of chromePlaceAt. Null if this is not a cashier CDP port. */
+export function chromeSlotForPort(port: number): number | null {
+  for (let slot = 0; slot < 100; slot++) {
+    if (chromePlaceAt(slot).port === port) return slot
+  }
+  return null
+}

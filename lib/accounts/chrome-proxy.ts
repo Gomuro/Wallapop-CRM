@@ -89,6 +89,20 @@ function fromVendor(raw: string): ChromeProxyConfig | null {
   }
 }
 
+/** Store the same operator string we accept in the account form. */
+export function formatChromeProxy(config: ChromeProxyConfig): string {
+  const url = new URL(config.server)
+  const host = url.hostname
+  const port = url.port
+  if (config.username) {
+    return `${host}:${port}:${config.username}:${config.password ?? ""}`
+  }
+  if (url.protocol !== "http:") {
+    return config.server
+  }
+  return `${host}:${port}`
+}
+
 /** Accepts `http://user:pass@host:port`, `user:pass@host:port`, `host:port:user:pass`, `host:port`. */
 export function parseChromeProxy(
   input: string | null | undefined,
