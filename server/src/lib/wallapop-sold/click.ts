@@ -38,6 +38,31 @@ export const CLICK_SELLER_SOLD_EVAL = `(() => {
   return "missing_button";
 })()`
 
+/**
+ * Live item page 2026-10-20 (already vendido):
+ * `<wallapop-badge badge-type="sold" text="Vendido">`
+ * Catalog / En venta still uses `badgetype="sold"` (no hyphen).
+ * Hydration also has `"flags":{...,"sold":true}`.
+ */
+export const FIND_ITEM_ALREADY_SOLD_EVAL = `(() => {
+  const badges = [...document.querySelectorAll("wallapop-badge")];
+  for (const el of badges) {
+    const kind = (
+      el.getAttribute("badge-type") ||
+      el.getAttribute("badgetype") ||
+      ""
+    ).toLowerCase();
+    const text = (el.getAttribute("text") || "").trim();
+    if (kind === "sold" || text === "Vendido") return "badge";
+  }
+  const html = document.documentElement.innerHTML;
+  const flags = html.match(
+    /"flags":\\{"reserved":(?:true|false),"bumped":(?:true|false),"sold":(true|false)/,
+  );
+  if (flags && flags[1] === "true") return "flags";
+  return "not";
+})()`
+
 export const CLICK_MARK_AS_SOLD_EVAL = `(() => {
   const host = document.querySelector("walla-button#markAsSoldButton");
   if (!host) return "missing_button";
@@ -45,6 +70,14 @@ export const CLICK_MARK_AS_SOLD_EVAL = `(() => {
   target.click();
   return "clicked";
 })()`
+
+export async function findItemAlreadySold(
+  page: Page,
+): Promise<"badge" | "flags" | "not"> {
+  const result = (await page.evaluate(FIND_ITEM_ALREADY_SOLD_EVAL)) as string
+  if (result === "badge" || result === "flags" || result === "not") return result
+  return "not"
+}
 
 export async function findSellerSoldButton(
   page: Page,

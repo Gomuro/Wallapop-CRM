@@ -18,7 +18,9 @@ export { WallapopSoldError }
 export {
   CLICK_MARK_AS_SOLD_EVAL,
   CLICK_SELLER_SOLD_EVAL,
+  FIND_ITEM_ALREADY_SOLD_EVAL,
   FIND_SELLER_SOLD_EVAL,
+  findItemAlreadySold,
   findSellerSoldButton,
 } from "./click"
 export {

@@ -10,6 +10,7 @@ import {
 } from "../../lib/inventory/wallapop-item-url"
 import {
   CLICK_MARK_AS_SOLD_EVAL,
+  FIND_ITEM_ALREADY_SOLD_EVAL,
   FIND_SELLER_SOLD_EVAL,
   firstSoldCatalogHrefMatches,
   soldCatalogHrefMatches,
@@ -93,6 +94,50 @@ describe("isSoldDryRun", () => {
 })
 
 describe("sold DOM fixtures", () => {
+  it("treats live item badge-type=sold as already vendido", async () => {
+    const html = fs.readFileSync(
+      path.join(__dirname, "fixtures/wallapop-item-already-sold.html"),
+      "utf8",
+    )
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(html)
+      expect(await page.evaluate(FIND_ITEM_ALREADY_SOLD_EVAL)).toBe("badge")
+      expect(await page.evaluate(FIND_SELLER_SOLD_EVAL)).toBe("missing_container")
+    } finally {
+      await browser.close()
+    }
+  })
+
+  it("reads flags.sold when the badge is not in the DOM yet", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(
+        `<script type="application/json">{"flags":{"reserved":false,"bumped":false,"sold":true,"expired":false,"favorited":false,"onHold":false}}</script>`,
+      )
+      expect(await page.evaluate(FIND_ITEM_ALREADY_SOLD_EVAL)).toBe("flags")
+    } finally {
+      await browser.close()
+    }
+  })
+
+  it("does not treat a live-for-sale seller block as already vendido", async () => {
+    const html = fs.readFileSync(
+      path.join(__dirname, "fixtures/wallapop-item-seller-sold.html"),
+      "utf8",
+    )
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(html)
+      expect(await page.evaluate(FIND_ITEM_ALREADY_SOLD_EVAL)).toBe("not")
+    } finally {
+      await browser.close()
+    }
+  })
+
   it("finds Marcar como vendido in the seller block, not Destacar", async () => {
     const html = fs.readFileSync(
       path.join(__dirname, "fixtures/wallapop-item-seller-sold.html"),
