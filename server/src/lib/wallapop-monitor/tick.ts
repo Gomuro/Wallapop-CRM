@@ -3,9 +3,16 @@ import type { Page } from "playwright";
 import { assignChromePlaces } from "../account-chrome";
 import { getPrisma } from "../db";
 import { log, serializeError } from "../log";
-import { pullQueuedListingsForSoldProducts } from "../product-sold";
+import {
+  pullQueuedListingsForSoldProducts,
+  revertRelistedSale,
+  revertRemovedSale,
+} from "../product-sold";
 import { scheduleOpenSiblingAdsForSoldProducts } from "../sibling-eliminar";
-import { scheduleOpenSiblingAdsForReservedProducts } from "../sibling-reserve";
+import {
+  scheduleOpenSiblingAdsForReservedProducts,
+  scheduleSiblingUnreserve,
+} from "../sibling-reserve";
 import {
   closeWorkerSlotPages,
   dismissWallapopConsent,
@@ -24,7 +31,12 @@ import {
 } from "../wallapop-session";
 import { applyMonitorPlan } from "./apply";
 import { CATALOG_PUBLISHED_URL } from "./catalog";
-import { planMonitorUpdates, type MonitorCrmListing } from "./diff";
+import {
+  planLinkedSales,
+  planMonitorUpdates,
+  type LinkedSaleListing,
+  type MonitorCrmListing,
+} from "./diff";
 import {
   ensureTodoElCatalogo,
   scrapeProCatalogs,
@@ -52,6 +64,20 @@ async function loadLiveListings(accountId: string): Promise<MonitorCrmListing[]>
     },
   });
   return listings;
+}
+
+async function loadLinkedSoldListings(accountId: string): Promise<LinkedSaleListing[]> {
+  const prisma = getPrisma();
+  if (!prisma) return [];
+  return prisma.productListing.findMany({
+    where: {
+      accountId,
+      status: "DEACTIVATED",
+      externalUrl: { not: null },
+      product: { status: "SOLD", soldAccountId: accountId },
+    },
+    select: { productId: true, externalUrl: true },
+  });
 }
 
 async function scrapeCatalogs(page: Page, accountId: string, confirmHrefs?: string[]) {
@@ -116,18 +142,27 @@ async function scrapeCatalogs(page: Page, accountId: string, confirmHrefs?: stri
   return { published, sold };
 }
 
-async function runMonitorAfterAttach(accountId: string, port: number): Promise<void> {
+async function runMonitorAfterAttach(
+  accountId: string,
+  port: number,
+): Promise<string[]> {
   const page = await ensureWorkerWindow("monitor", port);
   try {
     const listings = await loadLiveListings(accountId);
+    const linkedSold = await loadLinkedSoldListings(accountId);
     log("info", "wallapop_monitor_listings_snapshot", {
       accountId,
       count: listings.length,
     });
     let catalogs = await scrapeCatalogs(page, accountId);
-    if (!catalogs) return;
+    if (!catalogs) return [];
     let plan = planMonitorUpdates(catalogs.published, catalogs.sold, listings);
-    if (plan.toDeactivated.length > 0) {
+    let linked = planLinkedSales(catalogs.published, catalogs.sold, linkedSold);
+    const needsConfirm =
+      plan.toDeactivated.length > 0 ||
+      linked.removedProductIds.length > 0 ||
+      linked.relistedProductIds.length > 0;
+    if (needsConfirm) {
       const confirmHrefs = listings
         .filter(
           (listing) =>
@@ -137,10 +172,13 @@ async function runMonitorAfterAttach(accountId: string, port: number): Promise<v
       log("info", "wallapop_monitor_reread_activos", {
         accountId,
         missing: confirmHrefs.length,
+        removedSales: linked.removedProductIds.length,
+        relistedSales: linked.relistedProductIds.length,
       });
       catalogs = await scrapeCatalogs(page, accountId, confirmHrefs);
-      if (!catalogs) return;
+      if (!catalogs) return [];
       plan = planMonitorUpdates(catalogs.published, catalogs.sold, listings);
+      linked = planLinkedSales(catalogs.published, catalogs.sold, linkedSold);
     }
     log("info", "wallapop_monitor_plan", {
       toReserved: plan.toReserved.length,
@@ -149,16 +187,42 @@ async function runMonitorAfterAttach(accountId: string, port: number): Promise<v
       toDeactivated: plan.toDeactivated.length,
       orphanPublished: plan.orphanPublished.length,
       orphanSold: plan.orphanSold.length,
+      removedSales: linked.removedProductIds.length,
+      relistedSales: linked.relistedProductIds.length,
     });
     await applyMonitorPlan(plan, accountId);
+    await releaseCancelledSales(accountId, linked);
+    return linked.stillSoldProductIds;
   } finally {
     await closeWorkerSlotPages("monitor", port);
   }
 }
 
+async function releaseCancelledSales(
+  accountId: string,
+  linked: {
+    removedProductIds: string[];
+    relistedProductIds: string[];
+  },
+): Promise<void> {
+  const prisma = getPrisma();
+  if (!prisma) return;
+  for (const productId of linked.removedProductIds) {
+    const reverted = await revertRemovedSale(prisma, productId);
+    if (!reverted) continue;
+    log("info", "wallapop_monitor_sale_removed", { productId, accountId });
+    void scheduleSiblingUnreserve(productId, accountId);
+  }
+  for (const productId of linked.relistedProductIds) {
+    const reverted = await revertRelistedSale(prisma, productId);
+    if (!reverted) continue;
+    log("info", "wallapop_monitor_sale_relisted", { productId, accountId });
+    void scheduleSiblingUnreserve(productId, accountId);
+  }
+}
+
 export async function runWallapopMonitorTick(): Promise<void> {
   void pullQueuedListingsForSoldProducts();
-  void scheduleOpenSiblingAdsForSoldProducts();
   void scheduleOpenSiblingAdsForReservedProducts();
   const prisma = getPrisma();
   if (!prisma) return;
@@ -169,6 +233,7 @@ export async function runWallapopMonitorTick(): Promise<void> {
   const active = accounts.filter(
     (account) => peekWallapopSession(account.id).status === "ACTIVE",
   );
+  const stillSold = new Set<string>();
   if (active.length === 0) {
     log("info", "wallapop_monitor_skip_session", { status: "DISCONNECTED" });
     await quitChromeIfNoWorkerSlots();
@@ -178,11 +243,12 @@ export async function runWallapopMonitorTick(): Promise<void> {
     const port = places.get(account.id)?.port;
     if (port == null) continue;
     try {
-      await runWithBrowserBusy(
+      const confirmed = await runWithBrowserBusy(
         "monitor",
         () => runMonitorAfterAttach(account.id, port),
         port,
       );
+      for (const productId of confirmed) stillSold.add(productId);
     } catch (error) {
       if (isBrowserBusyError(error)) {
         log("info", "wallapop_monitor_skip_busy", { busy: error.busyWith, port });
@@ -196,4 +262,5 @@ export async function runWallapopMonitorTick(): Promise<void> {
       await quitChromeIfNoWorkerSlots(port);
     }
   }
+  void scheduleOpenSiblingAdsForSoldProducts(stillSold);
 }

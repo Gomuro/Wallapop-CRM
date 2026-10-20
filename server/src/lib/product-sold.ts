@@ -147,6 +147,73 @@ async function requeueSellerListing(
   })
 }
 
+async function clearSoldWarehouse(
+  tx: SoldTx,
+  productId: string,
+): Promise<string | null> {
+  const existing = await tx.product.findUnique({
+    where: { id: productId },
+    select: { status: true, soldAccountId: true },
+  })
+  if (!existing || existing.status !== "SOLD" || !existing.soldAccountId) return null
+  await tx.product.update({
+    where: { id: productId },
+    data: {
+      status: "ACTIVE",
+      soldAt: null,
+      soldPrice: null,
+      soldAccountId: null,
+    },
+  })
+  return existing.soldAccountId
+}
+
+/**
+ * The sold ad was deleted. Warehouse goes back to ACTIVE. That account stays
+ * Desactivado and loses the URL. Other accounts are left for the caller:
+ * a sibling reservation is released, a sibling that was already taken down
+ * is not put back in the queue.
+ */
+export async function revertRemovedSale(
+  prisma: PrismaDb,
+  productId: string,
+): Promise<boolean> {
+  const accountId = await prisma.$transaction(async (tx) => {
+    const soldAccountId = await clearSoldWarehouse(tx, productId)
+    if (!soldAccountId) return null
+    await tx.productListing.updateMany({
+      where: { productId, accountId: soldAccountId },
+      data: {
+        status: "DEACTIVATED",
+        externalUrl: null,
+        externalItemId: null,
+      },
+    })
+    return soldAccountId
+  })
+  return accountId != null
+}
+
+/**
+ * The purchase was cancelled and the same /item/ is in En venta again.
+ * Warehouse goes back to ACTIVE and that listing is live. The URL stays.
+ */
+export async function revertRelistedSale(
+  prisma: PrismaDb,
+  productId: string,
+): Promise<boolean> {
+  const accountId = await prisma.$transaction(async (tx) => {
+    const soldAccountId = await clearSoldWarehouse(tx, productId)
+    if (!soldAccountId) return null
+    await tx.productListing.updateMany({
+      where: { productId, accountId: soldAccountId, status: "DEACTIVATED" },
+      data: { status: "ACTIVE" },
+    })
+    return soldAccountId
+  })
+  return accountId != null
+}
+
 /**
  * After a return the warehouse is ACTIVE again. The selling account goes
  * back to the queue. Every other listing already taken down (DEACTIVATED)

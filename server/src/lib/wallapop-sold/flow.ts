@@ -1,5 +1,9 @@
 import type { Page } from "playwright"
 
+import {
+  clickSellerUnreserveButton,
+  findSellerReserveButton,
+} from "../wallapop-reserve/click"
 import { findSellerSoldButton, clickMarkAsSoldConfirm } from "./click"
 import {
   clickSellerSoldAndWaitTab,
@@ -22,6 +26,23 @@ async function requireSellerSoldButton(page: Page): Promise<void> {
       'No se encontró "Marcar como vendido" en el anuncio.',
     )
   }
+}
+
+/** A sibling hold hides Marcar como vendido behind Anular reserva. */
+async function releaseHoldSoItCanBeSold(page: Page): Promise<void> {
+  if ((await findSellerSoldButton(page)) === "found") return
+  if ((await findSellerReserveButton(page)) !== "already") return
+  await clickSellerUnreserveButton(page)
+  const deadline = Date.now() + 8_000
+  while (Date.now() <= deadline) {
+    if ((await findSellerSoldButton(page)) === "found") return
+    if ((await findSellerReserveButton(page)) === "ready") return
+    await page.waitForTimeout(250)
+  }
+  throw new WallapopSoldError(
+    "item",
+    'Tras Anular reserva el anuncio sigue sin "Marcar como vendido".',
+  )
 }
 
 async function confirmAndVerifyVendidos(
@@ -53,6 +74,9 @@ export async function runSoldAfterAttach(
 ): Promise<MarkWallapopSoldResult> {
   mark("item")
   await gotoItemPage(page, input.itemUrl)
+  if (!input.dryRun && (await findSellerSoldButton(page)) !== "found") {
+    await releaseHoldSoItCanBeSold(page)
+  }
   await requireSellerSoldButton(page)
   mark("before_confirm")
   if (input.dryRun) {

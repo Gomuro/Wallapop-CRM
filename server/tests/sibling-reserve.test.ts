@@ -1,9 +1,13 @@
 import { chromium } from "playwright"
 import { describe, expect, it } from "vitest"
 
-import { siblingReserveTargets } from "../src/lib/sibling-reserve"
+import {
+  siblingReserveTargets,
+  siblingUnreserveTargets,
+} from "../src/lib/sibling-reserve"
 import {
   CLICK_SELLER_RESERVE_EVAL,
+  CLICK_SELLER_UNRESERVE_EVAL,
   FIND_SELLER_RESERVE_EVAL,
 } from "../src/lib/wallapop-reserve"
 
@@ -17,6 +21,19 @@ describe("siblingReserveTargets", () => {
         [
           { accountId: "second", status: "RESERVED", externalUrl: SECOND },
           { accountId: "default", status: "ACTIVE", externalUrl: FIRST },
+          { accountId: "queue", status: "READY_TO_POST", externalUrl: null },
+        ],
+        "second",
+      ),
+    ).toEqual([{ accountId: "default", itemUrl: FIRST }])
+  })
+
+  it("releases the other account after the purchase is gone", () => {
+    expect(
+      siblingUnreserveTargets(
+        [
+          { accountId: "second", status: "DEACTIVATED", externalUrl: null },
+          { accountId: "default", status: "RESERVED", externalUrl: FIRST },
           { accountId: "queue", status: "READY_TO_POST", externalUrl: null },
         ],
         "second",
@@ -52,6 +69,28 @@ describe("Reservar producto", () => {
       expect(await page.evaluate(FIND_SELLER_RESERVE_EVAL)).toBe("ready")
       expect(await page.evaluate(CLICK_SELLER_RESERVE_EVAL)).toBe("clicked")
       expect(await page.evaluate(FIND_SELLER_RESERVE_EVAL)).toBe("already")
+    } finally {
+      await browser.close()
+    }
+  })
+
+  it("clicks Anular reserva and then sees Reservar producto", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><body>
+        <div class="ItemDetailSellerButtons">
+          <walla-button id="reserve" text="Anular reserva"></walla-button>
+        </div>
+      </body>`)
+      await page.locator("#reserve").evaluate((el) => {
+        el.addEventListener("click", () => {
+          el.setAttribute("text", "Reservar producto")
+        })
+      })
+      expect(await page.evaluate(FIND_SELLER_RESERVE_EVAL)).toBe("already")
+      expect(await page.evaluate(CLICK_SELLER_UNRESERVE_EVAL)).toBe("clicked")
+      expect(await page.evaluate(FIND_SELLER_RESERVE_EVAL)).toBe("ready")
     } finally {
       await browser.close()
     }

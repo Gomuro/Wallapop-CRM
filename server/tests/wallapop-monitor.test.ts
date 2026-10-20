@@ -18,6 +18,7 @@ import {
   planCombinedTitleUrlLinks,
 } from "../src/lib/wallapop-monitor/link-by-title-llm"
 import {
+  planLinkedSales,
   planMonitorUpdates,
   PUBLISHED_CATALOG_ROWS_EVAL,
 } from "../src/lib/wallapop-monitor"
@@ -141,6 +142,41 @@ describe("planMonitorUpdates", () => {
     expect(plan.toSoldProductIds).toEqual([])
     expect(plan.toDeactivated).toEqual(["l-silla", "l-mesa"])
     expect(plan.toReserved).toEqual([])
+  })
+
+  it("cancels a recorded sale when its /item/ is gone, and keeps one that is still sold", () => {
+    const linked = [
+      { productId: "p-gone", externalUrl: SILLA },
+      { productId: "p-back", externalUrl: ARMARIO },
+      { productId: "p-sold", externalUrl: MESA },
+    ]
+    expect(planLinkedSales([], [], linked)).toEqual({
+      removedProductIds: [],
+      relistedProductIds: [],
+      stillSoldProductIds: [],
+    })
+    expect(
+      planLinkedSales(
+        [{ href: ARMARIO, reserved: false }],
+        [{ href: MESA, sold: true }],
+        linked,
+      ),
+    ).toEqual({
+      removedProductIds: ["p-gone"],
+      relistedProductIds: ["p-back"],
+      stillSoldProductIds: ["p-sold"],
+    })
+    expect(
+      planLinkedSales(
+        [{ href: "https://es.wallapop.com/item/otro-1", reserved: false }],
+        [{ href: MESA, sold: false }],
+        [{ productId: "p-sold", externalUrl: MESA }],
+      ),
+    ).toEqual({
+      removedProductIds: [],
+      relistedProductIds: [],
+      stillSoldProductIds: [],
+    })
   })
 
   it("logs catalog hrefs that are not in CRM instead of auto-SOLD", () => {

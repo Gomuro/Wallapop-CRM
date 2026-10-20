@@ -168,7 +168,9 @@ export async function scheduleSiblingSold(
  * A sale recorded before this follow-up, or a failed click, is picked up here.
  * The ad stays on Wallapop. It is marked sold, not deleted.
  */
-export async function scheduleOpenSiblingAdsForSoldProducts(): Promise<void> {
+export async function scheduleOpenSiblingAdsForSoldProducts(
+  stillSoldProductIds: ReadonlySet<string> = new Set(),
+): Promise<void> {
   const prisma = getPrisma()
   if (!prisma) return
   const products = await prisma.product.findMany({
@@ -186,10 +188,10 @@ export async function scheduleOpenSiblingAdsForSoldProducts(): Promise<void> {
   })
   const ports = await portsByAccount()
   for (const product of products) {
-    for (const target of siblingSoldTargets(
-      product.listings,
-      product.soldAccountId,
-    )) {
+    const listings = stillSoldProductIds.has(product.id)
+      ? product.listings
+      : product.listings.filter((listing) => listing.status !== "RESERVED")
+    for (const target of siblingSoldTargets(listings, product.soldAccountId)) {
       const port = ports.get(target.accountId)
       if (port == null) continue
       enqueueSibling(product.id, target, port)

@@ -20,3 +20,9 @@ export type MarkWallapopReservedResult = {
   step: "reserved"
   already: boolean
 }
+
+export type MarkWallapopUnreservedResult = {
+  itemUrl: string
+  step: "active"
+  already: boolean
+}

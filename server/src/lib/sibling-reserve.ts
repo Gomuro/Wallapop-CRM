@@ -2,7 +2,10 @@ import { wallapopEsItemUrlOrNull } from "../../../lib/inventory/wallapop-item-ur
 import { assignChromePlaces } from "./account-chrome"
 import { getPrisma } from "./db"
 import { log, serializeError } from "./log"
-import { markWallapopReservedInBrowser } from "./wallapop-reserve"
+import {
+  markWallapopReservedInBrowser,
+  markWallapopUnreservedInBrowser,
+} from "./wallapop-reserve"
 
 export type SiblingReserveListing = {
   accountId: string
@@ -33,6 +36,28 @@ export function siblingReserveTargets(
   for (const listing of listings) {
     if (reserved.has(listing.accountId) || seen.has(listing.accountId)) continue
     if (listing.status !== "ACTIVE") continue
+    const itemUrl = wallapopEsItemUrlOrNull(listing.externalUrl)
+    if (!itemUrl) continue
+    seen.add(listing.accountId)
+    targets.push({ accountId: listing.accountId, itemUrl })
+  }
+  return targets
+}
+
+/**
+ * Reservations we still hold on the other accounts after the purchase that
+ * caused them was cancelled or the ad was deleted. The selling account is
+ * not included. Each target is released on Wallapop, not sold and not deleted.
+ */
+export function siblingUnreserveTargets(
+  listings: SiblingReserveListing[],
+  sourceAccountId: string | null,
+): SiblingReserveTarget[] {
+  const targets: SiblingReserveTarget[] = []
+  const seen = new Set<string>()
+  for (const listing of listings) {
+    if (sourceAccountId && listing.accountId === sourceAccountId) continue
+    if (listing.status !== "RESERVED" || seen.has(listing.accountId)) continue
     const itemUrl = wallapopEsItemUrlOrNull(listing.externalUrl)
     if (!itemUrl) continue
     seen.add(listing.accountId)
@@ -163,6 +188,99 @@ export async function scheduleSiblingReserved(
   })
   if (!product) return
   await enqueueProduct(productId, product.listings, sourceAccountId, await portsByAccount())
+}
+
+async function runSiblingUnreserve(
+  productId: string,
+  target: SiblingReserveTarget,
+  port: number,
+): Promise<void> {
+  log("info", "wallapop_sibling_unreserve_start", {
+    productId,
+    accountId: target.accountId,
+    port,
+    itemUrl: target.itemUrl,
+  })
+  const result = await markWallapopUnreservedInBrowser({
+    itemUrl: target.itemUrl,
+    cdpPort: port,
+  })
+  if (result.step !== "active") return
+  const prisma = getPrisma()
+  if (!prisma) return
+  const updated = await prisma.productListing.updateMany({
+    where: {
+      productId,
+      accountId: target.accountId,
+      status: "RESERVED",
+    },
+    data: { status: "ACTIVE" },
+  })
+  log("info", "wallapop_sibling_unreserve_done", {
+    productId,
+    accountId: target.accountId,
+    already: result.already,
+    updated: updated.count,
+  })
+}
+
+function enqueueUnreserve(
+  productId: string,
+  target: SiblingReserveTarget,
+  port: number,
+): void {
+  const key = `unreserve:${productId}:${target.accountId}`
+  if (inflight.has(key)) return
+  inflight.add(key)
+  log("info", "wallapop_sibling_unreserve_queued", {
+    productId,
+    accountId: target.accountId,
+    port,
+  })
+  enqueueOnPort(port, async () => {
+    try {
+      await runSiblingUnreserve(productId, target, port)
+    } catch (error) {
+      log("error", "wallapop_sibling_unreserve_failed", {
+        productId,
+        accountId: target.accountId,
+        port,
+        err: serializeError(error),
+      })
+    } finally {
+      inflight.delete(key)
+    }
+  })
+}
+
+/** The purchase is gone. Release Reservado on the other accounts. */
+export async function scheduleSiblingUnreserve(
+  productId: string,
+  sourceAccountId: string | null,
+): Promise<void> {
+  const prisma = getPrisma()
+  if (!prisma) return
+  const product = await prisma.product.findUnique({
+    where: { id: productId },
+    select: {
+      listings: {
+        select: { accountId: true, status: true, externalUrl: true },
+      },
+    },
+  })
+  if (!product) return
+  const ports = await portsByAccount()
+  for (const target of siblingUnreserveTargets(product.listings, sourceAccountId)) {
+    const port = ports.get(target.accountId)
+    if (port == null) {
+      log("warn", "wallapop_sibling_unreserve_no_port", {
+        productId,
+        accountId: target.accountId,
+      })
+      continue
+    }
+    enqueueUnreserve(productId, target, port)
+  }
 }
 
 /** One account is already RESERVED and another live ad is still for sale. */

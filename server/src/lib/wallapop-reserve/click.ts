@@ -59,6 +59,27 @@ export async function findSellerReserveButton(page: Page): Promise<SellerReserve
   return "missing_button"
 }
 
+export const CLICK_SELLER_UNRESERVE_EVAL = `(() => {
+  const root = document.querySelector('[class*="ItemDetailSellerButtons"]');
+  if (!root) return "missing_container";
+  for (const el of root.querySelectorAll("walla-button")) {
+    const text = (
+      el.getAttribute("text") ||
+      el.shadowRoot?.querySelector?.("[part=button-text]")?.textContent ||
+      ""
+    ).trim();
+    if (text !== "Anular reserva") continue;
+    const inner = el.shadowRoot?.querySelector?.("button");
+    const target = inner || el;
+    target.dispatchEvent(
+      new MouseEvent("click", { bubbles: true, composed: true, cancelable: true }),
+    );
+    target.click();
+    return "clicked";
+  }
+  return "missing_button";
+})()`
+
 export async function clickSellerReserveButton(page: Page): Promise<void> {
   const result = (await page.evaluate(CLICK_SELLER_RESERVE_EVAL)) as string
   log("info", "wallapop_reserve_seller_click", { result })
@@ -66,6 +87,17 @@ export async function clickSellerReserveButton(page: Page): Promise<void> {
     throw new WallapopReserveError(
       "item",
       'No se encontró "Reservar producto" en el anuncio.',
+    )
+  }
+}
+
+export async function clickSellerUnreserveButton(page: Page): Promise<void> {
+  const result = (await page.evaluate(CLICK_SELLER_UNRESERVE_EVAL)) as string
+  log("info", "wallapop_unreserve_seller_click", { result })
+  if (result !== "clicked") {
+    throw new WallapopReserveError(
+      "item",
+      'No se encontró "Anular reserva" en el anuncio.',
     )
   }
 }

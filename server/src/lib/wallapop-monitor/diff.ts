@@ -22,6 +22,21 @@ export type MonitorPlan = {
   orphanSold: string[]
 }
 
+export type LinkedSaleListing = {
+  productId: string
+  externalUrl: string | null
+}
+
+/** What a sold account's saved /item/ still means in this catalog scrape. */
+export type LinkedSalePlan = {
+  /** Gone from En venta and from Vendidos. The ad was deleted after the sale. */
+  removedProductIds: string[]
+  /** Back in En venta without a sold badge. The purchase was cancelled. */
+  relistedProductIds: string[]
+  /** Still in Vendidos with the sold badge. */
+  stillSoldProductIds: string[]
+}
+
 function listingByItemKey(
   listings: MonitorCrmListing[],
 ): Map<string, MonitorCrmListing> {
@@ -125,6 +140,58 @@ function missingFromBothCatalogs(
     toDeactivated.push(listing.id)
   }
   return toDeactivated
+}
+
+const EMPTY_LINKED_SALES: LinkedSalePlan = {
+  removedProductIds: [],
+  relistedProductIds: [],
+  stillSoldProductIds: [],
+}
+
+/**
+ * A sale we already recorded on this account. Empty catalogs mean the scrape
+ * failed, so nothing is cancelled. A sold badge wins over En venta.
+ */
+export function planLinkedSales(
+  published: { href: string }[],
+  sold: SoldCatalogRow[],
+  listings: LinkedSaleListing[],
+): LinkedSalePlan {
+  if (published.length === 0 && sold.length === 0) return EMPTY_LINKED_SALES
+  const publishedKeys = new Set<string>()
+  for (const row of published) {
+    const key = wallapopItemPathKey(row.href)
+    if (key) publishedKeys.add(key)
+  }
+  const vendidosKeys = new Set<string>()
+  const soldBadgeKeys = new Set<string>()
+  for (const row of sold) {
+    const key = wallapopItemPathKey(row.href)
+    if (!key) continue
+    vendidosKeys.add(key)
+    if (row.sold !== false) soldBadgeKeys.add(key)
+  }
+  const removed = new Set<string>()
+  const relisted = new Set<string>()
+  const stillSold = new Set<string>()
+  for (const listing of listings) {
+    const key = wallapopItemPathKey(listing.externalUrl)
+    if (!key) continue
+    if (soldBadgeKeys.has(key)) {
+      stillSold.add(listing.productId)
+      continue
+    }
+    if (publishedKeys.has(key)) {
+      relisted.add(listing.productId)
+      continue
+    }
+    if (!vendidosKeys.has(key)) removed.add(listing.productId)
+  }
+  return {
+    removedProductIds: [...removed],
+    relistedProductIds: [...relisted],
+    stillSoldProductIds: [...stillSold],
+  }
 }
 
 /**
