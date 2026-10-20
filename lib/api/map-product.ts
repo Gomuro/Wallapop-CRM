@@ -4,9 +4,12 @@ import type {
   ApiCategory,
   ApiListing,
   ApiProduct,
-  ApiProductImage,
   ApiProductListItem,
 } from "@/lib/api/types"
+import {
+  mappedProductImages,
+  productImageUrls,
+} from "@/lib/api/map-product-images"
 import {
   conditionFromFormValue,
   conditionLabel,
@@ -106,28 +109,6 @@ function asPackageSize(value: unknown): ShippingPackageSize | null {
   return value === "STANDARD" || value === "BULKY" ? value : null
 }
 
-function normalizeImages(images: unknown): ApiProductImage[] {
-  if (!Array.isArray(images)) return []
-  const out: ApiProductImage[] = []
-  for (const [index, item] of images.entries()) {
-    if (typeof item === "string" && item.trim()) {
-      out.push({ id: `img-${index}`, url: item.trim(), sortOrder: index })
-      continue
-    }
-    if (!item || typeof item !== "object") continue
-    const row = item as Record<string, unknown>
-    const url = asString(row.url).trim()
-    if (!url) continue
-    out.push({
-      id: asString(row.id, `img-${index}`),
-      url,
-      storageKey: typeof row.storageKey === "string" ? row.storageKey : undefined,
-      sortOrder: asNumber(row.sortOrder, index),
-    })
-  }
-  return out
-}
-
 export function mapApiListing(
   listing: ApiListing | null | undefined,
   accountName: string,
@@ -225,22 +206,6 @@ export function mapListItemToInventory(row: ApiProductListItem): InventoryProduc
       ? resolveMediaUrl(row.coverUrl)
       : ""
   return toListItemInventoryProduct(row, cover, listItemListing(row))
-}
-
-export function productImageUrls(product: ApiProduct): string[] {
-  return normalizeImages(product?.images)
-    .slice()
-    .sort((a, b) => a.sortOrder - b.sortOrder)
-    .map((image) => resolveMediaUrl(image.url))
-    .filter(Boolean)
-}
-
-export function mappedProductImages(product: ApiProduct) {
-  return normalizeImages(product?.images).map((image) => ({
-    id: image.id,
-    url: resolveMediaUrl(image.url),
-    sortOrder: image.sortOrder,
-  }))
 }
 
 type InventoryProductSource = {

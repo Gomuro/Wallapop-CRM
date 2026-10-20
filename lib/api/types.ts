@@ -130,21 +130,31 @@ export type ApiProductListResponse = {
   totalPages: number
 }
 
-export type ApiDefaultAccount = {
+export type ApiDefaultAccountIdentity = {
   id: string
   name: string
   status: string
   isDefault: boolean
-  city: string | null
-  postalCode: string | null
-  autopostIntervalMs: number | null
-  autopostEnabled?: boolean
-  wallapopEmail?: string | null
-  cdpPort?: number
-  profileName?: string
   createdAt: string
   updatedAt: string
 }
+
+export type ApiDefaultAccountPlace = {
+  city: string | null
+  postalCode: string | null
+  wallapopEmail?: string | null
+  cdpPort?: number
+  profileName?: string
+}
+
+export type ApiDefaultAccountSchedule = {
+  autopostIntervalMs: number | null
+  autopostEnabled?: boolean
+}
+
+export type ApiDefaultAccount = ApiDefaultAccountIdentity &
+  ApiDefaultAccountPlace &
+  ApiDefaultAccountSchedule
 
 export type ApiAutopostIntervalSource = "account" | "env" | "default"
 
