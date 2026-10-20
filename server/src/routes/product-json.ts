@@ -26,6 +26,7 @@ export const productListInclude = {
       lastPostedAt: true,
       externalUrl: true,
       shippingEnabled: true,
+      lastPublishError: true,
       account: { select: { name: true, isDefault: true } },
     },
   },
@@ -165,6 +166,7 @@ export function toProductJson(row: ProductJsonRow) {
 
 const productDetailListingSelect = {
   ...listingJsonSelect,
+  lastPublishError: true,
   account: { select: { name: true, isDefault: true } },
 } as const
 
@@ -186,6 +188,7 @@ export async function loadProductDetail(
 
 type ProductDetailListing = ProductJsonListing & {
   account: { name: string; isDefault: boolean }
+  lastPublishError: string | null
 }
 
 type ProductDetailRow = ProductJsonRow & {
@@ -221,6 +224,7 @@ export function toProductDetailJson(
         lastPostedAt: item.lastPostedAt,
         externalUrl: item.externalUrl,
         shippingEnabled: item.shippingEnabled,
+        lastPublishError: item.lastPublishError,
         account: item.account,
       })),
     ),
@@ -329,6 +333,7 @@ type ProductListItemExtras = {
     lastPostedAt: Date | null
     externalUrl: string | null
     shippingEnabled: boolean
+    lastPublishError?: string | null
     account?: { name: string; isDefault: boolean } | null
   }>
 }
@@ -384,6 +389,7 @@ export function accountGlancesForProduct(
       isDefault: account.isDefault,
       status: listing?.status ?? null,
       externalUrl: listing?.externalUrl ?? null,
+      lastPublishError: listing?.lastPublishError ?? null,
     }
   })
 }

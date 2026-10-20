@@ -61,6 +61,7 @@ async function fillShippingSection(
     const weightBandLabel = await ensureStandardWeightBand(
       page,
       input.weightKg,
+      input.weightBands,
     );
     logPublishStep("form", page, {
       phase: "after_weight",

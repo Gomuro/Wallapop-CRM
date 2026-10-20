@@ -168,8 +168,8 @@ function AccountMarks({
               focused && live && "text-foreground",
             )}
           >
-            <span className="min-w-0 truncate">{row.accountName}</span>
-            <span className="shrink-0">{accountGlanceLabel(row)}</span>
+            <span className="shrink-0">{row.accountName}</span>
+            <span className="min-w-0 text-right wrap-break-word">{accountGlanceLabel(row)}</span>
           </li>
         )
       })}

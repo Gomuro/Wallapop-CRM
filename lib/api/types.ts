@@ -77,6 +77,7 @@ export type ApiAccountGlance = {
   isDefault: boolean
   status: ListingStatusRead | null
   externalUrl: string | null
+  lastPublishError?: string | null
 }
 
 export type ApiProductMedia = {

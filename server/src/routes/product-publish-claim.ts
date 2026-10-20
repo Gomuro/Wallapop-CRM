@@ -7,6 +7,8 @@ import type { PrismaDb } from "./product-publish-prepare"
 export type PublishClaimFlags = {
   postedOnWallapop: boolean
   clickedPublicar: boolean
+  /** Saved on the listing as FAILED. Does not change the warehouse product. */
+  failReason: string | null
 }
 
 /** Atomic READY_TO_POST → POSTING for (product, account) without a public item URL. */
@@ -30,6 +32,26 @@ export async function claimListingForPublish(
     },
   })
   return result.count > 0
+}
+
+/** POSTING → FAILED with the reason already shown on the card. Warehouse stays. */
+export async function failPublishClaim(
+  prisma: PrismaClient,
+  productId: string,
+  accountId: string,
+  reason: string,
+): Promise<void> {
+  await prisma.productListing.updateMany({
+    where: {
+      productId,
+      accountId,
+      status: "POSTING",
+    },
+    data: {
+      status: "FAILED",
+      lastPublishError: reason,
+    },
+  })
 }
 
 /** Revert POSTING → READY_TO_POST only. Never touches ACTIVE / RESERVED. */
@@ -57,8 +79,9 @@ export function shouldRevertPublishClaim(
   claimed: boolean,
   postedOnWallapop: boolean,
   clickedPublicar = false,
+  failListing = false,
 ): boolean {
-  return claimed && !postedOnWallapop && !clickedPublicar
+  return claimed && !postedOnWallapop && !clickedPublicar && !failListing
 }
 
 export async function revertPublishClaimIfNeeded(input: {
@@ -69,6 +92,23 @@ export async function revertPublishClaimIfNeeded(input: {
   flags: PublishClaimFlags
 }): Promise<void> {
   const { prisma, productId, accountId, claimed, flags } = input
+  if (
+    flags.failReason &&
+    claimed &&
+    !flags.postedOnWallapop &&
+    !flags.clickedPublicar
+  ) {
+    try {
+      await failPublishClaim(prisma, productId, accountId, flags.failReason)
+    } catch (failError) {
+      log("error", "wallapop_publish_claim_fail_record_failed", {
+        productId,
+        accountId,
+        message: failError instanceof Error ? failError.message : String(failError),
+      })
+    }
+    return
+  }
   if (!shouldRevertPublishClaim(claimed, flags.postedOnWallapop, flags.clickedPublicar)) {
     return
   }

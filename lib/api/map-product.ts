@@ -83,6 +83,10 @@ function mapAccountGlances(
           typeof row.externalUrl === "string" && row.externalUrl.trim()
             ? row.externalUrl
             : null,
+        lastPublishError:
+          typeof row.lastPublishError === "string" && row.lastPublishError.trim()
+            ? row.lastPublishError
+            : null,
       },
     ]
   })

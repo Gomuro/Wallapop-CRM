@@ -88,6 +88,8 @@ export type PublishWallapopShipping = {
   heightCm?: number | null;
   typeAttributes?: unknown;
   uploadFields?: CategoryUploadField[];
+  /** Bands this category's form is allowed to show. Empty = use the labels on the page. */
+  weightBands?: readonly string[] | null;
 };
 
 export type PublishWallapopInput = PublishWallapopCopy & PublishWallapopShipping;
@@ -103,15 +105,21 @@ export class WallapopPublishError extends Error {
   step: PublishStep;
   /** True: Publicar may have run; keep POSTING, do not write ACTIVE. */
   keepClaim: boolean;
+  /** True: leave this account's Chrome and the upload form open. */
+  keepBrowser: boolean;
+  /** True: POSTING → FAILED with this message. The warehouse product stays. */
+  failListing: boolean;
   constructor(
     step: PublishStep,
     message: string,
-    opts?: { keepClaim?: boolean },
+    opts?: { keepClaim?: boolean; keepBrowser?: boolean; failListing?: boolean },
   ) {
     super(message);
     this.name = "WallapopPublishError";
     this.step = step;
     this.keepClaim = opts?.keepClaim === true;
+    this.keepBrowser = opts?.keepBrowser === true;
+    this.failListing = opts?.failListing === true || this.keepBrowser;
   }
 }
 

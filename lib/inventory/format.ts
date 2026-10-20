@@ -124,7 +124,10 @@ export function listingIndicatorShort(
 
 export function accountGlanceLabel(row: AccountListingGlance): string {
   if (row.status === "POSTING") return "Publicando…"
-  if (row.status === "FAILED") return "Error"
+  if (row.status === "FAILED") {
+    const reason = row.lastPublishError?.trim()
+    return reason ? `Error · ${reason}` : "Error"
+  }
   if (row.status === "RESERVED") return "Reservado"
   if (row.status === "READY_TO_POST") return "En cola"
   if (row.status === "DEACTIVATED") return "Desactivado"

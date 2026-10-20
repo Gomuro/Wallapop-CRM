@@ -16,6 +16,7 @@ export type AccountListingGlance = {
   isDefault: boolean
   status: ListingStatusRead | null
   externalUrl: string | null
+  lastPublishError?: string | null
 }
 
 export type InventoryListing = {

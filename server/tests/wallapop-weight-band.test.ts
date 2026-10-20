@@ -1,11 +1,14 @@
 import { describe, expect, it } from "vitest"
 
+import { accountGlanceLabel } from "../../lib/inventory/format"
 import {
   PACKAGING_BUFFER_KG,
   STANDARD_WEIGHT_BANDS,
   crmKgForStandardBand,
+  normalizeWeightBandLabel,
+  pickCategoryWeightBand,
+  publishWeightStopMessage,
   wallapopEffectiveWeightKg,
-  wallapopStandardWeightBandAriaName,
   wallapopStandardWeightBandFromCrm,
   wallapopStandardWeightBandLabel,
 } from "../src/lib/wallapop-weight-band"
@@ -59,17 +62,77 @@ describe("crmKgForStandardBand", () => {
   })
 })
 
-describe("wallapopStandardWeightBandAriaName", () => {
-  it("maps band needles to Delivery Option N", () => {
-    expect(wallapopStandardWeightBandAriaName("0 a 1 kg")).toBe(
-      "Delivery Option 0",
+describe("normalizeWeightBandLabel", () => {
+  it("strips the bidi marks Wallapop puts around the kilograms", () => {
+    expect(normalizeWeightBandLabel("‪10‬ a ‪20‬ kg")).toBe("10 a 20 kg")
+    expect(normalizeWeightBandLabel("20 a 30 kg")).toBe("20 a 30 kg")
+  })
+})
+
+describe("pickCategoryWeightBand", () => {
+  const upTo20 = ["0 a 1 kg", "1 a 2 kg", "2 a 5 kg", "5 a 10 kg", "10 a 20 kg"]
+
+  it("uses the category band that contains the weight", () => {
+    expect(pickCategoryWeightBand(0.5, upTo20)?.needle).toBe("0 a 1 kg")
+    expect(pickCategoryWeightBand(15, upTo20)).toMatchObject({
+      needle: "10 a 20 kg",
+      clamped: false,
+    })
+  })
+
+  it("clamps above the last category band and never invents 20 a 30 kg", () => {
+    expect(pickCategoryWeightBand(25, upTo20)).toEqual({
+      needle: "10 a 20 kg",
+      clamped: true,
+      wanted: "20 a 30 kg",
+    })
+    expect(pickCategoryWeightBand(40, upTo20)).toMatchObject({
+      needle: "10 a 20 kg",
+      clamped: true,
+      wanted: null,
+    })
+  })
+
+  it("returns null when the category lists no bands", () => {
+    expect(pickCategoryWeightBand(25, [])).toBeNull()
+  })
+})
+
+describe("publishWeightStopMessage", () => {
+  it("names the band the category does not list", () => {
+    expect(
+      publishWeightStopMessage({
+        wanted: "20 a 30 kg",
+        selected: "10 a 20 kg",
+        reason: "no_package_size",
+      }),
+    ).toBe(
+      "Peso 20 a 30 kg: ese tramo no está en la categoría. Tras elegir 10 a 20 kg no aparecieron Estándar ni Voluminoso.",
     )
-    expect(wallapopStandardWeightBandAriaName("2 a 5 kg")).toBe(
-      "Delivery Option 2",
+  })
+})
+
+describe("accountGlanceLabel", () => {
+  const row = {
+    accountId: "a",
+    accountName: "Wallapop 2",
+    isDefault: false,
+    externalUrl: null,
+  }
+
+  it("shows the saved reason next to Error", () => {
+    expect(
+      accountGlanceLabel({
+        ...row,
+        status: "FAILED",
+        lastPublishError: "Peso 20 a 30 kg: ese tramo no está en la categoría.",
+      }),
+    ).toBe("Error · Peso 20 a 30 kg: ese tramo no está en la categoría.")
+  })
+
+  it("stays Error when no reason was saved", () => {
+    expect(accountGlanceLabel({ ...row, status: "FAILED", lastPublishError: null })).toBe(
+      "Error",
     )
-    expect(wallapopStandardWeightBandAriaName("20 a 30 kg")).toBe(
-      "Delivery Option 5",
-    )
-    expect(wallapopStandardWeightBandAriaName("unknown")).toBeNull()
   })
 })

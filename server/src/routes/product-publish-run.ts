@@ -11,6 +11,7 @@ import {
   validateExtraUploadFields,
 } from "../../../lib/inventory/category-upload-fields"
 import { wallapopBrandFromProduct } from "../../../lib/inventory/wallapop-brand"
+import { weightBandsFromCategoryAttributes } from "../../../lib/inventory/wallapop-weight-band"
 import { wallapopItemUrlOrNull } from "../../../lib/inventory/wallapop-item-url"
 import { liveHrefForListing } from "../lib/wallapop-already-live"
 import {
@@ -150,11 +151,14 @@ async function loadCategoryUploadFields(ready: PublishReady) {
   )
   const first = Object.values(extraErrors)[0]
   if (first) throw new WallapopPublishError("form", first)
-  return fields
+  return {
+    uploadFields: fields,
+    weightBands: weightBandsFromCategoryAttributes(category?.attributes),
+  }
 }
 
 async function playwrightProductPublish(ready: PublishReady) {
-  const uploadFields = await loadCategoryUploadFields(ready)
+  const categoryFields = await loadCategoryUploadFields(ready)
   return publishWallapopInBrowser({
     cdpPort: await chromePortForAccount(ready.accountId),
     title: ready.product.title,
@@ -176,7 +180,8 @@ async function playwrightProductPublish(ready: PublishReady) {
     lengthCm: ready.lengthCm,
     heightCm: ready.heightCm,
     typeAttributes: ready.product.typeAttributes,
-    uploadFields,
+    uploadFields: categoryFields.uploadFields,
+    weightBands: categoryFields.weightBands,
   })
 }
 
@@ -222,6 +227,9 @@ function applyPublishErrorFlags(error: unknown, flags: PublishClaimFlags) {
   }
   if (error instanceof WallapopPublishError && error.keepClaim) {
     flags.clickedPublicar = true
+  }
+  if (error instanceof WallapopPublishError && error.failListing) {
+    flags.failReason = error.message
   }
 }
 
@@ -282,6 +290,7 @@ export async function executeLivePublish(
   const flags: PublishClaimFlags = {
     postedOnWallapop: false,
     clickedPublicar: false,
+    failReason: null,
   }
   try {
     const result = await playwrightProductPublish(prepared)

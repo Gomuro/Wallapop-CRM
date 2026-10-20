@@ -151,15 +151,22 @@ export async function publishWallapopInBrowser(
       "El producto no tiene fotos en disco.",
     );
   }
+  let keepBrowser = false;
   try {
     return await runWithBrowserBusy(
       "publish",
       () => publishWallapopInBrowserInner(input),
       input.cdpPort,
     );
+  } catch (error) {
+    keepBrowser = error instanceof WallapopPublishError && error.keepBrowser;
+    throw error;
   } finally {
-    if (consumeKeepChromeAfterAbort(input.cdpPort)) {
-      log("info", "wallapop_chrome_kept_after_abort", { dryRun: input.dryRun });
+    if (consumeKeepChromeAfterAbort(input.cdpPort) || keepBrowser) {
+      log("info", "wallapop_chrome_kept_after_abort", {
+        dryRun: input.dryRun,
+        keepBrowser,
+      });
     } else if (input.dryRun) {
       await closeWallapopUploadTab(input.cdpPort);
     } else {

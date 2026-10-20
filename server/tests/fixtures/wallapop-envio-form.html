@@ -13,10 +13,36 @@
 </section>
 <section id="envio-weight">
   <p>¿Cuánto pesa?</p>
-  <input type="radio" name="w" aria-label="Delivery Option 0" />
-  <input type="radio" name="w" aria-label="Delivery Option 1" />
-  <input type="radio" name="w" aria-label="Delivery Option 2" />
-  <input type="radio" name="w" aria-label="Delivery Option 3" />
-  <input type="radio" name="w" aria-label="Delivery Option 4" />
-  <input type="radio" name="w" aria-label="Delivery Option 5" />
+  <label><input type="radio" name="w" /><span>0 a 1 kg</span></label>
+  <label><input type="radio" name="w" /><span>1 a 2 kg</span></label>
+  <label><input type="radio" name="w" /><span>2 a 5 kg</span></label>
+  <label><input type="radio" name="w" /><span>5 a 10 kg</span></label>
+  <label><input type="radio" name="w" /><span>10 a 20 kg</span></label>
+  <label><input type="radio" name="w" /><span>20 a 30 kg</span></label>
+  <input type="radio" name="pkg" aria-label="delivery" />
+  <input type="radio" name="pkg" aria-label="bulky" />
+</section>
+<section id="envio-weight-capped">
+  <p>¿Cuánto pesa?</p>
+  <label><input type="radio" name="w" /><span>0 a 1 kg</span></label>
+  <label><input type="radio" name="w" /><span>1 a 2 kg</span></label>
+  <label><input type="radio" name="w" /><span>2 a 5 kg</span></label>
+  <label><input type="radio" name="w" /><span>5 a 10 kg</span></label>
+  <label><input type="radio" name="w" /><span>10 a 20 kg</span></label>
+  <input type="radio" name="w" id="phantom-20-30" aria-label="Delivery Option 5" />
+  <input type="radio" name="pkg" aria-label="delivery" />
+  <input type="radio" name="pkg" aria-label="bulky" />
+</section>
+<section id="envio-weight-bidi">
+  <p>¿Cuánto pesa?</p>
+  <div class="DeliveryRadioOption">
+    <span id="weightTierLabel">‪10‬ a ‪20‬ kg</span>
+    <input type="radio" name="w" aria-label="Delivery Option 4" />
+  </div>
+  <input type="radio" name="w" id="phantom-20-30" aria-label="Delivery Option 5" />
+  <input type="radio" name="pkg" aria-label="delivery" />
+</section>
+<section id="envio-weight-heavy-no-size">
+  <p>¿Cuánto pesa?</p>
+  <label><input type="radio" name="w" /><span>10 a 20 kg</span></label>
 </section>

@@ -9,7 +9,6 @@ import {
 import { getPrisma } from "../lib/db"
 import { listingJsonSelect, toListingJson } from "../lib/listing-json"
 import { getWallapopSessionSnapshot } from "../lib/wallapop-session"
-import { wallapopStandardWeightBandFromCrm } from "../lib/wallapop-weight-band"
 import { categoryBreadcrumbLabelsEs } from "../lib/category-breadcrumb"
 import { validateShippingForPublish } from "../../../lib/inventory/shipping-for-publish"
 import {
@@ -211,15 +210,6 @@ type PublishShipping = Pick<
   | "heightCm"
 >
 
-function weightBandInvalid(shippingEnabled: boolean, packageType: string, weightKg: number | null) {
-  return (
-    shippingEnabled &&
-    packageType !== "BULKY" &&
-    weightKg != null &&
-    !wallapopStandardWeightBandFromCrm(weightKg)
-  )
-}
-
 function publishShippingMeasures(product: ProductCard): PublishShipping {
   const shippingEnabled = isPublishShippingEnabled()
   return {
@@ -243,13 +233,6 @@ function guardPublishShippingReady(
   })
   if (!dryRun && !shippingReady.ok) {
     return publishFail(400, shippingReady.code, shippingReady.message)
-  }
-  if (weightBandInvalid(measures.shippingEnabled, measures.packageType, measures.weightKg)) {
-    return publishFail(
-      400,
-      "VALIDATION_ERROR",
-      "El peso es demasiado alto para envío estándar (máx. 30 kg, incluido el envoltorio).",
-    )
   }
   return null
 }

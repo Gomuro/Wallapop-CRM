@@ -616,11 +616,70 @@ describe("Wallapop envío DOM", () => {
     })
   })
 
-  it("selects Delivery Option N for the CRM peso tramo", async () => {
+  it("clicks the visible peso label for the CRM tramo", async () => {
     await withEnvioPage(envioFixtureSection("envio-weight"), async (page) => {
       const label = await ensureStandardWeightBand(page, 0.5)
       expect(label).toBe("0 a 1 kg")
-      expect(await roleRadioIsChecked(page, "Delivery Option 0")).toBe(true)
+      expect(await page.locator("label").filter({ hasText: "0 a 1 kg" }).locator("input").isChecked()).toBe(true)
+    })
+  })
+
+  it("clamps to the last visible band and does not click Delivery Option 5", async () => {
+    await withEnvioPage(envioFixtureSection("envio-weight-capped"), async (page) => {
+      const label = await ensureStandardWeightBand(page, 25)
+      expect(label).toBe("10 a 20 kg")
+      expect(
+        await page.locator("label").filter({ hasText: "10 a 20 kg" }).locator("input").isChecked(),
+      ).toBe(true)
+      expect(await page.locator("#phantom-20-30").isChecked()).toBe(false)
+    })
+  })
+
+  it("clicks 20 a 30 kg only when that label is allowed and visible", async () => {
+    await withEnvioPage(envioFixtureSection("envio-weight"), async (page) => {
+      const blocked = await ensureStandardWeightBand(page, 25, [
+        "0 a 1 kg",
+        "1 a 2 kg",
+        "2 a 5 kg",
+        "5 a 10 kg",
+        "10 a 20 kg",
+      ])
+      expect(blocked).toBe("10 a 20 kg")
+      expect(
+        await page.locator("label").filter({ hasText: "20 a 30 kg" }).locator("input").isChecked(),
+      ).toBe(false)
+
+      await page.locator("label").filter({ hasText: "10 a 20 kg" }).locator("input").evaluate((el) => {
+        if (el instanceof HTMLInputElement) el.checked = false
+      })
+      const allowed = await ensureStandardWeightBand(page, 25, [
+        "10 a 20 kg",
+        "20 a 30 kg",
+      ])
+      expect(allowed).toBe("20 a 30 kg")
+      expect(
+        await page.locator("label").filter({ hasText: "20 a 30 kg" }).locator("input").isChecked(),
+      ).toBe(true)
+    })
+  })
+
+  it("clicks the bidi weight label, not Delivery Option 5", async () => {
+    await withEnvioPage(envioFixtureSection("envio-weight-bidi"), async (page) => {
+      const label = await ensureStandardWeightBand(page, 25)
+      expect(label).toBe("10 a 20 kg")
+      expect(await page.locator(".DeliveryRadioOption input").isChecked()).toBe(true)
+      expect(await page.locator("#phantom-20-30").isChecked()).toBe(false)
+    })
+  })
+
+  it("does not publicar when a heavy band shows no Estándar or Voluminoso", async () => {
+    await withEnvioPage(envioFixtureSection("envio-weight-heavy-no-size"), async (page) => {
+      await expect(ensureStandardWeightBand(page, 15)).rejects.toMatchObject({
+        name: "WallapopPublishError",
+        keepBrowser: true,
+        failListing: true,
+        message: "Tras elegir 10 a 20 kg no aparecieron Estándar ni Voluminoso.",
+      })
     })
   })
 })
