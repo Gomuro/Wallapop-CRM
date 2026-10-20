@@ -148,6 +148,46 @@ const EMPTY_LINKED_SALES: LinkedSalePlan = {
   stillSoldProductIds: [],
 }
 
+function hrefKeys(rows: { href: string }[]): Set<string> {
+  const keys = new Set<string>()
+  for (const row of rows) {
+    const key = wallapopItemPathKey(row.href)
+    if (key) keys.add(key)
+  }
+  return keys
+}
+
+function soldCatalogKeys(rows: SoldCatalogRow[]): {
+  vendidos: Set<string>
+  soldBadge: Set<string>
+} {
+  const vendidos = new Set<string>()
+  const soldBadge = new Set<string>()
+  for (const row of rows) {
+    const key = wallapopItemPathKey(row.href)
+    if (!key) continue
+    vendidos.add(key)
+    if (row.sold !== false) soldBadge.add(key)
+  }
+  return { vendidos, soldBadge }
+}
+
+function classifyLinkedSale(
+  listing: { key: string; productId: string },
+  keys: { published: Set<string>; vendidos: Set<string>; soldBadge: Set<string> },
+  buckets: { removed: Set<string>; relisted: Set<string>; stillSold: Set<string> },
+): void {
+  if (keys.soldBadge.has(listing.key)) {
+    buckets.stillSold.add(listing.productId)
+    return
+  }
+  if (keys.published.has(listing.key)) {
+    buckets.relisted.add(listing.productId)
+    return
+  }
+  if (!keys.vendidos.has(listing.key)) buckets.removed.add(listing.productId)
+}
+
 /**
  * A sale we already recorded on this account. Empty catalogs mean the scrape
  * failed, so nothing is cancelled. A sold badge wins over En venta.
@@ -158,34 +198,23 @@ export function planLinkedSales(
   listings: LinkedSaleListing[],
 ): LinkedSalePlan {
   if (published.length === 0 && sold.length === 0) return EMPTY_LINKED_SALES
-  const publishedKeys = new Set<string>()
-  for (const row of published) {
-    const key = wallapopItemPathKey(row.href)
-    if (key) publishedKeys.add(key)
-  }
-  const vendidosKeys = new Set<string>()
-  const soldBadgeKeys = new Set<string>()
-  for (const row of sold) {
-    const key = wallapopItemPathKey(row.href)
-    if (!key) continue
-    vendidosKeys.add(key)
-    if (row.sold !== false) soldBadgeKeys.add(key)
-  }
+  const publishedKeys = hrefKeys(published)
+  const soldKeys = soldCatalogKeys(sold)
   const removed = new Set<string>()
   const relisted = new Set<string>()
   const stillSold = new Set<string>()
   for (const listing of listings) {
     const key = wallapopItemPathKey(listing.externalUrl)
     if (!key) continue
-    if (soldBadgeKeys.has(key)) {
-      stillSold.add(listing.productId)
-      continue
-    }
-    if (publishedKeys.has(key)) {
-      relisted.add(listing.productId)
-      continue
-    }
-    if (!vendidosKeys.has(key)) removed.add(listing.productId)
+    classifyLinkedSale(
+      { key, productId: listing.productId },
+      {
+        published: publishedKeys,
+        vendidos: soldKeys.vendidos,
+        soldBadge: soldKeys.soldBadge,
+      },
+      { removed, relisted, stillSold },
+    )
   }
   return {
     removedProductIds: [...removed],
