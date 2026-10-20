@@ -1,5 +1,10 @@
 import { z } from "zod"
 
+import {
+  CHROME_PROXY_PARSE_ERROR,
+  parseChromeProxy,
+} from "../accounts/chrome-proxy"
+
 export const accountStatusSchema = z.enum(["ACTIVE", "INACTIVE"])
 
 export const accountCreateSchema = z.object({
@@ -18,21 +23,32 @@ export const wallapopConnectionStatusSchema = z.enum([
   "ACTIVE",
 ])
 
+const wallapopProxyField = z
+  .string()
+  .trim()
+  .max(500)
+  .optional()
+  .nullable()
+  .transform((value) => {
+    if (value == null) return null
+    const trimmed = value.trim()
+    return trimmed.length > 0 ? trimmed : null
+  })
+  .refine((value) => value == null || parseChromeProxy(value) != null, {
+    message: CHROME_PROXY_PARSE_ERROR,
+  })
+
 export const wallapopConnectSchema = z.object({
   accountId: z.string().trim().min(1).optional(),
   email: z.string().trim().email("Introduce un email válido.").max(254),
   password: z.string().min(1, "Introduce la contraseña.").max(200),
-  proxy: z
-    .string()
-    .trim()
-    .max(500)
-    .optional()
-    .nullable()
-    .transform((value) => {
-      if (value == null) return null
-      const trimmed = value.trim()
-      return trimmed.length > 0 ? trimmed : null
-    }),
+  proxy: wallapopProxyField,
+})
+
+/** Set Chrome proxy without Wallapop login. Same profile, cookies stay. */
+export const wallapopProxySchema = z.object({
+  accountId: z.string().trim().min(1).optional(),
+  proxy: wallapopProxyField,
 })
 
 export const wallapop2faSchema = z.object({
@@ -118,6 +134,7 @@ export type WallapopConnectionStatus = z.infer<
   typeof wallapopConnectionStatusSchema
 >
 export type WallapopConnectInput = z.infer<typeof wallapopConnectSchema>
+export type WallapopProxyInput = z.infer<typeof wallapopProxySchema>
 export type Wallapop2faInput = z.infer<typeof wallapop2faSchema>
 export type AutopostIntervalPatchInput = z.infer<
   typeof autopostIntervalPatchSchema

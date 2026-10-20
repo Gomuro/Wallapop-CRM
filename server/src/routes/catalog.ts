@@ -5,6 +5,7 @@ import {
   uploadReplaceImage,
 } from "../middleware/upload"
 import {
+  applyAccountProxy,
   connectAccount,
   connectAccount2fa,
   createAccount,
@@ -106,4 +107,5 @@ catalog.delete("/accounts/:id", deleteAccount)
 catalog.get("/accounts/status", getAccountConnectionStatus)
 catalog.post("/accounts/connect", connectAccount)
 catalog.post("/accounts/connect/2fa", connectAccount2fa)
+catalog.post("/accounts/proxy", applyAccountProxy)
 catalog.post("/accounts/disconnect", disconnectAccount)

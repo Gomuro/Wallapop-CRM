@@ -4,6 +4,7 @@ import { useEffect, useRef, useState } from "react";
 
 import { isApiConfigured } from "@/lib/api/config";
 import {
+  applyWallapopAccountProxy,
   connectWallapopAccount,
   disconnectWallapopAccount,
   getWallapopAccountStatus,
@@ -199,6 +200,26 @@ async function runSubmitTwoFa(ctx: {
   }
 }
 
+async function runApplyProxy(ctx: {
+  proxy: string;
+  accountId?: string;
+  setters: ConnectSessionSetters;
+}) {
+  ctx.setters.setError(null);
+  ctx.setters.setPendingKind("proxy");
+  try {
+    const next = await applyWallapopAccountProxy({
+      accountId: ctx.accountId,
+      proxy: ctx.proxy,
+    });
+    ctx.setters.setSession(next);
+  } catch (err) {
+    ctx.setters.setError(wallapopAccountErrorMessage(err));
+  } finally {
+    ctx.setters.setPendingKind((kind) => (kind === "proxy" ? null : kind));
+  }
+}
+
 async function runDisconnectAccount(ctx: {
   accountId?: string;
   connectRequestIdRef: React.MutableRefObject<number>;
@@ -241,7 +262,10 @@ function snapshotConnectSession(ctx: {
   setProxy: (value: string) => void;
   setShowPassword: React.Dispatch<React.SetStateAction<boolean>>;
   openResetConfirm: (mode: ResetMode) => void;
-}): Omit<ConnectAccountSession, "onConnect" | "onSubmit2fa" | "onDisconnect"> {
+}): Omit<
+  ConnectAccountSession,
+  "onConnect" | "onSubmit2fa" | "onApplyProxy" | "onDisconnect"
+> {
   const resetBusy = ctx.pendingKind === "disconnect";
   const isActive = ctx.session.status === "ACTIVE";
   const isAuthenticating = ctx.session.status === "AUTHENTICATING";
@@ -373,6 +397,9 @@ export function useConnectAccountSession(accountId?: string): ConnectAccountSess
   function onSubmit2fa(event: React.FormEvent) {
     void runSubmitTwoFa({ event, twoFaCode, accountId, twoFaRequestIdRef, setters });
   }
+  function onApplyProxy() {
+    void runApplyProxy({ proxy, accountId, setters });
+  }
   function onDisconnect() {
     void runDisconnectAccount({
       accountId,
@@ -402,5 +429,5 @@ export function useConnectAccountSession(accountId?: string): ConnectAccountSess
     setShowPassword,
     openResetConfirm,
   });
-  return { ...view, onConnect, onSubmit2fa, onDisconnect };
+  return { ...view, onConnect, onSubmit2fa, onApplyProxy, onDisconnect };
 }

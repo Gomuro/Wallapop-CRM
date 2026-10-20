@@ -25,6 +25,8 @@ export {
   type WallapopBrowserHandle,
 } from "./attach"
 
+export { chromeProxyForPort, rememberChromeProxy } from "./chrome"
+
 export {
   abortInFlightPublish,
   assertBrowserIdle,

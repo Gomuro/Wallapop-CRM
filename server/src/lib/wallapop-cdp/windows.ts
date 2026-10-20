@@ -108,6 +108,25 @@ async function targetIdOf(page: Page): Promise<string | null> {
   }
 }
 
+async function pageIsTarget(
+  page: Page,
+  before: Set<Page>,
+  targetId: string | null,
+): Promise<boolean> {
+  if (
+    !canClaimWorkerPage({
+      wasAlreadyOpen: before.has(page),
+      isClosed: isClosedPage(page),
+      ownedByOtherSlot: isOwnedWorkerPage(page),
+    })
+  ) {
+    return false
+  }
+  if (!targetId) return true
+  const id = await targetIdOf(page)
+  return !id || id === targetId
+}
+
 async function waitForTargetPage(
   handle: WallapopBrowserHandle,
   before: Set<Page>,
@@ -117,19 +136,7 @@ async function waitForTargetPage(
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
     for (const page of handle.context.pages()) {
-      if (
-        !canClaimWorkerPage({
-          wasAlreadyOpen: before.has(page),
-          isClosed: isClosedPage(page),
-          ownedByOtherSlot: isOwnedWorkerPage(page),
-        })
-      ) {
-        continue
-      }
-      if (targetId) {
-        const id = await targetIdOf(page)
-        if (id && id !== targetId) continue
-      }
+      if (!(await pageIsTarget(page, before, targetId))) continue
       page.setDefaultTimeout(ACTION_TIMEOUT_MS)
       return page
     }
@@ -138,62 +145,94 @@ async function waitForTargetPage(
   return null
 }
 
-async function openOwnedWindow(
+type OwnedWindowOptions = {
+  logSlot?: string
+  claim?: (page: Page) => void
+}
+
+async function focusClaimedPage(
+  page: Page,
   handle: WallapopBrowserHandle,
   slot: BrowserWorkerSlot,
-  port?: number,
-  logSlot: string = slot,
   claim?: (page: Page) => void,
-): Promise<Page> {
-  const before = new Set(handle.context.pages())
-  const browser = handle.browser as BrowserWithCdp
-  if (typeof browser.newBrowserCDPSession === "function") {
-    try {
-      const session = await browser.newBrowserCDPSession()
-      const created = await session.send("Target.createTarget", {
-        url: "about:blank",
-        newWindow: true,
-      })
-      const page = await waitForTargetPage(handle, before, created.targetId ?? null)
-      if (page) {
-        page.setDefaultTimeout(ACTION_TIMEOUT_MS)
-        claim?.(page)
-        if (FOREGROUND_SLOTS.has(slot)) {
-          await page.bringToFront().catch(() => {})
-        }
-        await fitAccountWindows(handle.context)
-        log("info", "wallapop_worker_window_opened", {
-          slot: logSlot,
-          ownedPage: true,
-          targetId: created.targetId ?? null,
-        })
-        return page
-      }
-      log("warn", "wallapop_worker_window_target_missing", {
-        slot: logSlot,
-        targetId: created.targetId ?? null,
-      })
-    } catch (error) {
-      log("warn", "wallapop_worker_window_create_failed", {
-        slot: logSlot,
-        message: error instanceof Error ? error.message : String(error),
-      })
-    }
-  }
-  if (listOwnedWorkerPages(port).length > 0) {
-    throw new Error(
-      `No se pudo abrir una ventana propia para «${logSlot}»; no se reutiliza la pestaña de otro worker.`,
-    )
-  }
-  const page = await handle.context.newPage()
+): Promise<void> {
   page.setDefaultTimeout(ACTION_TIMEOUT_MS)
   claim?.(page)
   if (FOREGROUND_SLOTS.has(slot)) {
     await page.bringToFront().catch(() => {})
   }
   await fitAccountWindows(handle.context)
-  log("info", "wallapop_worker_tab_fallback", { slot: logSlot, ownedPage: true })
+}
+
+async function openCreatedTarget(
+  handle: WallapopBrowserHandle,
+  slot: BrowserWorkerSlot,
+  logSlot: string,
+  claim?: (page: Page) => void,
+): Promise<Page | null> {
+  const before = new Set(handle.context.pages())
+  const browser = handle.browser as BrowserWithCdp
+  if (typeof browser.newBrowserCDPSession !== "function") return null
+  try {
+    const session = await browser.newBrowserCDPSession()
+    const created = await session.send("Target.createTarget", {
+      url: "about:blank",
+      newWindow: true,
+    })
+    const page = await waitForTargetPage(handle, before, created.targetId ?? null)
+    if (!page) {
+      log("warn", "wallapop_worker_window_target_missing", {
+        slot: logSlot,
+        targetId: created.targetId ?? null,
+      })
+      return null
+    }
+    await focusClaimedPage(page, handle, slot, claim)
+    log("info", "wallapop_worker_window_opened", {
+      slot: logSlot,
+      ownedPage: true,
+      targetId: created.targetId ?? null,
+    })
+    return page
+  } catch (error) {
+    log("warn", "wallapop_worker_window_create_failed", {
+      slot: logSlot,
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return null
+  }
+}
+
+async function openFallbackTab(
+  handle: WallapopBrowserHandle,
+  slot: BrowserWorkerSlot,
+  port: number | undefined,
+  options: { logSlot: string; claim?: (page: Page) => void },
+): Promise<Page> {
+  if (listOwnedWorkerPages(port).length > 0) {
+    throw new Error(
+      `No se pudo abrir una ventana propia para «${options.logSlot}»; no se reutiliza la pestaña de otro worker.`,
+    )
+  }
+  const page = await handle.context.newPage()
+  await focusClaimedPage(page, handle, slot, options.claim)
+  log("info", "wallapop_worker_tab_fallback", {
+    slot: options.logSlot,
+    ownedPage: true,
+  })
   return page
+}
+
+async function openOwnedWindow(
+  handle: WallapopBrowserHandle,
+  slot: BrowserWorkerSlot,
+  port?: number,
+  options?: OwnedWindowOptions,
+): Promise<Page> {
+  const logSlot = options?.logSlot ?? slot
+  const created = await openCreatedTarget(handle, slot, logSlot, options?.claim)
+  if (created) return created
+  return openFallbackTab(handle, slot, port, { logSlot, claim: options?.claim })
 }
 
 export async function ensureWorkerWindow(
@@ -256,12 +295,15 @@ export async function openDevWatchWindow(port: number): Promise<void> {
     return
   }
   const handle = await ensureCdpAttached(port)
-  const page = await openOwnedWindow(handle, "session", port, "watch", (opened) => {
-    pinWatchPage(opened, port)
-    opened.once("close", () => {
-      releaseWatchPage(opened, port)
-      void quitChromeIfNoWorkerSlots(port)
-    })
+  const page = await openOwnedWindow(handle, "session", port, {
+    logSlot: "watch",
+    claim: (opened) => {
+      pinWatchPage(opened, port)
+      opened.once("close", () => {
+        releaseWatchPage(opened, port)
+        void quitChromeIfNoWorkerSlots(port)
+      })
+    },
   })
   await page.bringToFront().catch(() => {})
   await navigateViaAssign(page, WALLAPOP_WALL_URL)

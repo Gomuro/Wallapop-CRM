@@ -2,7 +2,7 @@ import type { Dispatch, FormEvent, SetStateAction } from "react"
 
 import type { WallapopAccountSession } from "@/lib/api/wallapop-account"
 
-export type PendingKind = "connect" | "2fa" | "disconnect" | null
+export type PendingKind = "connect" | "2fa" | "disconnect" | "proxy" | null
 export type ResetMode = "disconnect" | "cancel"
 
 export type ConnectAccountFormFields = {
@@ -53,6 +53,7 @@ export type ConnectAccountSettersSlice = {
 export type ConnectAccountActions = {
   onConnect: (event: FormEvent) => void
   onSubmit2fa: (event: FormEvent) => void
+  onApplyProxy: () => void
   onDisconnect: () => void
   openResetConfirm: (mode: ResetMode) => void
   requestDisconnect: () => void

@@ -72,14 +72,18 @@ export function ConnectLoginForm({ session }: { session: ConnectAccountSession }
     pendingKind,
     resetBusy,
     isDisconnected,
+    isActive,
     setEmail,
     setPassword,
     setProxy,
     setShowPassword,
     onConnect,
+    onApplyProxy,
   } = session;
-  const fieldsDisabled =
+  const loginDisabled =
     !apiReady || !isDisconnected || pendingKind === "connect" || resetBusy;
+  const proxyDisabled =
+    !apiReady || pendingKind === "connect" || pendingKind === "proxy" || resetBusy;
 
   return (
     <form onSubmit={onConnect} className="flex flex-col gap-4">
@@ -94,7 +98,7 @@ export function ConnectLoginForm({ session }: { session: ConnectAccountSession }
           className="h-12 text-base md:h-10 md:text-sm"
           value={email}
           onChange={(e) => setEmail(e.target.value)}
-          disabled={fieldsDisabled}
+          disabled={loginDisabled}
           required
         />
       </div>
@@ -110,7 +114,7 @@ export function ConnectLoginForm({ session }: { session: ConnectAccountSession }
             className="h-12 pr-11 text-base md:h-10 md:text-sm"
             value={password}
             onChange={(e) => setPassword(e.target.value)}
-            disabled={fieldsDisabled}
+            disabled={loginDisabled}
             required
           />
           <Button
@@ -137,14 +141,30 @@ export function ConnectLoginForm({ session }: { session: ConnectAccountSession }
           id="wallapop-proxy"
           name="proxy"
           type="text"
-          placeholder="http://user:pass@host:port"
+          placeholder="host:port:user:pass o http://user:pass@host:port"
           autoComplete="off"
           className="h-12 text-base md:h-10 md:text-sm"
           value={proxy}
           onChange={(e) => setProxy(e.target.value)}
-          disabled={fieldsDisabled}
+          disabled={proxyDisabled}
         />
       </div>
+
+      {isActive ? (
+        <Button
+          type="button"
+          variant="secondary"
+          className="h-12 w-full"
+          disabled={proxyDisabled}
+          onClick={onApplyProxy}
+          aria-busy={pendingKind === "proxy" || undefined}
+        >
+          {pendingKind === "proxy" ? (
+            <LoaderCircleIcon className="animate-spin" />
+          ) : null}
+          {pendingKind === "proxy" ? "Aplicando proxy…" : "Aplicar proxy"}
+        </Button>
+      ) : null}
 
       <ConnectLoginActions session={session} />
     </form>

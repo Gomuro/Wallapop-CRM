@@ -14,6 +14,7 @@ export {
   wallapop2faSchema,
   wallapopConnectSchema,
   wallapopConnectionStatusSchema,
+  wallapopProxySchema,
 } from "./account"
 export type {
   AccountCreateInput,
@@ -24,6 +25,7 @@ export type {
   Wallapop2faInput,
   WallapopConnectInput,
   WallapopConnectionStatus,
+  WallapopProxyInput,
 } from "./account"
 export {
   assertProductCategoryIsLeaf,

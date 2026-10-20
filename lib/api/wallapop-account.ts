@@ -54,6 +54,20 @@ export async function submitWallapop2fa(code: string, accountId?: string) {
   })
 }
 
+export async function applyWallapopAccountProxy(input: {
+  proxy?: string
+  accountId?: string
+}) {
+  return apiClientFetch<WallapopAccountSession>("/accounts/proxy", {
+    method: "POST",
+    body: JSON.stringify({
+      accountId: input.accountId,
+      proxy: input.proxy?.trim() ? input.proxy.trim() : null,
+    }),
+    timeoutMs: 60_000,
+  })
+}
+
 export async function disconnectWallapopAccount(accountId?: string) {
   return apiClientFetch<WallapopAccountSession>("/accounts/disconnect", {
     method: "POST",

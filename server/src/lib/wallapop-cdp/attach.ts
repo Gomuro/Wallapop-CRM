@@ -1,10 +1,6 @@
 /**
  * Chrome CDP attach / page helpers.
  */
-import { spawn, type ChildProcess } from "node:child_process"
-import fs from "node:fs"
-import path from "node:path"
-
 import {
   chromium,
   type Browser,
@@ -13,10 +9,16 @@ import {
 } from "playwright"
 
 import {
-  FIRST_ACCOUNT_CDP_PORT,
-  FIRST_ACCOUNT_PROFILE_NAME,
-  firstCdpPort,
-} from "../../../../lib/accounts/chrome-place"
+  chromeProxyForPort,
+  killSpawnedChrome,
+  rememberChromeProxy,
+  spawnRealChrome,
+} from "./chrome"
+import { hasLocalProxy } from "./local-proxy"
+
+export { killSpawnedChrome }
+
+import { firstCdpPort } from "../../../../lib/accounts/chrome-place"
 import { log } from "../log"
 import { promiseWithin, waitForChromeQuit } from "./busy"
 
@@ -37,31 +39,9 @@ function cdpUrlForPort(port: number): string {
   return `http://127.0.0.1:${port}`
 }
 
-function profileDirForPort(port: number): string {
-  if (port === CDP_PORT && process.env.WALLAPOP_CHROME_USER_DATA_DIR?.trim()) {
-    return process.env.WALLAPOP_CHROME_USER_DATA_DIR.trim()
-  }
-  const name =
-    port === FIRST_ACCOUNT_CDP_PORT
-      ? FIRST_ACCOUNT_PROFILE_NAME
-      : `ChromeCDP-${port}`
-  return path.resolve(process.env.USERPROFILE ?? "", name)
-}
-
 /** Every account's Chrome uses this window. Profiles otherwise restore different sizes. */
 export const ACCOUNT_WINDOW_WIDTH = 1440
 export const ACCOUNT_WINDOW_HEIGHT = 900
-
-const CHROME_LAUNCH_EXTRA_ARGS = [
-  "--disable-background-timer-throttling",
-  "--disable-backgrounding-occluded-windows",
-  "--disable-renderer-backgrounding",
-  "--disable-features=CalculateNativeWinOcclusion",
-  "--no-first-run",
-  "--no-default-browser-check",
-  `--window-size=${ACCOUNT_WINDOW_WIDTH},${ACCOUNT_WINDOW_HEIGHT}`,
-  "--window-position=0,0",
-] as const
 
 export type WallapopBrowserHandle = {
   browser: Browser
@@ -72,22 +52,20 @@ export type WallapopBrowserHandle = {
 }
 
 const handles = new Map<number, WallapopBrowserHandle>()
-/** Chrome process we spawned for a port. Profile stays on disk after quit. */
-const chromeProcesses = new Map<number, ChildProcess>()
 
-function usePort(port?: number): number {
+function resolveCdpPort(port?: number): number {
   return port ?? CDP_PORT
 }
 
 export function getWallapopHandle(port?: number): WallapopBrowserHandle | null {
-  return handles.get(usePort(port)) ?? null
+  return handles.get(resolveCdpPort(port)) ?? null
 }
 
 export function setWallapopHandle(
   next: WallapopBrowserHandle | null,
   port?: number,
 ): void {
-  const key = usePort(port)
+  const key = resolveCdpPort(port)
   if (next) handles.set(key, next)
   else handles.delete(key)
 }
@@ -98,35 +76,6 @@ export function isClosedPage(page: { isClosed(): boolean }): boolean {
   } catch {
     return true
   }
-}
-
-function findChromeExecutable(): string {
-  const fromEnv = process.env.WALLAPOP_CHROME_PATH?.trim()
-  const candidates = [
-    fromEnv,
-    "C:\\Program Files\\Google\\Chrome\\Application\\chrome.exe",
-    "C:\\Program Files (x86)\\Google\\Chrome\\Application\\chrome.exe",
-    process.env.LOCALAPPDATA
-      ? path.join(
-          process.env.LOCALAPPDATA,
-          "Google",
-          "Chrome",
-          "Application",
-          "chrome.exe",
-        )
-      : null,
-    "/usr/bin/google-chrome",
-    "/usr/bin/google-chrome-stable",
-    "/Applications/Google Chrome.app/Contents/MacOS/Google Chrome",
-  ].filter((value): value is string => Boolean(value))
-
-  for (const candidate of candidates) {
-    if (fs.existsSync(candidate)) return candidate
-  }
-
-  throw new Error(
-    "No se encontró Google Chrome. Instálalo o define WALLAPOP_CHROME_PATH.",
-  )
 }
 
 async function waitForCdp(cdpUrl: string, timeoutMs = CDP_READY_TIMEOUT_MS) {
@@ -146,80 +95,6 @@ async function waitForCdp(cdpUrl: string, timeoutMs = CDP_READY_TIMEOUT_MS) {
   throw new Error(
     `Chrome CDP no respondió en ${cdpUrl}. ¿Arrancó Chrome con --remote-debugging-port=${CDP_PORT}?`,
   )
-}
-
-function spawnRealChrome(proxy?: string | null, port = CDP_PORT): ChildProcess {
-  const chromePath = findChromeExecutable()
-  const profileDir = profileDirForPort(port)
-  fs.mkdirSync(profileDir, { recursive: true })
-
-  const args = [
-    `--remote-debugging-port=${port}`,
-    `--user-data-dir=${profileDir}`,
-    "--remote-allow-origins=*",
-    ...CHROME_LAUNCH_EXTRA_ARGS,
-  ]
-  const proxyServer = proxy?.trim()
-  if (proxyServer) {
-    args.push(`--proxy-server=${proxyServer}`)
-  }
-
-  log("info", "wallapop_chrome_spawning", {
-    chromePath,
-    profileDir,
-    cdpPort: port,
-  })
-
-  const child = spawn(chromePath, args, {
-    detached: true,
-    stdio: "ignore",
-    windowsHide: false,
-  })
-  child.unref()
-  chromeProcesses.set(port, child)
-  return child
-}
-
-function taskkillPid(pid: number): Promise<void> {
-  return new Promise((resolve) => {
-    const killer = spawn("taskkill", ["/PID", String(pid), "/T", "/F"], {
-      stdio: "ignore",
-      windowsHide: true,
-    })
-    const timer = setTimeout(resolve, 5_000)
-    killer.on("exit", () => {
-      clearTimeout(timer)
-      resolve()
-    })
-    killer.on("error", () => {
-      clearTimeout(timer)
-      resolve()
-    })
-  })
-}
-
-export async function killSpawnedChrome(port = CDP_PORT): Promise<void> {
-  const child = chromeProcesses.get(port) ?? null
-  chromeProcesses.delete(port)
-  if (child?.pid == null) return
-  try {
-    if (process.platform === "win32") {
-      await taskkillPid(child.pid)
-    } else {
-      try {
-        process.kill(child.pid, "SIGTERM")
-      } catch {
-        child.kill("SIGTERM")
-      }
-    }
-    log("info", "wallapop_chrome_process_killed", { pid: child.pid, port })
-  } catch (error) {
-    log("warn", "wallapop_chrome_process_kill_failed", {
-      pid: child.pid,
-      port,
-      message: error instanceof Error ? error.message : String(error),
-    })
-  }
 }
 
 export function hasOpenWallapopBrowser(port = CDP_PORT): boolean {
@@ -281,30 +156,90 @@ export async function connectCdpHandle(port = CDP_PORT): Promise<WallapopBrowser
   return { browser, context, page, ownedPage }
 }
 
+async function isCdpListening(cdpUrl: string): Promise<boolean> {
+  try {
+    const response = await fetch(`${cdpUrl.replace(/\/$/, "")}/json/version`, {
+      signal: AbortSignal.timeout(1_200),
+    })
+    return response.ok
+  } catch {
+    return false
+  }
+}
+
+async function quitListeningChrome(port: number): Promise<void> {
+  const cdpUrl = cdpUrlForPort(port)
+  if (await isCdpListening(cdpUrl)) {
+    try {
+      const browser = await connectOverCdp(cdpUrl)
+      try {
+        const session = await browser.newBrowserCDPSession()
+        await session.send("Browser.close")
+      } catch {
+        await browser.close().catch(() => {})
+      }
+    } catch {
+      // already down
+    }
+  }
+  await killSpawnedChrome(port)
+  const deadline = Date.now() + 10_000
+  while (Date.now() < deadline) {
+    if (!(await isCdpListening(cdpUrl))) return
+    await new Promise((resolve) => setTimeout(resolve, 200))
+  }
+}
+
 /**
  * 1) Attach to Chrome already listening on CDP.
  * 2) If closed — start real Google Chrome, then attach.
+ * Auth proxy: never reuse a Chrome started without the local forwarder.
  */
+async function reuseAuthedChrome(
+  port: number,
+  cdpUrl: string,
+  upstream: string | null,
+): Promise<WallapopBrowserHandle | null> {
+  if ((await isCdpListening(cdpUrl)) && hasLocalProxy(port)) {
+    const attached = await connectCdpHandle(port)
+    log("info", "wallapop_browser_attached_cdp", { cdpUrl, proxyUpstream: upstream })
+    return attached
+  }
+  log("info", "wallapop_chrome_relaunch_for_proxy", { cdpUrl, proxyUpstream: upstream })
+  await quitListeningChrome(port)
+  return null
+}
+
 export async function attachOrLaunch(
   proxyInput?: string | null,
   port = CDP_PORT,
 ): Promise<WallapopBrowserHandle> {
+  if (proxyInput !== undefined) rememberChromeProxy(port, proxyInput)
   const cdpUrl = cdpUrlForPort(port)
-  try {
-    const attached = await connectCdpHandle(port)
-    log("info", "wallapop_browser_attached_cdp", { cdpUrl })
-    return attached
-  } catch (error) {
-    log("info", "wallapop_cdp_not_ready_launching_chrome", {
-      cdpUrl,
-      message: error instanceof Error ? error.message : String(error),
-    })
+  const stored = chromeProxyForPort(port)
+  if (stored?.username) {
+    const reused = await reuseAuthedChrome(port, cdpUrl, stored.server ?? null)
+    if (reused) return reused
+  } else {
+    try {
+      const attached = await connectCdpHandle(port)
+      log("info", "wallapop_browser_attached_cdp", { cdpUrl })
+      return attached
+    } catch (error) {
+      log("info", "wallapop_cdp_not_ready_launching_chrome", {
+        cdpUrl,
+        message: error instanceof Error ? error.message : String(error),
+      })
+    }
   }
 
-  spawnRealChrome(proxyInput, port)
+  await spawnRealChrome(proxyInput, port)
   await waitForCdp(cdpUrl)
   const attached = await connectCdpHandle(port)
-  log("info", "wallapop_browser_attached_after_spawn", { cdpUrl })
+  log("info", "wallapop_browser_attached_after_spawn", {
+    cdpUrl,
+    proxyUpstream: stored?.server ?? null,
+  })
   return attached
 }
 
