@@ -153,6 +153,40 @@ async function waitForColorHost(page: Page, label: string): Promise<boolean> {
   return false;
 }
 
+async function clickOpenedField(
+  page: Page,
+  titles: string[],
+  ids: string[],
+  opened: boolean,
+): Promise<number> {
+  if (!opened) return 0;
+  try {
+    return await clickFieldOptions(page, titles, ids);
+  } catch {
+    return 0;
+  }
+}
+
+async function colorHostMissing(
+  page: Page,
+  field: CategoryUploadField,
+  ids: string[],
+  titles: string[],
+): Promise<boolean> {
+  if (field.id !== "color") return false;
+  if (await fieldHostPresent(page, field.id, field.label)) return false;
+  if (await waitForColorHost(page, field.label)) return false;
+  log("info", "wallapop_publish_extra_field", {
+    id: field.id,
+    opened: false,
+    clicked: 0,
+    titles,
+    ids,
+    skipped: "host_absent",
+  });
+  return true;
+}
+
 async function fillOneExtraField(
   page: Page,
   field: CategoryUploadField,
@@ -160,34 +194,11 @@ async function fillOneExtraField(
 ): Promise<void> {
   const titles = titlesForIds(field, ids);
   await closeOpenDropdowns(page);
-  if (
-    field.id === "color" &&
-    !(await fieldHostPresent(page, field.id, field.label))
-  ) {
-    const appeared = await waitForColorHost(page, field.label);
-    if (!appeared) {
-      log("info", "wallapop_publish_extra_field", {
-        id: field.id,
-        opened: false,
-        clicked: 0,
-        titles,
-        ids,
-        skipped: "host_absent",
-      });
-      return;
-    }
-  }
+  if (await colorHostMissing(page, field, ids, titles)) return;
   const opened = (await page.evaluate(
     `${OPEN_FIELD_JS}(${JSON.stringify(field.id)}, ${JSON.stringify(field.label)})`,
   )) as boolean;
-  let clicked = 0;
-  if (opened) {
-    try {
-      clicked = await clickFieldOptions(page, titles, ids);
-    } catch {
-      clicked = 0;
-    }
-  }
+  const clicked = await clickOpenedField(page, titles, ids, opened);
   await closeOpenDropdowns(page);
   log("info", "wallapop_publish_extra_field", {
     id: field.id,
