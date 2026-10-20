@@ -1,28 +1,22 @@
 "use client";
 
-import { useEffect, useRef, useState } from "react";
+import { useEffect, useRef, useState, type RefObject } from "react";
 import { LoaderCircleIcon } from "lucide-react";
 
-import { loadCatalogPage } from "@/app/actions/products";
 import { ProductCard } from "@/components/catalog/product-card";
 import { CatalogDeletePack } from "@/components/catalog/catalog-delete-pack";
+import {
+  collectCatalogPages,
+  mergeUnique,
+  requestNextCatalogPage,
+} from "@/components/catalog/catalog-product-list-pages";
 import { rememberOfflineProducts } from "@/lib/offline/cache";
 import { accountGlanceAlreadyQueued } from "@/lib/inventory/format";
-import { CATALOG_PAGE_SIZE } from "@/lib/inventory/types";
 import type {
   CatalogListingFilter,
   InventoryProduct,
 } from "@/lib/inventory/types";
 import type { ProductStatus } from "@/lib/validations";
-
-function mergeUnique(
-  current: InventoryProduct[],
-  incoming: InventoryProduct[],
-) {
-  const ids = new Set(current.map((product) => product.id));
-  const extra = incoming.filter((product) => !ids.has(product.id));
-  return extra.length > 0 ? [...current, ...extra] : current;
-}
 
 function queueableIds(products: InventoryProduct[], accountId: string | null) {
   if (!accountId) return products.map((product) => product.id);
@@ -134,6 +128,164 @@ function CatalogProductGrid({
   );
 }
 
+type CatalogListProps = {
+  initialProducts: InventoryProduct[];
+  total: number;
+  q: string;
+  status: "ALL" | ProductStatus;
+  listing?: CatalogListingFilter;
+  view: "grid" | "list";
+  extraProducts?: InventoryProduct[];
+};
+
+function markQueued(
+  product: InventoryProduct,
+  queued: Set<string>,
+  accountId: string,
+): InventoryProduct {
+  if (!queued.has(product.id)) return product;
+  return {
+    ...product,
+    status: product.status === "SOLD" ? "ACTIVE" : product.status,
+    soldAccountId: product.status === "SOLD" ? null : product.soldAccountId,
+    accountStates: product.accountStates?.map((state) =>
+      state.accountId === accountId
+        ? { ...state, status: "READY_TO_POST", externalUrl: null }
+        : state,
+    ),
+  };
+}
+
+function useCatalogSentinel(input: {
+  hasMore: boolean;
+  loading: boolean;
+  error: string | null;
+  page: number;
+  q: string;
+  status: "ALL" | ProductStatus;
+  listing?: CatalogListingFilter;
+  sentinelRef: RefObject<HTMLDivElement | null>;
+  inFlight: RefObject<boolean>;
+  generation: RefObject<number>;
+  setLoading: (value: boolean) => void;
+  setError: (value: string | null) => void;
+  setDone: (value: boolean) => void;
+  setPage: (value: number) => void;
+  setItems: (update: (prev: InventoryProduct[]) => InventoryProduct[]) => void;
+}) {
+  const {
+    hasMore,
+    loading,
+    error,
+    page,
+    q,
+    status,
+    listing,
+    sentinelRef,
+    inFlight,
+    generation,
+    setLoading,
+    setError,
+    setDone,
+    setPage,
+    setItems,
+  } = input;
+  useEffect(() => {
+    if (!hasMore || loading || error) return;
+    const node = sentinelRef.current;
+    if (!node) return;
+    const query = { q, status, listing };
+    const observer = new IntersectionObserver(
+      (entries) => {
+        if (!entries[0]?.isIntersecting || inFlight.current) return;
+        requestNextCatalogPage({
+          page,
+          query,
+          generation: generation.current,
+          currentGeneration: () => generation.current,
+          inFlight,
+          setLoading,
+          setError,
+          setDone,
+          setPage,
+          setItems,
+        });
+      },
+      { rootMargin: "240px 0px" },
+    );
+    observer.observe(node);
+    return () => observer.disconnect();
+  }, [
+    hasMore,
+    loading,
+    error,
+    page,
+    q,
+    status,
+    listing,
+    sentinelRef,
+    inFlight,
+    generation,
+    setLoading,
+    setError,
+    setDone,
+    setPage,
+    setItems,
+  ]);
+}
+
+async function selectEntireCatalog(input: {
+  selectingAll: boolean;
+  inFlight: RefObject<boolean>;
+  generation: RefObject<number>;
+  items: InventoryProduct[];
+  page: number;
+  done: boolean;
+  total: number;
+  query: { q: string; status: "ALL" | ProductStatus; listing?: CatalogListingFilter };
+  extraProducts: InventoryProduct[];
+  queueAccountId: string | null;
+  setSelectingAll: (value: boolean) => void;
+  setSelecting: (value: boolean) => void;
+  setError: (value: string | null) => void;
+  setItems: (value: InventoryProduct[]) => void;
+  setPage: (value: number) => void;
+  setDone: (value: boolean) => void;
+  setSelected: (value: Set<string>) => void;
+}) {
+  if (input.selectingAll || input.inFlight.current) return;
+  input.setSelectingAll(true);
+  input.setSelecting(true);
+  input.inFlight.current = true;
+  const gen = input.generation.current;
+  try {
+    const batch = await collectCatalogPages({
+      startItems: input.items,
+      startPage: input.page,
+      startDone: input.done,
+      total: input.total,
+      query: input.query,
+      isCurrent: () => gen === input.generation.current,
+    });
+    if (batch.aborted || gen !== input.generation.current) return;
+    if (batch.error) input.setError(batch.error);
+    input.setItems(batch.items);
+    input.setPage(batch.page);
+    if (batch.done) input.setDone(true);
+    const shown = mergeUnique(batch.items, input.extraProducts);
+    input.setSelected(new Set(queueableIds(shown, input.queueAccountId)));
+  } catch {
+    if (gen === input.generation.current) {
+      input.setError("No se han podido cargar más productos.");
+    }
+  } finally {
+    if (gen === input.generation.current) {
+      input.inFlight.current = false;
+      input.setSelectingAll(false);
+    }
+  }
+}
+
 export function CatalogProductList({
   initialProducts,
   total,
@@ -142,15 +294,7 @@ export function CatalogProductList({
   listing,
   view,
   extraProducts = [],
-}: {
-  initialProducts: InventoryProduct[];
-  total: number;
-  q: string;
-  status: "ALL" | ProductStatus;
-  listing?: CatalogListingFilter;
-  view: "grid" | "list";
-  extraProducts?: InventoryProduct[];
-}) {
+}: CatalogListProps) {
   const [items, setItems] = useState(initialProducts);
   const [page, setPage] = useState(1);
   const [loading, setLoading] = useState(false);
@@ -163,6 +307,7 @@ export function CatalogProductList({
   const sentinelRef = useRef<HTMLDivElement>(null);
   const inFlight = useRef(false);
   const generation = useRef(0);
+  const query = { q, status, listing };
 
   useEffect(() => {
     rememberOfflineProducts(items);
@@ -170,108 +315,23 @@ export function CatalogProductList({
 
   const displayed = mergeUnique(items, extraProducts);
   const hasMore = !done && items.length < total;
-
-  async function selectAll() {
-    if (selectingAll || inFlight.current) return;
-    setSelectingAll(true);
-    setSelecting(true);
-    inFlight.current = true;
-    const gen = generation.current;
-    let collected = items;
-    let nextPage = page;
-    let finished = done || collected.length >= total;
-    try {
-      while (!finished) {
-        const result = await loadCatalogPage({
-          page: nextPage + 1,
-          q,
-          status,
-          listing,
-        });
-        if (gen !== generation.current) return;
-        if (!result.ok) {
-          setError(result.error);
-          break;
-        }
-        if (result.products.length === 0) {
-          finished = true;
-          break;
-        }
-        collected = mergeUnique(collected, result.products);
-        nextPage = result.page;
-        finished =
-          collected.length >= result.total ||
-          result.products.length < CATALOG_PAGE_SIZE;
-      }
-      if (gen !== generation.current) return;
-      setItems(collected);
-      setPage(nextPage);
-      if (finished) setDone(true);
-      const shown = mergeUnique(collected, extraProducts);
-      setSelected(new Set(queueableIds(shown, queueAccountId)));
-    } catch {
-      if (gen === generation.current) {
-        setError("No se han podido cargar más productos.");
-      }
-    } finally {
-      if (gen === generation.current) {
-        inFlight.current = false;
-        setSelectingAll(false);
-      }
-    }
-  }
-
-  useEffect(() => {
-    if (!hasMore || loading || error) return;
-    const node = sentinelRef.current;
-    if (!node) return;
-
-    const observer = new IntersectionObserver(
-      (entries) => {
-        if (!entries[0]?.isIntersecting || inFlight.current) return;
-        const nextPage = page + 1;
-        const gen = generation.current;
-        inFlight.current = true;
-        setLoading(true);
-        void loadCatalogPage({ page: nextPage, q, status, listing })
-          .then((result) => {
-            if (gen !== generation.current) return;
-            inFlight.current = false;
-            setLoading(false);
-            if (!result.ok) {
-              setError(result.error);
-              return;
-            }
-            if (result.products.length === 0) {
-              setDone(true);
-              return;
-            }
-            setPage(result.page);
-            let nextLength = 0;
-            setItems((prev) => {
-              const next = mergeUnique(prev, result.products);
-              nextLength = next.length;
-              return next;
-            });
-            if (
-              nextLength >= result.total ||
-              result.products.length < CATALOG_PAGE_SIZE
-            ) {
-              setDone(true);
-            }
-          })
-          .catch(() => {
-            if (gen !== generation.current) return;
-            inFlight.current = false;
-            setLoading(false);
-            setError("No se han podido cargar más productos.");
-          });
-      },
-      { rootMargin: "240px 0px" },
-    );
-    observer.observe(node);
-    return () => observer.disconnect();
-  }, [hasMore, loading, error, page, q, status, listing]);
+  useCatalogSentinel({
+    hasMore,
+    loading,
+    error,
+    page,
+    q,
+    status,
+    listing,
+    sentinelRef,
+    inFlight,
+    generation,
+    setLoading,
+    setError,
+    setDone,
+    setPage,
+    setItems,
+  });
 
   return (
     <CatalogDeletePack
@@ -286,26 +346,31 @@ export function CatalogProductList({
         setItems((prev) => prev.filter((product) => !ids.includes(product.id)));
       }}
       onSelectAll={() => {
-        void selectAll();
+        void selectEntireCatalog({
+          selectingAll,
+          inFlight,
+          generation,
+          items,
+          page,
+          done,
+          total,
+          query,
+          extraProducts,
+          queueAccountId,
+          setSelectingAll,
+          setSelecting,
+          setError,
+          setItems,
+          setPage,
+          setDone,
+          setSelected,
+        });
       }}
       selectAllPending={selectingAll}
       onQueued={(ids, accountId) => {
         const queued = new Set(ids);
         setItems((prev) =>
-          prev.map((product) => {
-            if (!queued.has(product.id)) return product;
-            return {
-              ...product,
-              status: product.status === "SOLD" ? "ACTIVE" : product.status,
-              soldAccountId:
-                product.status === "SOLD" ? null : product.soldAccountId,
-              accountStates: product.accountStates?.map((state) =>
-                state.accountId === accountId
-                  ? { ...state, status: "READY_TO_POST", externalUrl: null }
-                  : state,
-              ),
-            };
-          }),
+          prev.map((product) => markQueued(product, queued, accountId)),
         );
       }}
     >

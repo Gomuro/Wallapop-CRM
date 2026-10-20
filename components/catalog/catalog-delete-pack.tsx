@@ -3,18 +3,20 @@
 import { useEffect, useRef, useState, type ReactNode } from "react"
 import { useRouter } from "next/navigation"
 
-import { ConfirmAction } from "@/components/confirm-action"
-import { apiClientFetch } from "@/lib/api/client"
-import { ApiError } from "@/lib/api/errors"
+import { CatalogDeletePackBar } from "@/components/catalog/catalog-delete-pack-bar"
+import {
+  deleteProgressText,
+  queueFailureMessage,
+  queueResultView,
+  walkQueue,
+} from "@/components/catalog/catalog-delete-pack-run"
 import {
   catalogDeleteErrorMessage,
   deleteProductFromCatalog,
 } from "@/lib/api/catalog-delete"
 import { getAccountAutopost } from "@/lib/api/wallapop-account"
-import { catalogDeleteNeedsWallapop } from "@/lib/inventory/listing-active"
 import { accountGlanceAlreadyQueued } from "@/lib/inventory/format"
 import type { AccountListingGlance, InventoryProduct } from "@/lib/inventory/types"
-import { cn } from "@/lib/utils"
 
 function accountsInView(products: InventoryProduct[]): AccountListingGlance[] {
   for (const product of products) {
@@ -31,20 +33,39 @@ function staysOnAccount(product: InventoryProduct, accountId: string): boolean {
   return accountGlanceAlreadyQueued(row)
 }
 
-export function CatalogDeletePack({
-  products,
-  selecting,
-  selected,
-  queueAccountId,
-  onQueueAccountId,
-  onSelectingChange,
-  onSelectedChange,
-  onRemoved,
-  onQueued,
-  onSelectAll,
-  selectAllPending = false,
-  children,
-}: {
+function soldQueueNotice(soldInQueue: number): ReactNode {
+  if (soldInQueue < 1) return null
+  const text =
+    soldInQueue === 1
+      ? "Cuidado: 1 vendido también entra en la cola y puede publicarse otra vez."
+      : `Cuidado: ${soldInQueue} vendidos también entran en la cola y pueden publicarse otra vez.`
+  return (
+    <p className="text-sm font-bold uppercase leading-snug text-destructive" role="note">
+      {text}
+    </p>
+  )
+}
+
+function useAutopostEnabled(open: boolean, accountId: string | null) {
+  const [autopostOn, setAutopostOn] = useState(false)
+  useEffect(() => {
+    if (!open || !accountId) return
+    let cancelled = false
+    void getAccountAutopost(accountId)
+      .then((next) => {
+        if (!cancelled) setAutopostOn(next.autopost.enabled)
+      })
+      .catch(() => {
+        if (!cancelled) setAutopostOn(false)
+      })
+    return () => {
+      cancelled = true
+    }
+  }, [open, accountId])
+  return { autopostOn, setAutopostOn }
+}
+
+type CatalogDeletePackProps = {
   products: InventoryProduct[]
   selecting: boolean
   selected: Set<string>
@@ -57,282 +78,221 @@ export function CatalogDeletePack({
   onSelectAll: () => void
   selectAllPending?: boolean
   children: ReactNode
-}) {
+}
+
+function chosenForAccount(products: InventoryProduct[], selected: Set<string>, accountId: string | null) {
+  const chosen = products.filter((product) => selected.has(product.id))
+  if (!accountId) return { toQueue: [] as InventoryProduct[], already: chosen.length }
+  const toQueue = chosen.filter((product) => !staysOnAccount(product, accountId))
+  return { toQueue, already: chosen.length - toQueue.length }
+}
+
+function usePackDelete(props: CatalogDeletePackProps) {
   const router = useRouter()
   const [confirmOpen, setConfirmOpen] = useState(false)
   const [packError, setPackError] = useState<string | null>(null)
   const [packPending, setPackPending] = useState(false)
   const [progress, setProgress] = useState<string | null>(null)
-  const [queueOpen, setQueueOpen] = useState(false)
-  const [queueError, setQueueError] = useState<string | null>(null)
-  const [queuePending, setQueuePending] = useState(false)
-  const [queueNote, setQueueNote] = useState<string | null>(null)
-  const [autopostOn, setAutopostOn] = useState(false)
-  const queueAbort = useRef<AbortController | null>(null)
-  const accounts = accountsInView(products)
-  const queueAccount = accounts.find((row) => row.accountId === queueAccountId) ?? null
-  const chosen = products.filter((product) => selected.has(product.id))
-  const toQueue = queueAccount
-    ? chosen.filter((product) => !staysOnAccount(product, queueAccount.accountId))
-    : []
-  const already = chosen.length - toQueue.length
-  const soldInQueue = toQueue.filter((product) => product.status === "SOLD").length
 
   async function deleteSelected() {
-    const queue = products.filter((product) => selected.has(product.id))
+    const queue = props.products.filter((product) => props.selected.has(product.id))
     setPackError(null)
     setPackPending(true)
-    const removed: string[] = []
-    try {
-      for (let index = 0; index < queue.length; index += 1) {
-        const product = queue[index]
-        if (!product) continue
-        const onWallapop =
-          product.listingActive === true ||
-          catalogDeleteNeedsWallapop({
-            status: product.status,
-            listing: product.listing,
-          })
-        setProgress(
-          onWallapop
-            ? `${index + 1} de ${queue.length}: ${product.title}. Primero se quita el anuncio en Wallapop; puede tardar.`
-            : `${index + 1} de ${queue.length}: ${product.title}. Se elimina del CRM.`,
-        )
-        const result = await deleteProductFromCatalog(product.id)
-        if (result.dryRun) {
-          setPackError(result.error ?? "Prueba: el anuncio sigue en Wallapop.")
-          break
-        }
-        removed.push(product.id)
-        onRemoved([product.id])
-      }
-    } catch (caught) {
-      setPackError(catalogDeleteErrorMessage(caught))
-    } finally {
-      setPackPending(false)
-      setProgress(null)
-    }
+    const removed = await deletePack(queue, setProgress, setPackError, props.onRemoved)
+    setPackPending(false)
+    setProgress(null)
     if (removed.length === 0) return
-    const next = new Set(selected)
+    const next = new Set(props.selected)
     for (const id of removed) next.delete(id)
-    onSelectedChange(next)
+    props.onSelectedChange(next)
     if (removed.length === queue.length) {
       setConfirmOpen(false)
-      onSelectingChange(false)
+      props.onSelectingChange(false)
     }
     router.refresh()
   }
 
-  useEffect(() => {
-    if (!queueOpen || !queueAccount) return
-    let cancelled = false
-    void getAccountAutopost(queueAccount.accountId)
-      .then((next) => {
-        if (!cancelled) setAutopostOn(next.autopost.enabled)
-      })
-      .catch(() => {
-        if (!cancelled) setAutopostOn(false)
-      })
-    return () => {
-      cancelled = true
-    }
-  }, [queueOpen, queueAccount?.accountId])
+  return {
+    confirmOpen,
+    setConfirmOpen,
+    packError,
+    setPackError,
+    packPending,
+    progress,
+    setProgress,
+    deleteSelected,
+  }
+}
+
+function usePackQueue(props: CatalogDeletePackProps, toQueue: InventoryProduct[], accountId: string | null) {
+  const router = useRouter()
+  const [queueOpen, setQueueOpen] = useState(false)
+  const [queueError, setQueueError] = useState<string | null>(null)
+  const [queuePending, setQueuePending] = useState(false)
+  const [queueNote, setQueueNote] = useState<string | null>(null)
+  const queueAbort = useRef<AbortController | null>(null)
+  const { autopostOn, setAutopostOn } = useAutopostEnabled(queueOpen, accountId)
 
   async function queueSelected() {
-    if (!queueAccount) return
+    if (!accountId) return
     const controller = new AbortController()
     queueAbort.current = controller
     setQueueError(null)
     setQueuePending(true)
-    const queued: string[] = []
-    let skipped = 0
-    let stopped = false
-    try {
-      for (let index = 0; index < toQueue.length; index += 1) {
-        if (controller.signal.aborted) {
-          stopped = true
-          break
-        }
-        const product = toQueue[index]
-        if (!product) continue
-        setQueueNote(`${index + 1} de ${toQueue.length}: ${product.title}`)
-        try {
-          await apiClientFetch(`/products/${encodeURIComponent(product.id)}/queue`, {
-            method: "POST",
-            body: JSON.stringify({ accountId: queueAccount.accountId }),
-            signal: controller.signal,
-          })
-          queued.push(product.id)
-        } catch (caught) {
-          if (controller.signal.aborted) {
-            stopped = true
-            break
-          }
-          if (caught instanceof ApiError && caught.status === 409) {
-            skipped += 1
-            continue
-          }
-          throw caught
-        }
-      }
-    } catch (caught) {
-      if (!controller.signal.aborted) {
-        setQueueError(caught instanceof ApiError ? caught.message : "No se ha podido poner en cola.")
-      } else {
-        stopped = true
-      }
-    } finally {
-      if (queueAbort.current === controller) queueAbort.current = null
-      setQueuePending(false)
-      setQueueNote(null)
-    }
-    if (queued.length > 0) onQueued(queued, queueAccount.accountId)
-    if (queued.length === 0 && skipped > 0 && !stopped) {
-      setQueueError(
-        "Esos productos ya están publicados, se están publicando o están inactivos en esta cuenta.",
-      )
-    }
-    if (stopped || (skipped === 0 && queued.length === toQueue.length)) {
-      setQueueOpen(false)
-    }
-    if (queued.length > 0 || stopped) router.refresh()
+    const walked = await runQueueWalk(toQueue, accountId, controller, setQueueNote)
+    if (queueAbort.current === controller) queueAbort.current = null
+    setQueuePending(false)
+    setQueueNote(null)
+    if (walked.queued.length > 0) props.onQueued(walked.queued, accountId)
+    const view = queueResultView({
+      queued: walked.queued.length,
+      skipped: walked.skipped,
+      stopped: walked.stopped,
+      planned: toQueue.length,
+      thrown: walked.thrown,
+    })
+    if (view.error) setQueueError(view.error)
+    if (view.close) setQueueOpen(false)
+    if (view.refresh) router.refresh()
   }
+
+  function onQueueOpenChange(next: boolean) {
+    if (!next && queuePending) {
+      queueAbort.current?.abort()
+      setQueueNote("Cancelando…")
+      return
+    }
+    setQueueOpen(next)
+    if (!next) {
+      setQueueError(null)
+      setQueueNote(null)
+      setAutopostOn(false)
+    }
+  }
+
+  return {
+    queueOpen,
+    queueError,
+    queuePending,
+    queueNote,
+    autopostOn,
+    queueSelected,
+    onQueueOpenChange,
+  }
+}
+
+async function runQueueWalk(
+  products: InventoryProduct[],
+  accountId: string,
+  controller: AbortController,
+  onNote: (note: string) => void,
+) {
+  let thrown: string | null = null
+  let walked = { queued: [] as string[], skipped: 0, stopped: false }
+  try {
+    walked = await walkQueue({
+      products,
+      accountId,
+      signal: controller.signal,
+      onNote,
+    })
+  } catch (caught) {
+    thrown = queueFailureMessage(caught, controller.signal.aborted)
+    if (controller.signal.aborted) walked = { ...walked, stopped: true }
+  }
+  return { ...walked, thrown }
+}
+
+export function CatalogDeletePack(props: CatalogDeletePackProps) {
+  const accounts = accountsInView(props.products)
+  const queueAccount =
+    accounts.find((row) => row.accountId === props.queueAccountId) ?? null
+  const { toQueue, already } = chosenForAccount(
+    props.products,
+    props.selected,
+    queueAccount?.accountId ?? null,
+  )
+  const soldInQueue = toQueue.filter((product) => product.status === "SOLD").length
+  const pack = usePackDelete(props)
+  const queue = usePackQueue(props, toQueue, queueAccount?.accountId ?? null)
 
   return (
     <>
-      {children}
-      {selecting ? (
-        <div className="sticky bottom-3 z-30 mt-4 flex flex-col gap-2 rounded-2xl bg-background/95 p-3 shadow-lg ring-1 ring-border backdrop-blur">
-          <button
-            type="button"
-            className="h-11 w-full rounded-full bg-muted text-sm font-semibold disabled:opacity-50"
-            disabled={selectAllPending || products.length === 0}
-            onClick={onSelectAll}
-          >
-            {selectAllPending ? "Cargando el catálogo…" : "Seleccionar todo"}
-          </button>
-          {accounts.length > 0 ? (
-            <div className="flex gap-2 overflow-x-auto pb-1">
-              {accounts.map((account) => {
-                const active = account.accountId === queueAccountId
-                return (
-                  <button
-                    key={account.accountId}
-                    type="button"
-                    className={cn(
-                      "h-10 shrink-0 rounded-full px-3 text-sm font-medium",
-                      active
-                        ? "bg-foreground text-background"
-                        : "bg-muted text-foreground",
-                    )}
-                    onClick={() => onQueueAccountId(account.accountId)}
-                  >
-                    {account.accountName}
-                  </button>
-                )
-              })}
-            </div>
-          ) : null}
-          <ConfirmAction
-            open={queueOpen}
-            onOpenChange={(next) => {
-              if (!next && queuePending) {
-                queueAbort.current?.abort()
-                setQueueNote("Cancelando…")
-                return
-              }
-              setQueueOpen(next)
+      {props.children}
+      {props.selecting ? (
+        <CatalogDeletePackBar
+          accounts={accounts}
+          queueAccountId={props.queueAccountId}
+          onQueueAccountId={props.onQueueAccountId}
+          selectAllPending={props.selectAllPending ?? false}
+          catalogEmpty={props.products.length === 0}
+          onSelectAll={props.onSelectAll}
+          onCancel={() => {
+            props.onSelectingChange(false)
+            props.onSelectedChange(new Set())
+          }}
+          queue={{
+            open: queue.queueOpen,
+            onOpenChange: queue.onQueueOpenChange,
+            accountName: queueAccount?.accountName ?? null,
+            toQueue: toQueue.length,
+            already,
+            pending: queue.queuePending,
+            disabled: !queueAccount || toQueue.length === 0 || queue.queuePending,
+            note: queue.queueNote,
+            error: queue.queueError,
+            autopostOn: queue.autopostOn,
+            notice: soldQueueNotice(soldInQueue),
+            onConfirm: () => {
+              void queue.queueSelected()
+            },
+          }}
+          remove={{
+            open: pack.confirmOpen,
+            onOpenChange: (next) => {
+              if (pack.packPending) return
+              pack.setConfirmOpen(next)
               if (!next) {
-                setQueueError(null)
-                setQueueNote(null)
-                setAutopostOn(false)
+                pack.setPackError(null)
+                pack.setProgress(null)
               }
-            }}
-            triggerLabel={
-              queueAccount
-                ? `Poner en cola · ${queueAccount.accountName} (${toQueue.length})`
-                : "Poner en cola"
-            }
-            triggerClassName="h-12 w-full"
-            triggerDisabled={!queueAccount || toQueue.length === 0 || queuePending}
-            title={queueAccount ? `Cola de ${queueAccount.accountName}` : "Cola"}
-            description={
-              queueNote ??
-              `Poner en cola no cambia un anuncio ya publicado ni lo devuelve a la cola. Si en ${
-                queueAccount?.accountName ?? "esta cuenta"
-              } ya está Publicado, se queda igual.${
-                toQueue.length > 0
-                  ? ` ${toQueue.length} pasarán a «Listo para publicar» solo en esta cuenta.`
-                  : ""
-              }${
-                already > 0
-                  ? ` ${already} ya publicados aquí no se tocan.`
-                  : ""
-              } Las demás cuentas no cambian.${
-                autopostOn
-                  ? " El autopost de esta cuenta está encendido: lo que entre en la cola se publicará de verdad."
-                  : ""
-              }`
-            }
-            confirmLabel="Poner en cola"
-            pendingLabel="Guardando…"
-            error={queueError}
-            notice={
-              soldInQueue > 0 ? (
-                <p
-                  className="text-sm font-bold uppercase leading-snug text-destructive"
-                  role="note"
-                >
-                  {soldInQueue === 1
-                    ? "Cuidado: 1 vendido también entra en la cola y puede publicarse otra vez."
-                    : `Cuidado: ${soldInQueue} vendidos también entran en la cola y pueden publicarse otra vez.`}
-                </p>
-              ) : null
-            }
-            pending={queuePending}
-            onConfirm={() => {
-              void queueSelected()
-            }}
-          />
-          <button
-            type="button"
-            className="h-11 text-sm font-semibold"
-            onClick={() => {
-              onSelectingChange(false)
-              onSelectedChange(new Set())
-            }}
-          >
-            Cancelar
-          </button>
-          <ConfirmAction
-            open={confirmOpen}
-            onOpenChange={(next) => {
-              if (packPending) return
-              setConfirmOpen(next)
-              if (!next) {
-                setPackError(null)
-                setProgress(null)
-              }
-            }}
-            triggerLabel={`Eliminar del catálogo (${selected.size})`}
-            triggerClassName="h-12 w-full"
-            triggerDisabled={selected.size === 0}
-            title="Eliminar del catálogo"
-            description={
-              progress ??
-              "Se borran los productos elegidos del CRM. Si el anuncio sigue en Wallapop, primero se elimina allí."
-            }
-            confirmLabel="Eliminar"
-            pendingLabel="En curso…"
-            confirmVariant="destructive"
-            error={packError}
-            pending={packPending}
-            onConfirm={() => {
-              void deleteSelected()
-            }}
-          />
-        </div>
+            },
+            selected: props.selected.size,
+            progress: pack.progress,
+            error: pack.packError,
+            pending: pack.packPending,
+            onConfirm: () => {
+              void pack.deleteSelected()
+            },
+          }}
+        />
       ) : null}
     </>
   )
+}
+
+async function deletePack(
+  queue: InventoryProduct[],
+  setProgress: (value: string | null) => void,
+  setPackError: (value: string | null) => void,
+  onRemoved: (ids: string[]) => void,
+): Promise<string[]> {
+  const removed: string[] = []
+  try {
+    for (let index = 0; index < queue.length; index += 1) {
+      const product = queue[index]
+      if (!product) continue
+      setProgress(deleteProgressText(index, queue.length, product))
+      const result = await deleteProductFromCatalog(product.id)
+      if (result.dryRun) {
+        setPackError(result.error ?? "Prueba: el anuncio sigue en Wallapop.")
+        break
+      }
+      removed.push(product.id)
+      onRemoved([product.id])
+    }
+  } catch (caught) {
+    setPackError(catalogDeleteErrorMessage(caught))
+  }
+  return removed
 }
