@@ -33,7 +33,7 @@ export function listingHasPublicItemUrl(
 /** En Wallapop only with a public /item/ URL. Upload/catalog pages do not count. */
 export function computeListingActive(
   listing:
-    | Pick<InventoryListing, "status" | "externalUrl">
+    | { status: string; externalUrl: string | null }
     | null
     | undefined,
   listingActive?: boolean,
@@ -112,7 +112,7 @@ export function canStartDevolucion(product: InventoryProduct): boolean {
 /** Live /item/ or a publish in flight — warehouse must not flip to Inactivo. */
 export function listingBlocksWarehouseInactive(
   listing:
-    | Pick<InventoryListing, "status" | "externalUrl">
+    | { status: string; externalUrl: string | null }
     | null
     | undefined,
 ): boolean {
