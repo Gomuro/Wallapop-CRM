@@ -31,12 +31,12 @@ type SellerSoldState = Awaited<ReturnType<typeof findSellerSoldButton>>
 async function waitForSellerItem(page: Page): Promise<{
   sold: SellerSoldState
   reserve: SellerReserveState
-  already: "badge" | "flags" | "not"
+  already: "badge" | "not"
 }> {
   const deadline = Date.now() + SELLER_BLOCK_WAIT_MS
   let sold: SellerSoldState = "missing_container"
   let reserve: SellerReserveState = "missing_container"
-  let already: "badge" | "flags" | "not" = "not"
+  let already: "badge" | "not" = "not"
   while (Date.now() <= deadline) {
     already = await findItemAlreadySold(page)
     if (already !== "not") {

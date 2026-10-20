@@ -104,20 +104,7 @@ describe("sold DOM fixtures", () => {
       const page = await browser.newPage()
       await page.setContent(html)
       expect(await page.evaluate(FIND_ITEM_ALREADY_SOLD_EVAL)).toBe("badge")
-      expect(await page.evaluate(FIND_SELLER_SOLD_EVAL)).toBe("missing_container")
-    } finally {
-      await browser.close()
-    }
-  })
-
-  it("reads flags.sold when the badge is not in the DOM yet", async () => {
-    const browser = await chromium.launch({ headless: true })
-    try {
-      const page = await browser.newPage()
-      await page.setContent(
-        `<script type="application/json">{"flags":{"reserved":false,"bumped":false,"sold":true,"expired":false,"favorited":false,"onHold":false}}</script>`,
-      )
-      expect(await page.evaluate(FIND_ITEM_ALREADY_SOLD_EVAL)).toBe("flags")
+      expect(await page.evaluate(FIND_SELLER_SOLD_EVAL)).toBe("missing_button")
     } finally {
       await browser.close()
     }

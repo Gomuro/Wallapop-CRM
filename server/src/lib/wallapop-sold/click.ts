@@ -39,27 +39,16 @@ export const CLICK_SELLER_SOLD_EVAL = `(() => {
 })()`
 
 /**
- * Live item page 2026-10-20 (already vendido):
- * `<wallapop-badge badge-type="sold" text="Vendido">`
- * Catalog / En venta still uses `badgetype="sold"` (no hyphen).
- * Hydration also has `"flags":{...,"sold":true}`.
+ * Seller /item/ 2026-10-20 CDP 9222 and 9232, already vendido:
+ * `<wallapop-badge badge-type="sold" text="Vendido">`. Seller block only Eliminar.
  */
 export const FIND_ITEM_ALREADY_SOLD_EVAL = `(() => {
   const badges = [...document.querySelectorAll("wallapop-badge")];
   for (const el of badges) {
-    const kind = (
-      el.getAttribute("badge-type") ||
-      el.getAttribute("badgetype") ||
-      ""
-    ).toLowerCase();
+    const kind = (el.getAttribute("badge-type") || "").toLowerCase();
     const text = (el.getAttribute("text") || "").trim();
-    if (kind === "sold" || text === "Vendido") return "badge";
+    if (kind === "sold" && text === "Vendido") return "badge";
   }
-  const html = document.documentElement.innerHTML;
-  const flags = html.match(
-    /"flags":\\{"reserved":(?:true|false),"bumped":(?:true|false),"sold":(true|false)/,
-  );
-  if (flags && flags[1] === "true") return "flags";
   return "not";
 })()`
 
@@ -73,9 +62,9 @@ export const CLICK_MARK_AS_SOLD_EVAL = `(() => {
 
 export async function findItemAlreadySold(
   page: Page,
-): Promise<"badge" | "flags" | "not"> {
+): Promise<"badge" | "not"> {
   const result = (await page.evaluate(FIND_ITEM_ALREADY_SOLD_EVAL)) as string
-  if (result === "badge" || result === "flags" || result === "not") return result
+  if (result === "badge" || result === "not") return result
   return "not"
 }
 
