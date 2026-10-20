@@ -94,6 +94,14 @@ export function isListingActive(
   return isLiveOnWallapopStatus(listing?.status)
 }
 
+function inactiveWarehouseHidesQueue(
+  listing: { status: ListingStatusRead },
+  warehouseStatus?: ProductStatus,
+) {
+  if (warehouseStatus !== "INACTIVE") return false
+  return listing.status === "READY_TO_POST" || listing.status === "FAILED"
+}
+
 /** Short label for catalog card badge (single default listing). */
 export function listingIndicatorShort(
   listing: { status: ListingStatusRead } | null | undefined,
@@ -101,12 +109,7 @@ export function listingIndicatorShort(
   warehouseStatus?: ProductStatus,
 ): string | null {
   if (!listing) return null
-  if (
-    warehouseStatus === "INACTIVE" &&
-    (listing.status === "READY_TO_POST" || listing.status === "FAILED")
-  ) {
-    return null
-  }
+  if (inactiveWarehouseHidesQueue(listing, warehouseStatus)) return null
   if (listing.status === "POSTING") return "Publicando…"
   if (listing.status === "FAILED") return "Error al publicar"
   if (
