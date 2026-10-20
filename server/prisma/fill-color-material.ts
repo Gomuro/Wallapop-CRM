@@ -154,7 +154,7 @@ function isDryRun(argv: string[]) {
   return argv.includes("--dry-run")
 }
 
-function useVps(argv: string[]) {
+function wantsVpsDatabase(argv: string[]) {
   return argv.includes("--vps")
 }
 
@@ -175,11 +175,15 @@ function productIdOf(argv: string[]): string | null {
 async function main() {
   const argv = process.argv.slice(2)
   const dryRun = isDryRun(argv)
-  const connectionString = useVps(argv)
+  const connectionString = wantsVpsDatabase(argv)
     ? process.env.DATABASE_URL_VPS
     : process.env.DATABASE_URL
   if (!connectionString) {
-    throw new Error(useVps(argv) ? "DATABASE_URL_VPS is not set" : "DATABASE_URL is not set")
+    throw new Error(
+      wantsVpsDatabase(argv)
+        ? "DATABASE_URL_VPS is not set"
+        : "DATABASE_URL is not set",
+    )
   }
 
   const { PrismaPg } = await import("@prisma/adapter-pg")
