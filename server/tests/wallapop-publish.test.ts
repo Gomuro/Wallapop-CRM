@@ -6,6 +6,7 @@ import { describe, expect, it } from "vitest"
 
 import type { CategoryUploadField } from "../../lib/inventory/category-upload-fields"
 import { productListingApiPutBodySchema } from "../../lib/validations/listing"
+import { ensureCategorySelected } from "../src/lib/wallapop-publish/category"
 import { ensureExtraUploadFields } from "../src/lib/wallapop-publish/extra-fields"
 import { selectConsumerGoods } from "../src/lib/wallapop-publish/flow"
 import { dismissSearchOverlay } from "../src/lib/wallapop-publish/nav"
@@ -845,6 +846,92 @@ describe("upload Color field", () => {
       await expect(
         ensureExtraUploadFields(page, [material], { material: ["other"] }),
       ).rejects.toBeInstanceOf(WallapopPublishError)
+    } finally {
+      await browser.close()
+    }
+  })
+})
+
+const CATEGORY_DRILL_HTML = `<!DOCTYPE html><body>
+  <h1>Selecciona una categoría</h1>
+  <div id="section">
+    <walla-dropdown>
+      <div class="walla-dropdown__inner-input" role="button" id="cat-button" aria-label="Categoría y subcategoría, Sillas gaming" style="display:block;height:40px">
+        <span class="subText">Tecnología y electrónica > Gaming: consolas y videojuegos > PC gaming y streaming</span>
+      </div>
+    </walla-dropdown>
+    <div id="panel"></div>
+  </div>
+  <input id="category_leaf_id" value="24121">
+  <script>
+    const levels = {
+      root: ["Hogar y jardín", "Motos"],
+      hogar: ["Muebles y organización", "Baño"],
+      muebles: ["Sillas y taburetes", "Puffs"],
+    }
+    const button = document.getElementById("cat-button")
+    const panel = document.getElementById("panel")
+    const leaf = document.getElementById("category_leaf_id")
+    function render(names) {
+      panel.innerHTML = '<div role="listbox" style="display:block;height:120px;overflow:auto">' +
+        names.map((name) =>
+          '<walla-dropdown-item role="option" aria-label="' + name + '" style="display:block;height:36px">' + name + '</walla-dropdown-item>'
+        ).join("") +
+        "</div>"
+    }
+    document.querySelector("walla-dropdown").addEventListener("click", () => {
+      if (!panel.querySelector('[role="listbox"]')) render(levels.root)
+    })
+    panel.addEventListener("click", (event) => {
+      const item = event.target.closest("walla-dropdown-item")
+      if (!item) return
+      const name = item.getAttribute("aria-label")
+      if (name === "Hogar y jardín") render(levels.hogar)
+      else if (name === "Muebles y organización") render(levels.muebles)
+      else if (name === "Sillas y taburetes") {
+        button.textContent = "Hogar y jardín > Muebles y organización"
+        leaf.value = "24221"
+      }
+    })
+  </script>
+</body>`
+
+describe("category drill", () => {
+  it("walks past a suggested gaming chair to Sillas y taburetes", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(CATEGORY_DRILL_HTML)
+      await ensureCategorySelected(page, [
+        "Hogar y jardín",
+        "Muebles y organización",
+        "Sillas y taburetes",
+      ])
+      expect(await page.locator("#category_leaf_id").inputValue()).toBe("24221")
+    } finally {
+      await browser.close()
+    }
+  })
+
+  it("rejects a filled picker that is still the suggested category", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><body>
+        <h1>Selecciona una categoría</h1>
+        <walla-dropdown>
+          <div class="walla-dropdown__inner-input" role="button" aria-label="Categoría y subcategoría, Sillas gaming" style="display:block;height:40px">
+            <span class="subText">Tecnología y electrónica > Gaming: consolas y videojuegos > PC gaming y streaming</span>
+          </div>
+        </walla-dropdown>
+        <div role="listbox" style="display:block;height:80px">
+          <walla-dropdown-item role="option" aria-label="Motos" style="display:block;height:36px">Motos</walla-dropdown-item>
+        </div>
+        <input id="category_leaf_id" value="24121">
+      </body>`)
+      await expect(
+        ensureCategorySelected(page, ["Hogar y jardín", "Sillas y taburetes"]),
+      ).rejects.toThrow(/Sillas gaming/)
     } finally {
       await browser.close()
     }
