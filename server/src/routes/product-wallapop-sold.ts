@@ -9,7 +9,7 @@ import { isBrowserBusyError } from "../lib/wallapop-cdp"
 import { markProductSoldTx } from "../lib/product-sold"
 import { scheduleSiblingSold } from "../lib/sibling-eliminar"
 import { markWallapopSoldInBrowser, WallapopSoldError } from "../lib/wallapop-sold"
-import { enqueueWorkerJob } from "../lib/wallapop-worker-jobs"
+import { enqueueTitledJob } from "./product-worker-enqueue"
 import { log, serializeError } from "../lib/log"
 import { loadProductCard, paramId, sendZod, toProductJson } from "./product-json"
 import {
@@ -166,26 +166,11 @@ export async function postProductWallapopSold(req: Request, res: Response) {
     await runPreparedSold(prepared, res)
     return
   }
-  const titled = await prepared.prisma.product.findUnique({
-    where: { id: prepared.productId },
-    select: { title: true },
-  })
-  const queued = enqueueWorkerJob({
-    kind: "sold",
+  await enqueueTitledJob({
+    res,
+    prisma: prepared.prisma,
     productId: prepared.productId,
-    title: titled?.title ?? "Producto",
+    kind: "sold",
     run: () => runWallapopSoldJob(prepared),
-  })
-  if (!queued.ok) {
-    sendError(res, 409, "ALREADY_QUEUED", queued.message)
-    return
-  }
-  res.json({
-    ok: true,
-    queued: true,
-    dryRun: false,
-    step: "queued",
-    product: null,
-    error: null,
   })
 }

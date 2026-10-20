@@ -14,8 +14,8 @@ import {
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import { isUniqueConstraint, prismaErrorCode } from "../lib/prisma-error"
-import { readQueueNewProductAllAccounts } from "../lib/queue-new-products"
 import { rescheduleAutopostLoop, scheduleAccountAutopost } from "../lib/wallapop-autopost"
+import { insertProductWithListing } from "./product-insert"
 import {
   buildListWhere,
   loadProductCard,
@@ -115,64 +115,6 @@ export async function listProducts(req: Request, res: Response) {
 }
 
 type CreateProductBody = ReturnType<typeof createBodySchema.parse>
-type PrismaDb = NonNullable<ReturnType<typeof getPrisma>>
-
-function productCreateData(body: CreateProductBody) {
-  return {
-    sku: body.sku,
-    title: body.title,
-    description: body.description,
-    price: body.price,
-    currency: body.currency,
-    categoryId: body.categoryId,
-    condition: body.condition,
-    brand: body.brand,
-    weightKg: body.weightKg ?? null,
-    shippingPackageSize: body.shippingPackageSize ?? null,
-    widthCm: body.widthCm ?? null,
-    lengthCm: body.lengthCm ?? null,
-    heightCm: body.heightCm ?? null,
-    status: body.status,
-    typeAttributes: body.typeAttributes as Prisma.InputJsonValue,
-  }
-}
-
-async function insertProductWithListing(
-  prisma: PrismaDb,
-  body: CreateProductBody,
-  defaultAccountId: string,
-) {
-  const queueAll =
-    body.status === "ACTIVE" && (await readQueueNewProductAllAccounts(prisma))
-  const accounts = queueAll
-    ? await prisma.account.findMany({
-        select: { id: true, isDefault: true, autopostEnabled: true },
-      })
-    : []
-  const accountIds =
-    accounts.length > 0
-      ? accounts.map((account) => account.id)
-      : [defaultAccountId]
-  if (!accountIds.includes(defaultAccountId)) accountIds.unshift(defaultAccountId)
-
-  const productId = await prisma.$transaction(async (tx) => {
-    const product = await tx.product.create({ data: productCreateData(body) })
-    await tx.productListing.createMany({
-      data: accountIds.map((accountId) => ({
-        productId: product.id,
-        accountId,
-        status: "READY_TO_POST" as const,
-      })),
-    })
-    return product.id
-  })
-  return {
-    productId,
-    autopostAccountIds: accounts
-      .filter((account) => account.autopostEnabled && !account.isDefault)
-      .map((account) => account.id),
-  }
-}
 
 function sendCreateProductError(res: Response, error: unknown): boolean {
   if (isUniqueConstraint(error, "sku")) {

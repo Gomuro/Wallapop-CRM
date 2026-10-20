@@ -7,7 +7,7 @@ import { log, serializeError } from "../lib/log"
 import { deactivateListingAfterEliminar } from "../lib/product-eliminar"
 import { requeueSoldProductAfterReturn } from "../lib/product-sold"
 import { rescheduleAutopostLoop } from "../lib/wallapop-autopost"
-import { enqueueWorkerJob } from "../lib/wallapop-worker-jobs"
+import { enqueueTitledJob } from "./product-worker-enqueue"
 import { isBrowserBusyError } from "../lib/wallapop-cdp"
 import {
   eliminarWallapopInBrowser,
@@ -186,27 +186,12 @@ export async function postProductWallapopDevolucion(req: Request, res: Response)
     await runPreparedDevolucion(prepared, res)
     return
   }
-  const titled = await prepared.prisma.product.findUnique({
-    where: { id: prepared.productId },
-    select: { title: true },
-  })
-  const queued = enqueueWorkerJob({
-    kind: "devolucion",
+  await enqueueTitledJob({
+    res,
+    prisma: prepared.prisma,
     productId: prepared.productId,
-    title: titled?.title ?? "Producto",
+    kind: "devolucion",
     run: () => runWallapopDevolucionJob(prepared),
-  })
-  if (!queued.ok) {
-    sendError(res, 409, "ALREADY_QUEUED", queued.message)
-    return
-  }
-  res.json({
-    ok: true,
-    queued: true,
-    dryRun: false,
-    step: "queued",
-    eliminated: false,
-    product: null,
-    error: null,
+    payload: { eliminated: false },
   })
 }

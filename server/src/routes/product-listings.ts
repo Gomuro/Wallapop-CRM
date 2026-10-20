@@ -132,7 +132,7 @@ async function parseListingPutBody(req: Request, res: Response) {
   }
 }
 
-async function rejectReadyToPostWithoutBrand(
+export async function rejectReadyToPostWithoutBrand(
   prisma: PrismaDb,
   productId: string,
   body: ListingPutBody,
@@ -193,21 +193,11 @@ async function rejectPostingStatusChange(input: {
   return true
 }
 
-export async function putProductListing(req: Request, res: Response) {
-  const productId = paramId(req)
-  if (!productId) {
-    sendError(res, 404, "NOT_FOUND", "Product not found.")
-    return
-  }
-  const body = await parseListingPutBody(req, res)
-  if (!body) return
-
-  const prisma = getPrisma()
-  if (!prisma) {
-    sendError(res, 500, "INTERNAL", "Database is not configured.")
-    return
-  }
-  const requestedAccountId = body.accountId?.trim() ?? ""
+async function resolveListingAccount(
+  prisma: PrismaDb,
+  requestedAccountId: string,
+  res: Response,
+) {
   const account = requestedAccountId
     ? await prisma.account.findUnique({
         where: { id: requestedAccountId },
@@ -224,8 +214,27 @@ export async function putProductListing(req: Request, res: Response) {
       "NOT_FOUND",
       requestedAccountId ? "Cuenta no encontrada." : DEFAULT_ACCOUNT_MISSING_MESSAGE,
     )
+    return null
+  }
+  return account
+}
+
+export async function putProductListing(req: Request, res: Response) {
+  const productId = paramId(req)
+  if (!productId) {
+    sendError(res, 404, "NOT_FOUND", "Product not found.")
     return
   }
+  const body = await parseListingPutBody(req, res)
+  if (!body) return
+
+  const prisma = getPrisma()
+  if (!prisma) {
+    sendError(res, 500, "INTERNAL", "Database is not configured.")
+    return
+  }
+  const account = await resolveListingAccount(prisma, body.accountId?.trim() ?? "", res)
+  if (!account) return
   const accountId = account.id
   if (!(await assertProductExists(prisma, productId, res))) return
   if (await rejectReadyToPostWithoutBrand(prisma, productId, body, res)) return
@@ -269,108 +278,4 @@ export function listingBlocksManualQueue(
   return wallapopItemUrlOrNull(listing.externalUrl) != null
 }
 
-const QUEUE_LISTING_DATA = {
-  status: "READY_TO_POST" as const,
-  externalUrl: null,
-  externalItemId: null,
-  postingAttempts: 0,
-  lastPublishError: null,
-}
-
-export async function queueProductOnAccount(req: Request, res: Response) {
-  const productId = paramId(req)
-  const accountId =
-    typeof req.body?.accountId === "string" ? req.body.accountId.trim() : ""
-  if (!productId || !accountId) {
-    sendError(res, 400, "VALIDATION_ERROR", "Falta la cuenta.")
-    return
-  }
-  const prisma = getPrisma()
-  if (!prisma) {
-    sendError(res, 500, "INTERNAL", "Database is not configured.")
-    return
-  }
-  const account = await prisma.account.findUnique({
-    where: { id: accountId },
-    select: { id: true, isDefault: true, autopostEnabled: true },
-  })
-  if (!account) {
-    sendError(res, 404, "NOT_FOUND", "Cuenta no encontrada.")
-    return
-  }
-  const product = await prisma.product.findUnique({
-    where: { id: productId },
-    select: { id: true, status: true },
-  })
-  if (!product) {
-    sendError(res, 404, "NOT_FOUND", "Producto no encontrado.")
-    return
-  }
-  if (product.status === "INACTIVE") {
-    sendError(
-      res,
-      409,
-      "NOT_PUBLISHABLE",
-      "Este producto no se puede publicar porque está inactivo.",
-    )
-    return
-  }
-  if (
-    await rejectReadyToPostWithoutBrand(
-      prisma,
-      productId,
-      { status: "READY_TO_POST", externalUrl: null },
-      res,
-    )
-  ) {
-    return
-  }
-  const existing = await prisma.productListing.findUnique({
-    where: { productId_accountId: { productId, accountId } },
-    select: { status: true, externalUrl: true },
-  })
-  if (listingBlocksManualQueue(product.status, existing)) {
-    sendError(
-      res,
-      409,
-      "ALREADY_POSTED",
-      "Este producto ya está publicado o se está publicando en esta cuenta.",
-    )
-    return
-  }
-  const listing = await prisma.$transaction(async (tx) => {
-    const row = await tx.productListing.upsert({
-      where: { productId_accountId: { productId, accountId } },
-      create: {
-        product: { connect: { id: productId } },
-        account: { connect: { id: accountId } },
-        ...QUEUE_LISTING_DATA,
-        shippingEnabled: true,
-      },
-      update: QUEUE_LISTING_DATA,
-      select: listingJsonSelect,
-    })
-    if (product.status === "SOLD") {
-      await tx.product.update({
-        where: { id: productId },
-        data: {
-          status: "ACTIVE",
-          soldAt: null,
-          soldPrice: null,
-          soldAccountId: null,
-        },
-      })
-    } else {
-      await tx.product.updateMany({
-        where: { id: productId, status: { not: "SOLD" } },
-        data: { status: "ACTIVE" },
-      })
-    }
-    return row
-  })
-  if (account.autopostEnabled) {
-    if (account.isDefault) await rescheduleAutopostLoop()
-    else await scheduleAccountAutopost(account.id)
-  }
-  res.json({ listing: toListingJson(listing) })
-}
+export { queueProductOnAccount } from "./product-listing-queue"

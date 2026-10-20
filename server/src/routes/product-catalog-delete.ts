@@ -34,6 +34,35 @@ function browserFailure(error: unknown) {
   return { status: 500, code: "ELIMINAR_FAILED", message: `${step}: ${message}` }
 }
 
+async function clearWallapopBeforeDelete(res: Response, externalUrl: string | null | undefined) {
+  const itemUrl = wallapopEsItemUrlOrNull(externalUrl)
+  const session = await getWallapopSessionSnapshot()
+  if (!itemUrl || session.status !== "ACTIVE") {
+    sendError(
+      res,
+      409,
+      "NOT_ACTIVE",
+      "La sesión de Wallapop debe estar activa antes de eliminar el anuncio.",
+    )
+    return false
+  }
+  try {
+    const browser = await eliminarWallapopInBrowser({
+      itemUrl,
+      dryRun: isEliminarDryRun(),
+    })
+    if (browser.dryRun) {
+      res.json({ ok: true, dryRun: true, deleted: false, error: DRY_RUN_MESSAGE })
+      return false
+    }
+  } catch (error) {
+    const fail = browserFailure(error)
+    sendError(res, fail.status, fail.code, fail.message)
+    return false
+  }
+  return true
+}
+
 /** Wallapop first when the ad is still up, then the CRM row. */
 export async function postCatalogDelete(req: Request, res: Response) {
   const productId = paramId(req)
@@ -52,37 +81,9 @@ export async function postCatalogDelete(req: Request, res: Response) {
     return
   }
   const listing = product.listings[0]
-  if (
-    catalogDeleteNeedsWallapop({
-      status: product.status,
-      listing,
-    })
-  ) {
-    const itemUrl = wallapopEsItemUrlOrNull(listing?.externalUrl)
-    const session = await getWallapopSessionSnapshot()
-    if (!itemUrl || session.status !== "ACTIVE") {
-      sendError(
-        res,
-        409,
-        "NOT_ACTIVE",
-        "La sesión de Wallapop debe estar activa antes de eliminar el anuncio.",
-      )
-      return
-    }
-    try {
-      const browser = await eliminarWallapopInBrowser({
-        itemUrl,
-        dryRun: isEliminarDryRun(),
-      })
-      if (browser.dryRun) {
-        res.json({ ok: true, dryRun: true, deleted: false, error: DRY_RUN_MESSAGE })
-        return
-      }
-    } catch (error) {
-      const fail = browserFailure(error)
-      sendError(res, fail.status, fail.code, fail.message)
-      return
-    }
+  if (catalogDeleteNeedsWallapop({ status: product.status, listing })) {
+    const cleared = await clearWallapopBeforeDelete(res, listing?.externalUrl)
+    if (!cleared) return
     await deactivateListingAfterEliminar(prisma, productId)
   }
   const erased = await eraseProductIfOffWallapop(prisma, productId)

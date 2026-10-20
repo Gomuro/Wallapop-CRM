@@ -33,6 +33,27 @@ async function parseStatusPatchBody(req: Request, res: Response) {
   }
 }
 
+function rejectStatusPatch(
+  existing: { status: string; listings: Array<{ status: string; externalUrl: string | null }> },
+  body: { status: "ACTIVE" | "INACTIVE" },
+  res: Response,
+) {
+  if (existing.status === "SOLD") {
+    sendError(res, 409, "PRODUCT_SOLD", "Sold products cannot change warehouse status.")
+    return true
+  }
+  if (body.status === "INACTIVE" && listingBlocksWarehouseInactive(existing.listings[0])) {
+    sendError(
+      res,
+      409,
+      "LIVE_ON_WALLAPOP",
+      "Quita el anuncio de Wallapop antes de marcarlo inactivo.",
+    )
+    return true
+  }
+  return false
+}
+
 async function assertStatusPatchAllowed(
   prisma: PrismaDb,
   id: string,
@@ -54,28 +75,7 @@ async function assertStatusPatchAllowed(
     sendError(res, 404, "NOT_FOUND", "Product not found.")
     return false
   }
-  if (existing.status === "SOLD") {
-    sendError(
-      res,
-      409,
-      "PRODUCT_SOLD",
-      "Sold products cannot change warehouse status.",
-    )
-    return false
-  }
-  if (
-    body.status === "INACTIVE" &&
-    listingBlocksWarehouseInactive(existing.listings[0])
-  ) {
-    sendError(
-      res,
-      409,
-      "LIVE_ON_WALLAPOP",
-      "Quita el anuncio de Wallapop antes de marcarlo inactivo.",
-    )
-    return false
-  }
-  return true
+  return !rejectStatusPatch(existing, body, res)
 }
 
 export async function patchProductStatus(req: Request, res: Response) {
