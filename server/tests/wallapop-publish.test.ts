@@ -879,6 +879,77 @@ describe("upload Color field", () => {
     }
   })
 
+  it("clicks Negro by aria-label even with a leftover input#black", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><body>
+        <div class="walla-dropdown__floating-area" style="display:block;width:0;height:0;overflow:hidden">
+          <walla-dropdown-item role="option" aria-label="ghost"><input id="black"></walla-dropdown-item>
+        </div>
+        <walla-dropdown data-testid="color">
+          <div role="button" aria-label="Color">Color*</div>
+          <div class="walla-dropdown__floating-area" style="display:block;height:220px;width:320px">
+            <walla-button id="clear">Borrar</walla-button>
+            <walla-dropdown-item role="option" aria-label="Negro" style="display:block;height:40px">
+              <input name="black" type="checkbox">Negro
+            </walla-dropdown-item>
+            <walla-dropdown-item role="option" aria-label="Blanco" aria-selected="true" style="display:block;height:40px">
+              <input id="white" type="checkbox" checked>Blanco
+            </walla-dropdown-item>
+            <walla-button id="ok">Seleccionar</walla-button>
+          </div>
+        </walla-dropdown>
+        <script>
+          document.querySelector('[aria-label="Negro"]').addEventListener("click", (event) => {
+            const item = event.currentTarget
+            item.setAttribute("aria-selected", "true")
+            item.querySelector("input").checked = true
+          })
+          document.getElementById("ok").addEventListener("click", () => {
+            document.getElementById("ok").setAttribute("data-clicked", "1")
+          })
+        </script>
+      </body>`)
+      await expect(
+        ensureExtraUploadFields(page, [colorField], { color: ["black"] }),
+      ).resolves.toBeUndefined()
+      expect(
+        await page.locator('[aria-label="Negro"]').getAttribute("aria-selected"),
+      ).toBe("true")
+    } finally {
+      await browser.close()
+    }
+  })
+
+  it("accepts Negro when the list closes without Seleccionar", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><body>
+        <walla-dropdown data-testid="color">
+          <div role="button" id="color-btn" aria-label="Color">Color*</div>
+          <div class="walla-dropdown__floating-area" style="display:block;height:80px">
+            <walla-dropdown-item role="option" aria-label="Negro" style="display:block;height:40px">
+              <input id="black" type="checkbox">Negro
+            </walla-dropdown-item>
+          </div>
+        </walla-dropdown>
+        <script>
+          document.querySelector('[role="option"]').addEventListener("click", () => {
+            document.getElementById("color-btn").setAttribute("aria-label", "Color, Negro")
+            document.querySelector(".walla-dropdown__floating-area")?.remove()
+          })
+        </script>
+      </body>`)
+      await expect(
+        ensureExtraUploadFields(page, [colorField], { color: ["black"] }),
+      ).resolves.toBeUndefined()
+    } finally {
+      await browser.close()
+    }
+  })
+
   it("still fails when Color is open but Negro is not in the list", async () => {
     const browser = await chromium.launch({ headless: true })
     try {

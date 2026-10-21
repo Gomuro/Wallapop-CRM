@@ -14,6 +14,7 @@ import {
   PublishAbortedError,
   quitChromeIfNoWorkerSlots,
   runWithBrowserBusy,
+  setKeepChromeWarm,
 } from "../wallapop-cdp";
 import { log, serializeError } from "../log";
 import { snapshotPublishForm, safePageUrl } from "./debug";
@@ -162,13 +163,14 @@ export async function publishWallapopInBrowser(
     keepBrowser = error instanceof WallapopPublishError && error.keepBrowser;
     throw error;
   } finally {
-    if (consumeKeepChromeAfterAbort(input.cdpPort) || keepBrowser) {
+    if (input.dryRun) {
+      setKeepChromeWarm(true, input.cdpPort);
+      log("info", "wallapop_upload_tab_kept_dry_run");
+    } else if (consumeKeepChromeAfterAbort(input.cdpPort) || keepBrowser) {
       log("info", "wallapop_chrome_kept_after_abort", {
         dryRun: input.dryRun,
         keepBrowser,
       });
-    } else if (input.dryRun) {
-      await closeWallapopUploadTab(input.cdpPort);
     } else {
       await closeWallapopUploadTab(input.cdpPort);
       await quitChromeIfNoWorkerSlots(input.cdpPort);
