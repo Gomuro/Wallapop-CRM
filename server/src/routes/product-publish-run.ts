@@ -171,6 +171,9 @@ async function playwrightProductPublish(ready: PublishReady) {
       typeAttributes: ready.product.typeAttributes,
     }),
     imagePaths: ready.imagePaths,
+    listingId:
+      ready.product.listings.find((row) => row.accountId === ready.accountId)?.id ??
+      `${ready.product.id}:${ready.accountId}`,
     categoryLabels: ready.categoryLabels,
     dryRun: ready.dryRun,
     shippingEnabled: ready.shippingEnabled,

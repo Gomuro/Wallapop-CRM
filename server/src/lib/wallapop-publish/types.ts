@@ -72,6 +72,8 @@ export type PublishWallapopCopy = {
   condition: string;
   brand?: string | null;
   imagePaths: string[];
+  /** ProductListing id. One id keeps one camera for the whole photo row. */
+  listingId?: string;
   /** Spanish breadcrumb root → leaf from CRM `Category.path`. */
   categoryLabels: string[];
   dryRun: boolean;

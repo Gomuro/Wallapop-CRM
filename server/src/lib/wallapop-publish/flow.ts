@@ -11,6 +11,7 @@ import {
   markWallapopSessionLoggedOut,
   WALLAPOP_LOGGED_OUT_MESSAGE,
 } from "../wallapop-session";
+import { uniquifyPublishPhotos } from "../image-unique/run";
 import { log } from "../log";
 import { categoryPickerStillEmpty, categorySectionVisible } from "./category";
 import { logPublishStep, snapshotPublishForm } from "./debug";
@@ -131,6 +132,39 @@ export async function fillSummary(
   return summaryText;
 }
 
+function assertPhotosContinued(cont: string): void {
+  if (cont === "NONE") {
+    throw new WallapopPublishError(
+      "photos",
+      "Continuar deshabilitado tras subir las fotos.",
+    );
+  }
+  if (cont === "FINAL") {
+    throw new WallapopPublishError(
+      "photos",
+      "Apareció Publicar demasiado pronto tras las fotos.",
+    );
+  }
+}
+
+function briefPhotoError(error: unknown): string {
+  const detail = error instanceof Error ? error.message : String(error);
+  return detail.replace(/\s+/g, " ").slice(0, 180);
+}
+
+async function prepareUniquePhotos(input: PublishWallapopInput) {
+  const sourcePaths = input.imagePaths.slice(0, 10);
+  const listingId = input.listingId?.trim() || sourcePaths.join("\n");
+  try {
+    return await uniquifyPublishPhotos({ imagePaths: sourcePaths, listingId });
+  } catch (error) {
+    throw new WallapopPublishError(
+      "photos",
+      `No se pudieron preparar las fotos. ${briefPhotoError(error)}`,
+    );
+  }
+}
+
 export async function uploadPhotos(
   page: Page,
   input: PublishWallapopInput,
@@ -144,23 +178,21 @@ export async function uploadPhotos(
       "No hay input[type=file] para fotos.",
     );
   }
-  const paths = input.imagePaths.slice(0, 10);
-  await fileInput.setInputFiles(paths);
-  log("info", "wallapop_publish_photos_set", { count: paths.length });
-  await page.waitForTimeout(8_000);
-  const cont = await clickEnabledContinuar(page);
-  logPublishStep("photos", page, { phase: "after_photos_continuar", cont });
-  if (cont === "NONE") {
-    throw new WallapopPublishError(
-      "photos",
-      "Continuar deshabilitado tras subir las fotos.",
-    );
-  }
-  if (cont === "FINAL") {
-    throw new WallapopPublishError(
-      "photos",
-      "Apareció Publicar demasiado pronto tras las fotos.",
-    );
+  const prepared = await prepareUniquePhotos(input);
+  try {
+    log("info", "wallapop_publish_photos_uniquified", {
+      count: prepared.paths.length,
+      listingId: input.listingId ?? null,
+      model: prepared.model,
+    });
+    await fileInput.setInputFiles(prepared.paths);
+    log("info", "wallapop_publish_photos_set", { count: prepared.paths.length });
+    await page.waitForTimeout(8_000);
+    const cont = await clickEnabledContinuar(page);
+    logPublishStep("photos", page, { phase: "after_photos_continuar", cont });
+    assertPhotosContinued(cont);
+  } finally {
+    await prepared.cleanup();
   }
 }
 

@@ -177,6 +177,15 @@ async function requirePackageSizeAfterHeavyBand(
 ): Promise<void> {
   if (!HEAVY_WEIGHT_BANDS.has(picked.needle)) return;
   if (await waitForPackageSizeAfterHeavyBand(page)) return;
+  // Ventiladores / same kg-only UI: 10–20 kg is the last step. Jardín swaps
+  // the bands for Estándar/Voluminoso — throw only when the kg list is gone.
+  if (await hasVisibleWeightBands(page)) {
+    log("info", "wallapop_publish_package_size_not_after_heavy", {
+      weightKg,
+      labelNeedle: picked.needle,
+    });
+    return;
+  }
   log("error", "wallapop_publish_package_size_missing_after_weight", {
     weightKg,
     labelNeedle: picked.needle,
