@@ -30,6 +30,7 @@ export const productListInclude = {
       accountId: true,
       status: true,
       lastPostedAt: true,
+      updatedAt: true,
       externalUrl: true,
       shippingEnabled: true,
       lastPublishError: true,
@@ -79,6 +80,7 @@ type ProductJsonListing = {
   shippingUpToKg: number | null
   accountId: string
   lastPostedAt: Date | null
+  updatedAt?: Date | null
 }
 
 type ProductJsonIdentity = {

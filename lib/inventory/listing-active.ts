@@ -82,8 +82,13 @@ export function canEliminarOnWallapop(product: InventoryProduct): boolean {
 }
 
 /** «Poner en cola»: listing taken off Wallapop, product still for sale. */
-export function canRequeueListing(product: InventoryProduct): boolean {
-  return product.status !== "SOLD" && product.listing?.status === "DEACTIVATED"
+export function canRequeueListing(
+  product: InventoryProduct,
+  listing?: InventoryListing | null,
+): boolean {
+  if (product.status === "SOLD") return false
+  const status = listing?.status ?? product.listing?.status
+  return status === "DEACTIVATED" || status === "MISSING"
 }
 
 /** «Devolución»: sold SKU comes back (Eliminar on Wallapop if needed, then cola). */

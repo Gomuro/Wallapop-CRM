@@ -18,6 +18,7 @@ import {
   planCombinedTitleUrlLinks,
 } from "../src/lib/wallapop-monitor/link-by-title-llm"
 import {
+  missingIdsAfterItemProbes,
   planLinkedSales,
   planMonitorUpdates,
   PUBLISHED_CATALOG_ROWS_EVAL,
@@ -64,7 +65,7 @@ describe("planMonitorUpdates", () => {
     expect(plan.toReserved).toEqual(["l-armario"])
     expect(plan.toActive).toEqual(["l-silla"])
     expect(plan.toSoldProductIds).toEqual([])
-    expect(plan.toDeactivated).toEqual(["l-mesa"])
+    expect(plan.toMissing).toEqual(["l-mesa"])
   })
 
   it("marks sold by /item/ href, not title, and sold wins over reserved", () => {
@@ -74,7 +75,7 @@ describe("planMonitorUpdates", () => {
       listings,
     )
     expect(plan.toSoldProductIds).toEqual(["p-mesa"])
-    expect(plan.toDeactivated).toEqual(["l-armario", "l-silla"])
+    expect(plan.toMissing).toEqual(["l-armario", "l-silla"])
     expect(plan.toReserved).toEqual([])
     expect(
       planMonitorUpdates(
@@ -97,10 +98,10 @@ describe("planMonitorUpdates", () => {
     expect(plan.toReserved).toEqual([])
     expect(plan.toActive).toEqual([])
     expect(plan.toSoldProductIds).toEqual([])
-    expect(plan.toDeactivated).toEqual([])
+    expect(plan.toMissing).toEqual([])
   })
 
-  it("deactivates a live /item/ missing from both catalogs and ignores a row without a URL", () => {
+  it("marks catalog-missing live /item/ rows as MISSING candidates and ignores a row without a URL", () => {
     const plan = planMonitorUpdates(
       [{ href: "https://es.wallapop.com/item/otro-1300000001", reserved: false }],
       [{ href: "https://es.wallapop.com/item/vendido-1300000002", sold: true }],
@@ -114,7 +115,7 @@ describe("planMonitorUpdates", () => {
         },
       ],
     )
-    expect(plan.toDeactivated).toEqual(["l-armario", "l-silla", "l-mesa"])
+    expect(plan.toMissing).toEqual(["l-armario", "l-silla", "l-mesa"])
     expect(plan.toSoldProductIds).toEqual([])
   })
 
@@ -129,7 +130,7 @@ describe("planMonitorUpdates", () => {
       [],
       listings.filter((row) => row.externalUrl === ARMARIO),
     )
-    expect(plan.toDeactivated).toEqual([])
+    expect(plan.toMissing).toEqual([])
     expect(plan.orphanPublished).toEqual([publishedDuringScrape])
   })
 
@@ -140,7 +141,7 @@ describe("planMonitorUpdates", () => {
       listings,
     )
     expect(plan.toSoldProductIds).toEqual([])
-    expect(plan.toDeactivated).toEqual(["l-silla", "l-mesa"])
+    expect(plan.toMissing).toEqual(["l-silla", "l-mesa"])
     expect(plan.toReserved).toEqual([])
   })
 
@@ -189,7 +190,30 @@ describe("planMonitorUpdates", () => {
     expect(plan.orphanSold).toHaveLength(1)
     expect(plan.toSoldProductIds).toEqual([])
     expect(plan.toReserved).toEqual([])
-    expect(plan.toDeactivated).toEqual(["l-armario", "l-silla", "l-mesa"])
+    expect(plan.toMissing).toEqual(["l-armario", "l-silla", "l-mesa"])
+  })
+
+  it("keeps a sold-badge Vendidos row as a sale, not MISSING", () => {
+    const plan = planMonitorUpdates(
+      [],
+      [{ href: ARMARIO, sold: true }],
+      listings.filter((row) => row.externalUrl === ARMARIO),
+    )
+    expect(plan.toSoldProductIds).toEqual(["p-armario"])
+    expect(plan.toMissing).toEqual([])
+  })
+
+  it("does not mark MISSING until the live /item/ page is gone", () => {
+    expect(
+      missingIdsAfterItemProbes(["l-armario", "l-silla", "l-mesa"], {
+        "l-armario": "live",
+        "l-silla": "gone",
+        "l-mesa": "unknown",
+      }),
+    ).toEqual(["l-silla"])
+    expect(missingIdsAfterItemProbes(["l-armario"], { "l-armario": "live" })).toEqual(
+      [],
+    )
   })
 })
 

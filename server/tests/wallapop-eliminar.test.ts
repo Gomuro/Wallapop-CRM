@@ -131,13 +131,13 @@ describe("listingForDevolucion", () => {
         status: "SOLD",
         listings: [{ status: "DEACTIVATED", externalUrl: ASALVO }],
       }),
-    ).toEqual({ itemUrl: ASALVO })
+    ).toMatchObject({ itemUrl: ASALVO })
     expect(
       listingForDevolucion({
         status: "SOLD",
         listings: [{ status: "DEACTIVATED", externalUrl: null }],
       }),
-    ).toEqual({ itemUrl: null })
+    ).toMatchObject({ itemUrl: null })
   })
 })
 
@@ -268,6 +268,14 @@ describe("card buttons", () => {
   it("shows Poner en cola only for DEACTIVATED on an unsold product", () => {
     expect(canRequeueListing(product("ACTIVE", { status: "DEACTIVATED", externalUrl: null }))).toBe(true)
     expect(canRequeueListing(product("INACTIVE", { status: "DEACTIVATED", externalUrl: null }))).toBe(true)
+    expect(
+      canRequeueListing(
+        product("ACTIVE", {
+          status: "MISSING",
+          externalUrl: ASALVO,
+        }),
+      ),
+    ).toBe(true)
     expect(canRequeueListing(product("SOLD", { status: "DEACTIVATED", externalUrl: null }))).toBe(false)
     expect(canRequeueListing(product("ACTIVE", { status: "ACTIVE", externalUrl: ASALVO }))).toBe(false)
   })

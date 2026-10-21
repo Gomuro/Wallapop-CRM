@@ -11,7 +11,7 @@ import { log } from "../log"
 
 /**
  * Eligible queue row on the default account.
- * Only `READY_TO_POST` — never POSTING / ACTIVE / RESERVED / DEACTIVATED / FAILED.
+ * Only `READY_TO_POST` — never POSTING / ACTIVE / RESERVED / MISSING / DEACTIVATED / FAILED.
  * Skips the row while the same product is RESERVED on another account.
  * Stale POSTING is recovered by the posting watchdog before pick.
  * A leftover upload/home URL is not a published item — still eligible.

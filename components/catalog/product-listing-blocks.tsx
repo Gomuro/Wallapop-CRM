@@ -41,7 +41,7 @@ function ListingActions({
   const showSold = canMarkSoldOnListing(product.status, listing)
   const showEliminar = canEliminarOnListing(product.status, listing)
   const showDevolucion = canStartDevolucionOnListing(product, listing)
-  const showRequeue = first && canRequeueListing(product) && listing.status === "DEACTIVATED"
+  const showRequeue = canRequeueListing(product, listing)
 
   if (!showSold && !showEliminar && !showDevolucion && !showRequeue) return null
 
@@ -69,7 +69,12 @@ function ListingActions({
           accountLabel={label}
         />
       ) : null}
-      {showRequeue ? <RequeueListingButton productId={product.id} /> : null}
+      {showRequeue ? (
+        <RequeueListingButton
+          productId={product.id}
+          accountId={listing.accountId}
+        />
+      ) : null}
     </div>
   )
 }

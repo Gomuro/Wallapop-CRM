@@ -28,6 +28,7 @@ import {
   type LinkedSaleListing,
   type MonitorCrmListing,
 } from "./diff";
+import { confirmMissingItemPages } from "./item-probe";
 import { scrapeCatalogs } from "./tick-scrape";
 
 async function loadLiveListings(accountId: string): Promise<MonitorCrmListing[]> {
@@ -63,11 +64,11 @@ async function loadLinkedSoldListings(accountId: string): Promise<LinkedSaleList
 }
 
 function planNeedsConfirm(
-  plan: { toDeactivated: string[] },
+  plan: { toMissing: string[] },
   linked: { removedProductIds: string[]; relistedProductIds: string[] },
 ): boolean {
   return (
-    plan.toDeactivated.length > 0 ||
+    plan.toMissing.length > 0 ||
     linked.removedProductIds.length > 0 ||
     linked.relistedProductIds.length > 0
   );
@@ -87,7 +88,7 @@ async function confirmCatalogRead(input: {
   const confirmHrefs = listings
     .filter(
       (listing) =>
-        plan.toDeactivated.includes(listing.id) && listing.externalUrl,
+        plan.toMissing.includes(listing.id) && listing.externalUrl,
     )
     .map((listing) => listing.externalUrl as string);
   log("info", "wallapop_monitor_reread_activos", {
@@ -125,17 +126,24 @@ async function runMonitorAfterAttach(
       linkedSold,
     });
     if (!confirmed) return [];
+    const toMissing = await confirmMissingItemPages(
+      page,
+      listings,
+      confirmed.plan.toMissing,
+      accountId,
+    );
+    const plan = { ...confirmed.plan, toMissing };
     log("info", "wallapop_monitor_plan", {
-      toReserved: confirmed.plan.toReserved.length,
-      toActive: confirmed.plan.toActive.length,
-      toSold: confirmed.plan.toSoldProductIds.length,
-      toDeactivated: confirmed.plan.toDeactivated.length,
-      orphanPublished: confirmed.plan.orphanPublished.length,
-      orphanSold: confirmed.plan.orphanSold.length,
+      toReserved: plan.toReserved.length,
+      toActive: plan.toActive.length,
+      toSold: plan.toSoldProductIds.length,
+      toMissing: plan.toMissing.length,
+      orphanPublished: plan.orphanPublished.length,
+      orphanSold: plan.orphanSold.length,
       removedSales: confirmed.linked.removedProductIds.length,
       relistedSales: confirmed.linked.relistedProductIds.length,
     });
-    await applyMonitorPlan(confirmed.plan, accountId);
+    await applyMonitorPlan(plan, accountId);
     await releaseCancelledSales(accountId, confirmed.linked);
     return confirmed.linked.stillSoldProductIds;
   } finally {

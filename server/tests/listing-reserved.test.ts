@@ -20,12 +20,14 @@ const reservedListing = {
 describe("ListingStatus.RESERVED", () => {
   it("is writable via PUT schema", () => {
     expect(listingStatusSchema.parse("RESERVED")).toBe("RESERVED")
+    expect(listingStatusSchema.parse("MISSING")).toBe("MISSING")
   })
 
   it("is live on Wallapop and listingActive", () => {
     expect(isLiveOnWallapopStatus("RESERVED")).toBe(true)
     expect(isLiveOnWallapopStatus("ACTIVE")).toBe(true)
     expect(isLiveOnWallapopStatus("DEACTIVATED")).toBe(false)
+    expect(isLiveOnWallapopStatus("MISSING")).toBe(false)
     expect(computeListingActive(reservedListing)).toBe(true)
   })
 
@@ -50,6 +52,13 @@ describe("ListingStatus.RESERVED", () => {
 
   it("badge says Reservado, not En Wallapop", () => {
     expect(listingStatusLabel("RESERVED")).toBe("Reservado")
+    expect(listingStatusLabel("MISSING")).toBe("Desaparecido de la caja")
+    expect(
+      listingIndicatorShort(
+        { ...reservedListing, status: "MISSING" },
+        false,
+      ),
+    ).toBe("Desaparecido de la caja")
     expect(listingIndicatorShort(reservedListing, true)).toBe("Reservado")
     expect(
       listingIndicatorShort(

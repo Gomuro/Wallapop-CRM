@@ -100,6 +100,7 @@ type ProductListItemExtras = {
     accountId: string
     status: string
     lastPostedAt: Date | null
+    updatedAt?: Date | null
     externalUrl: string | null
     shippingEnabled: boolean
     lastPublishError?: string | null
@@ -130,6 +131,7 @@ function toProductListItemListing(row: ProductListItemRow) {
     listingActive:
       live && wallapopItemUrlOrNull(listing?.externalUrl) != null,
     lastPostedAt: listing?.lastPostedAt?.toISOString() ?? null,
+    listingUpdatedAt: listing?.updatedAt?.toISOString() ?? null,
     shippingPublishReady: isShippingPublishReady({
       weightKg: decimalJson(row.weightKg),
       shippingEnabled: listing?.shippingEnabled,

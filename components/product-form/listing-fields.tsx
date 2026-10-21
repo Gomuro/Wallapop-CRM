@@ -22,7 +22,12 @@ import { typeMeta, typeSection } from "@/lib/ui/type"
 function writableListingStatus(
   status: InventoryListing["status"] | undefined,
 ): ListingStatus {
-  if (status === "ACTIVE" || status === "RESERVED" || status === "DEACTIVATED") {
+  if (
+    status === "ACTIVE" ||
+    status === "RESERVED" ||
+    status === "MISSING" ||
+    status === "DEACTIVATED"
+  ) {
     return status
   }
   return "READY_TO_POST"

@@ -73,7 +73,7 @@ async function enVentaContainsItem(page: Page, itemUrl: string): Promise<boolean
 }
 
 /** True if seller «Eliminar» hydrates after a cache-busted reload of /item/. */
-async function itemPageStillLive(page: Page, itemUrl: string): Promise<boolean> {
+export async function itemPageStillLive(page: Page, itemUrl: string): Promise<boolean> {
   await navigateViaAssign(page, cacheBustItemUrl(itemUrl))
   await dismissWallapopConsent(page)
   assertNotLogin(page)

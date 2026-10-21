@@ -24,6 +24,7 @@ enum ListingStatus {
   POSTING
   ACTIVE
   RESERVED
+  MISSING
   DEACTIVATED
   FAILED
 }

@@ -23,6 +23,7 @@ const LISTING_STATUS_OPTIONS: ListingStatus[] = [
   "READY_TO_POST",
   "ACTIVE",
   "RESERVED",
+  "MISSING",
   "DEACTIVATED",
 ]
 

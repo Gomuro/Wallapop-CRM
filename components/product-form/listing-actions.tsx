@@ -151,8 +151,14 @@ export function QueueAccountButton({
   )
 }
 
-/** Desactivado → Listo para publicar. Autopost will post it as a new /item/. */
-export function RequeueListingButton({ productId }: { productId: string }) {
+/** Desactivado / desaparecido → Listo para publicar. Autopost will post it as a new /item/. */
+export function RequeueListingButton({
+  productId,
+  accountId,
+}: {
+  productId: string
+  accountId?: string
+}) {
   const router = useRouter()
   const state = useConfirmState()
 
@@ -163,6 +169,7 @@ export function RequeueListingButton({ productId }: { productId: string }) {
         const formData = new FormData()
         formData.set("listingStatus", "READY_TO_POST")
         formData.set("clearListingUrl", "1")
+        if (accountId) formData.set("accountId", accountId)
         const result = await updateProductListingAction(productId, {}, formData)
         if (result.error) {
           state.setError(result.error)

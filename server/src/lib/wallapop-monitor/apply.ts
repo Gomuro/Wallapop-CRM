@@ -56,22 +56,35 @@ async function applyReserved(
   }
 }
 
-async function applyDeactivated(
+async function applyMissing(
   prisma: MonitorDb,
   plan: MonitorPlan,
+  accountId: string | null,
 ): Promise<void> {
-  if (plan.toDeactivated.length === 0) return
-  const updated = await prisma.productListing.updateMany({
+  if (plan.toMissing.length === 0) return
+  const rows = await prisma.productListing.findMany({
     where: {
-      id: { in: plan.toDeactivated },
+      id: { in: plan.toMissing },
       status: { in: ["ACTIVE", "RESERVED"] },
     },
-    data: { status: "DEACTIVATED", externalUrl: null },
+    select: { id: true, productId: true, externalUrl: true },
   })
-  log("info", "wallapop_monitor_deactivated", {
-    count: updated.count,
-    ids: plan.toDeactivated,
+  if (rows.length === 0) return
+  await prisma.productListing.updateMany({
+    where: {
+      id: { in: rows.map((row) => row.id) },
+      status: { in: ["ACTIVE", "RESERVED"] },
+    },
+    data: { status: "MISSING" },
   })
+  for (const row of rows) {
+    log("info", "wallapop_monitor_listing_missing", {
+      accountId,
+      listingId: row.id,
+      productId: row.productId,
+      url: row.externalUrl,
+    })
+  }
 }
 
 async function applyClearedReserved(
@@ -103,6 +116,6 @@ export async function applyMonitorPlan(
   }
   await applySoldProducts(prisma, plan, accountId)
   await applyReserved(prisma, plan, accountId)
-  await applyDeactivated(prisma, plan)
+  await applyMissing(prisma, plan, accountId)
   await applyClearedReserved(prisma, plan)
 }

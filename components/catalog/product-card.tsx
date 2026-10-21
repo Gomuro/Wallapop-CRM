@@ -17,6 +17,7 @@ import {
   formatListingPostedAt,
   statusLabel,
 } from "@/lib/inventory/format"
+import { wallapopItemUrlOrNull } from "@/lib/inventory/wallapop-item-url"
 import {
   SHIPPING_INCOMPLETE_BADGE,
   showShippingIncompleteBadge,
@@ -169,7 +170,35 @@ function AccountMarks({
             )}
           >
             <span className="shrink-0">{row.accountName}</span>
-            <span className="min-w-0 text-right wrap-break-word">{accountGlanceLabel(row)}</span>
+            <span className="min-w-0 text-right wrap-break-word">
+              {accountGlanceLabel(row)}
+              {row.status === "MISSING" && wallapopItemUrlOrNull(row.externalUrl) ? (
+                <>
+                  {" · "}
+                  <span
+                    role="link"
+                    tabIndex={0}
+                    className="text-primary underline-offset-2 hover:underline"
+                    onClick={(event) => {
+                      event.preventDefault()
+                      event.stopPropagation()
+                      const href = wallapopItemUrlOrNull(row.externalUrl)
+                      if (href) window.open(href, "_blank", "noopener,noreferrer")
+                    }}
+                    onKeyDown={(event) => {
+                      if (event.key !== "Enter" && event.key !== " ") return
+                      event.preventDefault()
+                      event.stopPropagation()
+                      const href = wallapopItemUrlOrNull(row.externalUrl)
+                      if (href) window.open(href, "_blank", "noopener,noreferrer")
+                    }}
+                    onPointerDown={(event) => event.stopPropagation()}
+                  >
+                    Ver anuncio
+                  </span>
+                </>
+              ) : null}
+            </span>
           </li>
         )
       })}
@@ -253,6 +282,11 @@ export function ProductCard({
               <p className="mt-1 text-xs text-muted-foreground">
                 Publicado{" "}
                 {formatListingPostedAt(product.listing.lastPostedAt)}
+              </p>
+            ) : null}
+            {product.listing?.status === "MISSING" && product.listing.updatedAt ? (
+              <p className="mt-1 text-xs text-muted-foreground">
+                Detectado {formatListingPostedAt(product.listing.updatedAt)}
               </p>
             ) : null}
           </div>
@@ -343,6 +377,11 @@ function GridProductCard({
           {product.listing?.lastPostedAt ? (
             <p className="text-xs text-muted-foreground">
               Publicado {formatListingPostedAt(product.listing.lastPostedAt)}
+            </p>
+          ) : null}
+          {product.listing?.status === "MISSING" && product.listing.updatedAt ? (
+            <p className="text-xs text-muted-foreground">
+              Detectado {formatListingPostedAt(product.listing.updatedAt)}
             </p>
           ) : null}
         </div>

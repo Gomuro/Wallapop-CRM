@@ -16,7 +16,7 @@ export type MonitorCrmListing = {
 export type MonitorPlan = {
   toReserved: string[]
   toActive: string[]
-  toDeactivated: string[]
+  toMissing: string[]
   toSoldProductIds: string[]
   orphanPublished: string[]
   orphanSold: string[]
@@ -126,20 +126,33 @@ function reservedAndActive(
   return { toReserved, toActive }
 }
 
-/** Live /item/ missing from both catalogs. Both catalogs empty: leave CRM alone. */
+/**
+ * Live CRM /item/ missing from En venta and from Vendidos sold-badge rows.
+ * Both catalogs empty: scrape failed — leave CRM alone.
+ */
 function missingFromBothCatalogs(
   byListing: Map<string, MonitorCrmListing>,
   byPublished: Map<string, PublishedCatalogRow>,
   soldKeys: Set<string>,
 ) {
   if (byPublished.size === 0 && soldKeys.size === 0) return []
-  const toDeactivated: string[] = []
+  const toMissing: string[] = []
   for (const [key, listing] of byListing) {
     if (listing.status !== "ACTIVE" && listing.status !== "RESERVED") continue
     if (byPublished.has(key) || soldKeys.has(key)) continue
-    toDeactivated.push(listing.id)
+    toMissing.push(listing.id)
   }
-  return toDeactivated
+  return toMissing
+}
+
+export type ItemLiveProbe = "live" | "gone" | "unknown"
+
+/** Catalog candidates stay unchanged unless the live /item/ page is gone. */
+export function missingIdsAfterItemProbes(
+  candidateIds: string[],
+  probes: Record<string, ItemLiveProbe>,
+): string[] {
+  return candidateIds.filter((id) => probes[id] === "gone")
 }
 
 const EMPTY_LINKED_SALES: LinkedSalePlan = {
@@ -225,7 +238,8 @@ export function planLinkedSales(
 
 /**
  * Match only `/item/` href ↔ listing.externalUrl. Never title.
- * Sold wins over En venta. A live /item/ in neither catalog becomes DEACTIVATED.
+ * Sold wins over En venta. A live /item/ in neither catalog is a MISSING
+ * candidate until the item page confirms it.
  */
 export function planMonitorUpdates(
   published: PublishedCatalogRow[],
@@ -244,7 +258,7 @@ export function planMonitorUpdates(
   )
   return {
     ...reserved,
-    toDeactivated: missingFromBothCatalogs(byListing, byPublished, soldKeys),
+    toMissing: missingFromBothCatalogs(byListing, byPublished, soldKeys),
     toSoldProductIds: soldPlan.toSoldProductIds,
     orphanPublished: orphanHrefs(published, byListing, false),
     orphanSold: orphanHrefs(sold, byListing, true),

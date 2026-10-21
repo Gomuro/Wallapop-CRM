@@ -28,6 +28,7 @@ function MetaRow({
 
 const LISTING_ESTADO: Record<string, string> = {
   RESERVED: "Reservado",
+  MISSING: "Desaparecido de la caja",
   DEACTIVATED: "Desactivado",
   READY_TO_POST: "En cola de publicación",
   POSTING: "Publicando…",
@@ -41,6 +42,7 @@ function listingEstadoLabel(
   warehouseInactive: boolean,
 ) {
   if (listing.status === "RESERVED") return "Reservado"
+  if (listing.status === "MISSING") return "Desaparecido de la caja"
   if (posted) return "Publicado"
   if (listing.status === "DEACTIVATED" && productSold) {
     return "Vendido en Wallapop"
@@ -84,16 +86,24 @@ function ListingLinkValue({
 function ListingHints({
   junkUrl,
   ready,
+  missing,
   productId,
   shippingIncomplete,
 }: {
   junkUrl: boolean
   ready: boolean
+  missing: boolean
   productId?: string
   shippingIncomplete: boolean
 }) {
   return (
     <div className="space-y-2 px-3 py-3">
+      {missing ? (
+        <p className="text-sm leading-snug text-muted-foreground">
+          Ya no está en Wallapop. El CRM no lo eliminó. El enlace se
+          conserva para comprobarlo. Para volver a publicar, ponlo en cola.
+        </p>
+      ) : null}
       {junkUrl ? (
         <p className="text-sm leading-snug text-muted-foreground">
           El enlace guardado es la página de alta, no el anuncio. El
@@ -139,10 +149,15 @@ export function ListingDetailSection({
   const itemUrl = wallapopItemUrlOrNull(listing?.externalUrl)
   const junkUrl = Boolean(listing?.externalUrl) && !itemUrl
   const ready = listing?.status === "READY_TO_POST"
+  const missing = listing?.status === "MISSING"
   const posted = isLiveOnWallapopStatus(listing?.status) && Boolean(itemUrl)
   const showPostedAt =
     Boolean(listing?.lastPostedAt) &&
-    (posted || listing?.status === "DEACTIVATED")
+    (posted || listing?.status === "DEACTIVATED" || missing)
+  const detectedAt =
+    missing && listing?.updatedAt
+      ? formatListingPostedAt(listing.updatedAt)
+      : null
   const estado = listing
     ? listingEstadoLabel(
         listing,
@@ -173,6 +188,10 @@ export function ListingDetailSection({
       </div>
       <div className="divide-y divide-border px-3">
         <MetaRow label="Estado">{estado}</MetaRow>
+        {listing?.accountName?.trim() &&
+        listing.accountName.trim() !== heading ? (
+          <MetaRow label="Caja">{listing.accountName.trim()}</MetaRow>
+        ) : null}
         <MetaRow label="Enlace">
           <ListingLinkValue itemUrl={itemUrl} junkUrl={junkUrl} />
         </MetaRow>
@@ -181,11 +200,13 @@ export function ListingDetailSection({
             {formatListingPostedAt(listing.lastPostedAt)}
           </MetaRow>
         ) : null}
+        {detectedAt ? <MetaRow label="Detectado">{detectedAt}</MetaRow> : null}
       </div>
       {listing ? (
         <ListingHints
           junkUrl={junkUrl}
           ready={ready}
+          missing={missing}
           productId={productId}
           shippingIncomplete={shippingIncomplete}
         />

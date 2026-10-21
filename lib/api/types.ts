@@ -40,6 +40,7 @@ export type ApiListing = {
   accountName?: string
   isDefault?: boolean
   lastPostedAt: string | null
+  updatedAt?: string | null
 }
 
 export type ApiProductIdentity = {
@@ -114,6 +115,7 @@ export type ApiProductListListing = {
   listingStatus: ListingStatusRead | null
   listing?: ApiListing | null
   lastPostedAt: string | null
+  listingUpdatedAt?: string | null
   shippingPublishReady: boolean
   accounts?: ApiAccountGlance[]
 }

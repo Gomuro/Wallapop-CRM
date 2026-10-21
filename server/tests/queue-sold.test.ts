@@ -44,4 +44,13 @@ describe("listingBlocksManualQueue", () => {
       }),
     ).toBe(false)
   })
+
+  it("lets a MISSING listing back into the queue even with the saved /item/", () => {
+    expect(
+      listingBlocksManualQueue("ACTIVE", {
+        status: "MISSING",
+        externalUrl: ITEM,
+      }),
+    ).toBe(false)
+  })
 })

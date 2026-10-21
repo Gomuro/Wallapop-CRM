@@ -7,6 +7,7 @@ export const listingStatusSchema = z.enum([
   "READY_TO_POST",
   "ACTIVE",
   "RESERVED",
+  "MISSING",
   "DEACTIVATED",
 ])
 
@@ -16,6 +17,7 @@ export const listingStatusReadSchema = z.enum([
   "POSTING",
   "ACTIVE",
   "RESERVED",
+  "MISSING",
   "DEACTIVATED",
   "FAILED",
 ])

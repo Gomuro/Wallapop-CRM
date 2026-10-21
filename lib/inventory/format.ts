@@ -31,6 +31,7 @@ export function statusLabel(status: ProductStatus) {
 const LISTING_STATUS_LABEL: Record<ListingStatusRead, string> = {
   ACTIVE: "En venta",
   RESERVED: "Reservado",
+  MISSING: "Desaparecido de la caja",
   DEACTIVATED: "Desactivado",
   READY_TO_POST: "Listo para publicar",
   POSTING: "Publicando…",
@@ -121,6 +122,7 @@ export function listingIndicatorShort(
   if (listing.status === "RESERVED") return "Reservado"
   if (isListingActive(listing, listingActive)) return "En Wallapop"
   if (listing.status === "READY_TO_POST") return "Listo para publicar"
+  if (listing.status === "MISSING") return "Desaparecido de la caja"
   if (listing.status === "DEACTIVATED") return "Desactivado"
   return listingStatusLabel(listing.status)
 }
@@ -133,6 +135,7 @@ export function accountGlanceLabel(row: AccountListingGlance): string {
   }
   if (row.status === "RESERVED") return "Reservado"
   if (row.status === "READY_TO_POST") return "En cola"
+  if (row.status === "MISSING") return "Desaparecido de la caja"
   if (row.status === "DEACTIVATED") return "Desactivado"
   if (row.status === "ACTIVE" && wallapopItemUrlOrNull(row.externalUrl)) {
     return "Publicado"

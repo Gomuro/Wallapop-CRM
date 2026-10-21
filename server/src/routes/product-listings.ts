@@ -275,6 +275,7 @@ export function listingBlocksManualQueue(
     return true
   }
   if (productStatus === "SOLD") return false
+  if (listing.status === "MISSING") return false
   return wallapopItemUrlOrNull(listing.externalUrl) != null
 }
 

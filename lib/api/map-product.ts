@@ -32,6 +32,7 @@ const PRODUCT_STATUSES = new Set<ProductStatus>(["ACTIVE", "SOLD", "INACTIVE"])
 const LISTING_STATUSES = new Set<ListingStatusRead>([
   "ACTIVE",
   "RESERVED",
+  "MISSING",
   "DEACTIVATED",
   "READY_TO_POST",
   "POSTING",
@@ -134,6 +135,10 @@ export function mapApiListing(
       typeof listing.lastPostedAt === "string" && listing.lastPostedAt.trim()
         ? listing.lastPostedAt
         : null,
+    updatedAt:
+      typeof listing.updatedAt === "string" && listing.updatedAt.trim()
+        ? listing.updatedAt
+        : null,
     shippingEnabled: listing.shippingEnabled !== false,
   }
 }
@@ -141,15 +146,22 @@ export function mapApiListing(
 export function listItemListing(
   row: ApiProductListItem,
 ): InventoryListing | null {
+  const glance =
+    row.accounts?.find((account) => account.isDefault) ?? row.accounts?.[0]
   return (
-    mapApiListing(row.listing, "") ??
+    mapApiListing(row.listing, glance?.accountName ?? "") ??
     (row.listingStatus != null
       ? {
           id: "",
-          accountId: "",
+          accountId: glance?.accountId ?? "",
+          accountName: glance?.accountName,
           status: asListingStatus(row.listingStatus),
-          externalUrl: null,
+          externalUrl:
+            typeof glance?.externalUrl === "string" && glance.externalUrl.trim()
+              ? glance.externalUrl
+              : null,
           lastPostedAt: row.lastPostedAt ?? null,
+          updatedAt: row.listingUpdatedAt ?? null,
           shippingEnabled: true,
         }
       : null)
