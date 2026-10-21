@@ -2,8 +2,6 @@ import type { BrowserContext, Page } from "playwright"
 
 import { log } from "../log"
 import {
-  ACCOUNT_WINDOW_HEIGHT,
-  ACCOUNT_WINDOW_WIDTH,
   ACTION_TIMEOUT_MS,
   ensureCdpAttached,
   isClosedPage,
@@ -38,7 +36,7 @@ type BrowserWithCdp = WallapopBrowserHandle["browser"] & {
 
 const WINDOW_WAIT_MS = 12_000
 
-/** One size for every account. A restored profile window is put back to this. */
+/** Fill the monitor so the Activos title column is not clipped with an ellipsis. */
 export async function fitAccountWindows(context: BrowserContext): Promise<void> {
   const seen = new Set<number>()
   for (const page of context.pages()) {
@@ -56,11 +54,7 @@ export async function fitAccountWindows(context: BrowserContext): Promise<void> 
       seen.add(windowId)
       await session.send("Browser.setWindowBounds", {
         windowId,
-        bounds: {
-          width: ACCOUNT_WINDOW_WIDTH,
-          height: ACCOUNT_WINDOW_HEIGHT,
-          windowState: "normal",
-        },
+        bounds: { windowState: "maximized" },
       })
       await session.detach().catch(() => {})
     } catch (error) {
@@ -72,8 +66,7 @@ export async function fitAccountWindows(context: BrowserContext): Promise<void> 
   if (seen.size > 0) {
     log("info", "wallapop_window_sized", {
       windows: seen.size,
-      width: ACCOUNT_WINDOW_WIDTH,
-      height: ACCOUNT_WINDOW_HEIGHT,
+      windowState: "maximized",
     })
   }
 }

@@ -42,10 +42,6 @@ function cdpUrlForPort(port: number): string {
   return `http://127.0.0.1:${port}`
 }
 
-/** Every account's Chrome uses this window. Profiles otherwise restore different sizes. */
-export const ACCOUNT_WINDOW_WIDTH = 1440
-export const ACCOUNT_WINDOW_HEIGHT = 900
-
 export type WallapopBrowserHandle = {
   browser: Browser
   context: BrowserContext

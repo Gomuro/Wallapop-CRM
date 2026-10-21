@@ -54,7 +54,9 @@ export const PRO_CATALOG_ROWS_EVAL = `(() => {
     })
     if (!href) return
     const titleEl = row.querySelector("span.Title")
-    let title = titleEl ? text(titleEl) : ""
+    let title = titleEl
+      ? String(titleEl.textContent || titleEl.innerText || "").replace(/\\s+/g, " ").trim()
+      : ""
     const bits = []
     row.querySelectorAll("td").forEach((td) => {
       const value = text(td)

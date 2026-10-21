@@ -23,8 +23,6 @@ import { log } from "../log"
 import { ensureLocalProxy, stopLocalProxy } from "./local-proxy"
 
 const DEFAULT_CDP_PORT = firstCdpPort()
-const ACCOUNT_WINDOW_WIDTH = 1440
-const ACCOUNT_WINDOW_HEIGHT = 900
 
 function profileDirForPort(port: number): string {
   if (port === DEFAULT_CDP_PORT && process.env.WALLAPOP_CHROME_USER_DATA_DIR?.trim()) {
@@ -44,8 +42,7 @@ const CHROME_LAUNCH_EXTRA_ARGS = [
   "--disable-features=CalculateNativeWinOcclusion",
   "--no-first-run",
   "--no-default-browser-check",
-  `--window-size=${ACCOUNT_WINDOW_WIDTH},${ACCOUNT_WINDOW_HEIGHT}`,
-  "--window-position=0,0",
+  "--start-maximized",
 ] as const
 
 /** Chrome process we spawned for a port. Profile stays on disk after quit. */
