@@ -402,6 +402,65 @@ describe("pickUniqueCatalogItemUrl", () => {
     }
   })
 
+  it("reloads a frozen Activos table until the new row is listed", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      const stale = `<!DOCTYPE html><body>
+        <table><tbody>
+          <tr id="CatalogItem_0">
+            <td>Otro producto</td>
+            <td>10,00 €</td>
+            <td><a href="https://es.wallapop.com/item/otro-1">foto</a></td>
+          </tr>
+        </tbody></table>
+        <tsl-pagination-actions>
+          <span class="PaginationActions__info">1 - 1 de 1</span>
+        </tsl-pagination-actions>
+      </body>`
+      const fresh = `<!DOCTYPE html><body>
+        <table><tbody>
+          <tr id="CatalogItem_0">
+            <td>Otro producto</td>
+            <td>10,00 €</td>
+            <td><a href="https://es.wallapop.com/item/otro-1">foto</a></td>
+          </tr>
+          <tr id="CatalogItem_1">
+            <td><span class="Title">Carrito andador con asiento Carlett</span></td>
+            <td>89,99 €</td>
+            <td><a href="https://es.wallapop.com/item/carrito-andador-con-asiento-carlett-1315777640">foto</a></td>
+          </tr>
+        </tbody></table>
+        <tsl-pagination-actions>
+          <span class="PaginationActions__info">1 - 2 de 2</span>
+        </tsl-pagination-actions>
+      </body>`
+      let documents = 0
+      await page.route("https://catalog.test/**", (route) => {
+        if (route.request().resourceType() !== "document") return route.fallback()
+        documents += 1
+        return route.fulfill({
+          status: 200,
+          contentType: "text/html",
+          body: documents === 1 ? stale : fresh,
+        })
+      })
+      await page.goto("https://catalog.test/management")
+      const grabbed = await grabCatalogItemUrl(
+        page,
+        { title: "Carrito andador con asiento Carlett", price: 89.99 },
+        15_000,
+      )
+      expect(grabbed).toMatchObject({
+        href: "https://es.wallapop.com/item/carrito-andador-con-asiento-carlett-1315777640",
+        reason: "matched",
+      })
+      expect(documents).toBeGreaterThanOrEqual(2)
+    } finally {
+      await browser.close()
+    }
+  })
+
   it("walks the next Pro page when the new row is not on the first one", async () => {
     const browser = await chromium.launch({ headless: true })
     try {

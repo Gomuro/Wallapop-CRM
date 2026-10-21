@@ -13,6 +13,8 @@ import {
 const CATALOG_URL_POLL_MS = 1_000;
 /** Activos can still be the pre-publish table after the pager already matches. */
 const CATALOG_URL_TIMEOUT_MS = 45_000;
+/** Wallapop often paints the old total until the management page is reloaded. */
+const CATALOG_RELOADS = 4;
 
 /**
  * Pro catalog rows. Same host as the monitor (`tr[id^="CatalogItem_"]`).
@@ -219,6 +221,7 @@ export async function grabCatalogItemUrl(
   const deadline = Date.now() + timeoutMs;
   let classic: PublishedCatalogItem[] = [];
   let last: CatalogGrab = { href: null, reason: "none", scanned: 0 };
+  let reloads = 0;
   while (true) {
     await dismissYuhuModal(page);
     const pro = await scrapeProCatalogItems(page);
@@ -238,6 +241,26 @@ export async function grabCatalogItemUrl(
         reason: picked.reason,
       });
       if (picked.href || picked.reason === "ambiguous") return last;
+      if (
+        activos.complete &&
+        reloads < CATALOG_RELOADS &&
+        Date.now() < deadline &&
+        page.url().startsWith("http")
+      ) {
+        reloads += 1;
+        log("info", "wallapop_publish_catalog_reload", {
+          attempt: reloads,
+          rows: items.length,
+          total: activos.total,
+        });
+        await page
+          .reload({ waitUntil: "domcontentloaded", timeout: 20_000 })
+          .catch(() => {});
+        await page
+          .waitForSelector('tr[id^="CatalogItem_"]', { timeout: 15_000 })
+          .catch(() => {});
+        continue;
+      }
     } else {
       classic = await scrapePublishedCatalogItems(page);
       const first = firstCatalogItemUrl(classic);
