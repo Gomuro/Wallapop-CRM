@@ -61,9 +61,49 @@ const FINAL_PUBLISH_CLICK_JS = `(() => {
     return false;
   })()`;
 
+const FINAL_PUBLISH_POINT_JS = `(() => {
+    const re = new RegExp(${JSON.stringify(FINAL_RE.source)}, ${JSON.stringify(FINAL_RE.flags)});
+    const visible = (el) => {
+      const s = window.getComputedStyle(el);
+      const r = el.getBoundingClientRect();
+      return s.display !== "none" && s.visibility !== "hidden" && r.width > 0 && r.height > 0;
+    };
+    const labelOf = (el) => {
+      const shadowBtn = el.shadowRoot?.querySelector?.("button");
+      return (
+        el.innerText ||
+        el.getAttribute("aria-label") ||
+        el.getAttribute("text") ||
+        shadowBtn?.innerText ||
+        shadowBtn?.getAttribute("aria-label") ||
+        ""
+      )
+        .trim()
+        .replace(/\\s+/g, " ");
+    };
+    const nodes = [...document.querySelectorAll("button, [role=button], walla-button")];
+    for (const el of nodes) {
+      if (!visible(el)) continue;
+      if (!re.test(labelOf(el))) continue;
+      const target = el.shadowRoot?.querySelector?.("button") || el;
+      const r = target.getBoundingClientRect();
+      if (r.width < 2 || r.height < 2) continue;
+      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+    }
+    return null;
+  })()`;
+
 async function clickFinalPublish(page: Page): Promise<boolean> {
   throwIfPublishAborted();
   try {
+    const point = (await page.evaluate(FINAL_PUBLISH_POINT_JS)) as {
+      x: number;
+      y: number;
+    } | null;
+    if (point) {
+      await page.mouse.click(point.x, point.y);
+      return true;
+    }
     return Boolean(await page.evaluate(FINAL_PUBLISH_CLICK_JS));
   } catch (error) {
     if (isInFlightPublishAborted() || isPublishAbortedError(error)) {

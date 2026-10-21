@@ -972,6 +972,109 @@ describe("category drill", () => {
     }
   })
 
+  it("clicks the last row inside a short overflow list", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      const rows = [
+        "Menaje para cocinar, comer y beber",
+        "Picas y muebles cocina",
+        "Grifería de cocina",
+        "Textiles de cocina y comedor",
+        "Accesorios",
+      ]
+      await page.setContent(`<!DOCTYPE html><body>
+        <h1>Selecciona una categoría</h1>
+        <walla-dropdown>
+          <div class="walla-dropdown__inner-input" role="button" id="cat-button" aria-label="Categoría y subcategoría, Purificador y humificador" style="display:block;height:40px">
+            <span class="subText">Hogar y jardín > Calefacción y climatización</span>
+          </div>
+        </walla-dropdown>
+        <div role="listbox" style="display:block;height:72px;overflow:auto;width:280px">
+          ${rows
+            .map(
+              (name) =>
+                `<walla-dropdown-item role="option" aria-label="${name}" style="display:block;height:36px">${name}</walla-dropdown-item>`,
+            )
+            .join("")}
+        </div>
+        <input id="category_leaf_id" value="24266">
+        <script>
+          document.querySelector('[role="listbox"]').addEventListener("click", (event) => {
+            const item = event.target.closest("walla-dropdown-item")
+            if (!item || item.getAttribute("aria-label") !== "Accesorios") return
+            const btn = document.getElementById("cat-button")
+            btn.setAttribute("aria-label", "Categoría y subcategoría, Accesorios")
+            const sub = btn.querySelector("span.subText")
+            if (sub) sub.textContent = "Hogar y jardín > Cocina"
+            document.getElementById("category_leaf_id").value = "24299"
+            item.closest("[role=listbox]").remove()
+          })
+        </script>
+      </body>`)
+      await ensureCategorySelected(page, [
+        "Hogar y jardín",
+        "Cocina",
+        "Accesorios",
+      ])
+      expect(await page.locator("#category_leaf_id").inputValue()).toBe("24299")
+    } finally {
+      await browser.close()
+    }
+  })
+
+  it("ignores a leftover 0-size listbox in front of the painted menu", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><body>
+        <h1>Selecciona una categoría</h1>
+        <walla-dropdown>
+          <div class="walla-dropdown__inner-input" role="button" id="cat-button" aria-label="Categoría y subcategoría" style="display:block;height:40px"></div>
+        </walla-dropdown>
+        <div role="listbox" style="width:1px;height:1px;overflow:hidden;position:absolute;left:-800px;top:0">
+          <walla-dropdown-item role="option" aria-label="Accesorios" style="display:block;height:36px">Accesorios</walla-dropdown-item>
+        </div>
+        <div id="panel"></div>
+        <input id="category_leaf_id" value="">
+        <script>
+          const panel = document.getElementById("panel")
+          const button = document.getElementById("cat-button")
+          const leaf = document.getElementById("category_leaf_id")
+          function render(names) {
+            panel.innerHTML = '<div role="listbox" style="display:block;height:120px;overflow:auto">' +
+              names.map((name) =>
+                '<walla-dropdown-item role="option" aria-label="' + name + '" style="display:block;height:36px">' + name + '</walla-dropdown-item>'
+              ).join("") +
+              "</div>"
+          }
+          document.querySelector("walla-dropdown").addEventListener("click", () => {
+            if (!panel.querySelector('[role="listbox"]')) render(["Hogar y jardín", "Motos"])
+          })
+          panel.addEventListener("click", (event) => {
+            const item = event.target.closest("walla-dropdown-item")
+            if (!item) return
+            const name = item.getAttribute("aria-label")
+            if (name === "Hogar y jardín") render(["Cocina", "Baño"])
+            else if (name === "Cocina") render(["Accesorios"])
+            else if (name === "Accesorios") {
+              button.textContent = "Hogar y jardín > Cocina"
+              leaf.value = "24299"
+            }
+          })
+        </script>
+      </body>`)
+      await ensureCategorySelected(page, [
+        "Hogar y jardín",
+        "Cocina",
+        "Accesorios",
+      ])
+      expect(await page.locator("#category_leaf_id").inputValue()).toBe("24299")
+    } finally {
+      await browser.close()
+    }
+  })
+
   it("rejects a filled picker that is still the suggested category", async () => {
     const browser = await chromium.launch({ headless: true })
     try {

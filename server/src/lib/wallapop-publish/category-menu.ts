@@ -9,9 +9,27 @@ type CategoryMenu = {
   control: string;
 };
 
+/** First `[role=listbox]` is often a 0×0 leftover. Use the painted one. */
+const VISIBLE_LISTBOX_FN = `function visibleListbox() {
+  const boxes = [...document.querySelectorAll('[role="listbox"]')];
+  let best = null;
+  let bestArea = 0;
+  for (const box of boxes) {
+    const r = box.getBoundingClientRect();
+    if (r.width < 8 || r.height < 8) continue;
+    const area = r.width * r.height;
+    if (area > bestArea) {
+      best = box;
+      bestArea = area;
+    }
+  }
+  return best;
+}`;
+
 export async function readCategoryMenu(page: Page): Promise<CategoryMenu> {
   return (await page.evaluate(`(() => {
-    const listbox = document.querySelector('[role="listbox"]');
+    ${VISIBLE_LISTBOX_FN}
+    const listbox = visibleListbox();
     const options = listbox
       ? [...listbox.querySelectorAll("walla-dropdown-item[role=option]")].map((el) =>
           (el.getAttribute("aria-label") || "").trim(),
@@ -53,7 +71,8 @@ export async function scrollMenuForLabel(page: Page, label: string): Promise<boo
     const menu = await readCategoryMenu(page);
     if (menu.options.includes(label)) return true;
     const moved = (await page.evaluate(`(() => {
-      const listbox = document.querySelector('[role="listbox"]');
+      ${VISIBLE_LISTBOX_FN}
+      const listbox = visibleListbox();
       if (!listbox) return false;
       let scroller = listbox;
       let node = listbox;
@@ -75,27 +94,73 @@ export async function scrollMenuForLabel(page: Page, label: string): Promise<boo
   return false;
 }
 
-/** Click the row inside the open list, not a slotted 0×0 copy elsewhere on the page. */
-export async function clickOpenMenuOption(page: Page, label: string): Promise<boolean> {
+/** Keep the click inside the open list. `block:center` on the last row jumps outside it. */
+export async function clickOpenMenuOption(
+  page: Page,
+  label: string,
+  via: "mouse" | "host" = "mouse",
+): Promise<boolean> {
   const point = (await page.evaluate(`((label) => {
-    const listbox = document.querySelector('[role="listbox"]');
+    ${VISIBLE_LISTBOX_FN}
+    const listbox = visibleListbox();
     if (!listbox) return null;
     const el = [...listbox.querySelectorAll('walla-dropdown-item[role="option"]')].find(
       (item) => (item.getAttribute("aria-label") || "").trim() === label,
     );
     if (!el) return null;
-    el.scrollIntoView({ block: "center" });
+    el.scrollIntoView({ block: "nearest", inline: "nearest" });
+    let scroller = listbox;
+    let node = listbox;
+    while (node && node !== document.body) {
+      if (node.scrollHeight > node.clientHeight + 8) {
+        scroller = node;
+        break;
+      }
+      node = node.parentElement;
+    }
+    const box = listbox.getBoundingClientRect();
     const rect = el.getBoundingClientRect();
-    if (rect.width < 2 || rect.height < 2) return null;
-    return { x: rect.x + rect.width / 2, y: rect.y + rect.height / 2 };
+    if (rect.bottom > box.bottom - 4) scroller.scrollTop += rect.bottom - box.bottom + 8;
+    if (rect.top < box.top + 4) scroller.scrollTop -= box.top - rect.top + 8;
+    const box2 = listbox.getBoundingClientRect();
+    const rect2 = el.getBoundingClientRect();
+    if (rect2.width < 2 || rect2.height < 2) return null;
+    const x = Math.min(
+      Math.max(rect2.x + rect2.width / 2, box2.x + 8),
+      box2.x + box2.width - 8,
+    );
+    const y = Math.min(
+      Math.max(rect2.y + rect2.height / 2, box2.y + 8),
+      box2.y + box2.height - 8,
+    );
+    if (y < box2.y || y > box2.bottom) return null;
+    return { x, y };
   })(${JSON.stringify(label)})`)) as { x: number; y: number } | null;
   if (!point) return false;
+  await page.waitForTimeout(200);
+  if (via === "host") {
+    const clicked = (await page.evaluate(`((label) => {
+      ${VISIBLE_LISTBOX_FN}
+      const listbox = visibleListbox();
+      if (!listbox) return false;
+      const el = [...listbox.querySelectorAll('walla-dropdown-item[role="option"]')].find(
+        (item) => (item.getAttribute("aria-label") || "").trim() === label,
+      );
+      if (!el) return false;
+      el.click();
+      const inner = el.shadowRoot && el.shadowRoot.querySelector("button, [role='button']");
+      if (inner) inner.click();
+      return true;
+    })(${JSON.stringify(label)})`)) as boolean;
+    if (clicked) return true;
+  }
   await page.mouse.click(point.x, point.y);
   return true;
 }
 
 const CATEGORY_DROPDOWN_OPEN_EVAL = `(() => {
-      const listbox = document.querySelector('[role="listbox"]');
+      ${VISIBLE_LISTBOX_FN}
+      const listbox = visibleListbox();
       if (!listbox) return false;
       const r = listbox.getBoundingClientRect();
       if (r.width < 1 || r.height < 1) return false;
@@ -186,15 +251,18 @@ export async function clickCategoryOption(
   label: string,
   leaf: string,
 ): Promise<boolean> {
-  if (!(await scrollMenuForLabel(page, label))) return false;
-  const before = await readCategoryMenu(page);
-  if (!(await clickOpenMenuOption(page, label))) return false;
-  const deadline = Date.now() + 1_500;
-  while (Date.now() < deadline) {
-    const after = await readCategoryMenu(page);
-    if (label === leaf && categoryLeafChosen(before, after, leaf)) return true;
-    if (label !== leaf && !sameOptionList(before.options, after.options)) return true;
-    await page.waitForTimeout(150);
+  for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (!(await scrollMenuForLabel(page, label))) return false;
+    const before = await readCategoryMenu(page);
+    const via = attempt === 0 ? "mouse" : "host";
+    if (!(await clickOpenMenuOption(page, label, via))) continue;
+    const deadline = Date.now() + 2_500;
+    while (Date.now() < deadline) {
+      const after = await readCategoryMenu(page);
+      if (label === leaf && categoryLeafChosen(before, after, leaf)) return true;
+      if (label !== leaf && !sameOptionList(before.options, after.options)) return true;
+      await page.waitForTimeout(150);
+    }
   }
   return false;
 }

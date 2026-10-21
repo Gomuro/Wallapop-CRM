@@ -42,9 +42,7 @@ async function selectCategoryLeafSuggested(
   page: Page,
   leaf: string,
 ): Promise<boolean> {
-  if (!(await clickCategoryOption(page, leaf, leaf))) return false;
-  const menu = await readCategoryMenu(page);
-  return menu.control.includes(leaf);
+  return clickCategoryOption(page, leaf, leaf);
 }
 
 async function selectCategoryBreadcrumb(
