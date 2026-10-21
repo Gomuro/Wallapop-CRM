@@ -126,6 +126,10 @@ async function runMonitorAfterAttach(
       linkedSold,
     });
     if (!confirmed) return [];
+    log("info", "wallapop_monitor_item_probe_queue", {
+      accountId,
+      candidates: confirmed.plan.toMissing.length,
+    });
     const toMissing = await confirmMissingItemPages(
       page,
       listings,
