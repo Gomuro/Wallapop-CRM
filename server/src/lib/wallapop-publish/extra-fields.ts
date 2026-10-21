@@ -118,7 +118,7 @@ async function clickOneFieldOption(
   id: string,
   title: string,
 ): Promise<boolean> {
-  const handle = await page.evaluateHandle(
+  const handle = await page.evaluateHandle<Element | null>(
     `((title, id) => { ${OPTION_TARGET_JS} return fieldOptionTarget(title, id); })(${JSON.stringify(title)}, ${JSON.stringify(id)})`,
   );
   const element = handle.asElement();

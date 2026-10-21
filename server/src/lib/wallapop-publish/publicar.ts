@@ -68,7 +68,7 @@ function clickLeftTheButton(error: unknown): boolean {
 
 async function clickFinalPublish(page: Page): Promise<void> {
   throwIfPublishAborted();
-  const handle = await page.evaluateHandle(FINAL_PUBLISH_ELEMENT_JS);
+  const handle = await page.evaluateHandle<Element | null>(FINAL_PUBLISH_ELEMENT_JS);
   const element = handle.asElement();
   if (!element) {
     await handle.dispose();
