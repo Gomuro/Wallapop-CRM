@@ -113,16 +113,17 @@ function walk(
         : inheritedMandatory
     const verticalId = node.vertical_id ?? null
     const path = childPath(parentPath, id)
+    const name = node.name.replace(/\s+/g, " ").trim()
 
     rows.push({
       wallapopId: id,
       parentWallapopId,
       slug:
         depth === 1
-          ? (ROOT_SLUGS[id] ?? `${slugify(node.name)}-${id}`)
-          : `${slugify(node.name) || "cat"}-${id}`,
-      nameEs: node.name,
-      nameUk: node.name,
+          ? (ROOT_SLUGS[id] ?? `${slugify(name)}-${id}`)
+          : `${slugify(name) || "cat"}-${id}`,
+      nameEs: name,
+      nameUk: name,
       isLeaf: kids.length === 0,
       leafSelectionMandatory: mandatory,
       verticalId,

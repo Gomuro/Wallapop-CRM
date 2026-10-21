@@ -1760,7 +1760,7 @@
                     {
                       "parent_id": 11012,
                       "id": 9787,
-                      "name": "Pantalones  harén",
+                      "name": "Pantalones harén",
                       "path": "Pantalones y leggings > Ropa > Mujer",
                       "attributes": { "excluded": [] },
                       "presentation": {
@@ -8831,7 +8831,7 @@
                 {
                   "parent_id": 10127,
                   "id": 24213,
-                  "name": "Vitrinas, aparadores y consolas",
+                  "name": "Vitrinas, aparadores y consolas",
                   "path": "Muebles de almacenaje > Muebles y organización",
                   "attributes": { "excluded": [] },
                   "presentation": {
@@ -9786,7 +9786,7 @@
             {
               "parent_id": 24276,
               "id": 24262,
-              "name": "Aire acondicionado y ventiladores ",
+              "name": "Aire acondicionado y ventiladores",
               "path": "Calefacción y climatización",
               "attributes": { "excluded": [] },
               "presentation": {
