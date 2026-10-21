@@ -5,6 +5,7 @@ import { logPublishStep } from "./debug";
 import {
   categoryDropdownOpen,
   clickCategoryOption,
+  normalizeCategoryLabel,
   openCategoryPicker,
   readCategoryMenu,
 } from "./category-menu";
@@ -33,9 +34,14 @@ export async function categoryPickerStillEmpty(page: Page): Promise<boolean> {
   return Boolean(await page.evaluate(CATEGORY_PICKER_EMPTY_JS));
 }
 
+function controlHasLeaf(control: string, leaf: string): boolean {
+  const wanted = normalizeCategoryLabel(leaf);
+  return Boolean(wanted) && normalizeCategoryLabel(control).includes(wanted);
+}
+
 async function categoryAlreadySet(page: Page, leaf: string): Promise<boolean> {
   const menu = await readCategoryMenu(page);
-  return menu.control.includes(leaf) && !(await categoryPickerStillEmpty(page));
+  return controlHasLeaf(menu.control, leaf) && !(await categoryPickerStillEmpty(page));
 }
 
 async function selectCategoryLeafSuggested(
@@ -63,7 +69,7 @@ async function selectCategoryBreadcrumb(
         control: menu.control,
         options: menu.options,
       });
-    } else if (label === leaf) {
+    } else if (normalizeCategoryLabel(label) === normalizeCategoryLabel(leaf)) {
       return true;
     }
     await page.waitForTimeout(400);
@@ -96,11 +102,12 @@ async function assertCategoryPicked(
   openedLeafId: string,
 ): Promise<void> {
   const menu = await readCategoryMenu(page);
+  const wanted = normalizeCategoryLabel(leaf);
   const menuClosedOnNewLeaf =
     Boolean(menu.leafId) &&
     menu.leafId !== openedLeafId &&
-    !menu.options.includes(leaf);
-  const chosen = menu.control.includes(leaf) || menuClosedOnNewLeaf;
+    !menu.options.some((row) => normalizeCategoryLabel(row) === wanted);
+  const chosen = controlHasLeaf(menu.control, leaf) || menuClosedOnNewLeaf;
   if (!chosen) {
     const shown = menu.control || menu.leafId || "vacía";
     throw new WallapopPublishError(
@@ -119,7 +126,7 @@ async function pickCategoryOnForm(
   logPublishStep("form", page, { category: "select_start", labels });
   await openCategoryPicker(page);
   const opened = await readCategoryMenu(page);
-  if (opened.leafId && !opened.control.includes(leaf)) {
+  if (opened.leafId && !controlHasLeaf(opened.control, leaf)) {
     log("info", "wallapop_publish_category_suggestion", {
       leafId: opened.leafId,
       control: opened.control,
@@ -147,16 +154,17 @@ export async function ensureCategorySelected(
   page: Page,
   labels: string[],
 ): Promise<void> {
-  if (!labels.length) {
+  const normalized = labels.map(normalizeCategoryLabel).filter(Boolean);
+  if (!normalized.length) {
     throw new WallapopPublishError(
       "form",
       "Faltan etiquetas de categoría para Wallapop.",
     );
   }
-  const leaf = labels[labels.length - 1]!;
+  const leaf = normalized[normalized.length - 1]!;
   if (await categoryAlreadySet(page, leaf)) {
     logPublishStep("form", page, { category: "already_set", leaf });
     return;
   }
-  await pickCategoryOnForm(page, labels, leaf);
+  await pickCategoryOnForm(page, normalized, leaf);
 }

@@ -48,6 +48,29 @@ const DISMISS_SEARCH_EVAL = `(() => {
     return true;
   })()`;
 
+export async function dismissPhotoDeleteDialog(page: Page): Promise<void> {
+  const clicked = (await page.evaluate(`(() => {
+    const body = document.body ? document.body.innerText : "";
+    if (!/borrar la foto/i.test(body)) return false;
+    const re = /^(Cancelar|No)$/i;
+    const nodes = [...document.querySelectorAll("button, [role=button], walla-button")];
+    for (const el of nodes) {
+      const shadowBtn = el.shadowRoot && el.shadowRoot.querySelector("button");
+      const text = (
+        el.innerText ||
+        el.getAttribute("text") ||
+        (shadowBtn && shadowBtn.innerText) ||
+        ""
+      ).trim();
+      if (!re.test(text)) continue;
+      (shadowBtn || el).click();
+      return true;
+    }
+    return false;
+  })()`)) as boolean;
+  if (clicked) await page.waitForTimeout(400);
+}
+
 export async function dismissSearchOverlay(page: Page): Promise<void> {
   const open = await page.evaluate(DISMISS_SEARCH_EVAL);
   if (!open) return;

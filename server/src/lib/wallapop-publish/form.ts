@@ -14,7 +14,7 @@ import {
 } from "./fields";
 import { ensureExtraUploadFields } from "./extra-fields";
 import { ensureMarcaIfShown } from "./marca";
-import { clickMainText } from "./nav";
+import { clickMainText, dismissPhotoDeleteDialog } from "./nav";
 import {
   ensurePackageSizeIfShown,
   ensureStandardWeightBand,
@@ -111,6 +111,7 @@ export async function fillPublishForm(
 ): Promise<{ descriptionText: string; weightBandLabel: string | null }> {
   mark("form");
   logPublishStep("form", page, { phase: "form_start" });
+  await dismissPhotoDeleteDialog(page);
   await ensureCategorySelected(page, input.categoryLabels);
   await closeOpenDropdowns(page);
   logPublishStep("form", page, { phase: "after_category" });

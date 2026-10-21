@@ -38,6 +38,31 @@ describe("categoryBreadcrumbLabelsEs", () => {
     ).resolves.toEqual([])
   })
 
+  it("trims trailing spaces on Spanish names", async () => {
+    const rows: CategoryRow[] = [
+      {
+        wallapopId: 12467,
+        nameEs: "Hogar y jardín",
+        verticalId: "consumer_goods",
+      },
+      {
+        wallapopId: 24200,
+        nameEs: "Aire acondicionado y ventiladores ",
+        verticalId: "consumer_goods",
+      },
+    ]
+    await expect(
+      categoryBreadcrumbLabelsEs(
+        prismaWith("12467/24200/", rows),
+        "cat",
+        { consumerGoodsPublish: true },
+      ),
+    ).resolves.toEqual([
+      "Hogar y jardín",
+      "Aire acondicionado y ventiladores",
+    ])
+  })
+
   it("returns Spanish labels from root to leaf", async () => {
     await expect(
       categoryBreadcrumbLabelsEs(prismaWith(fashionPath, fashionRows), "cat"),

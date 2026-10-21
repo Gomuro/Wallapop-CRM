@@ -7,6 +7,7 @@ import { describe, expect, it } from "vitest"
 import type { CategoryUploadField } from "../../lib/inventory/category-upload-fields"
 import { productListingApiPutBodySchema } from "../../lib/validations/listing"
 import { ensureCategorySelected } from "../src/lib/wallapop-publish/category"
+import { normalizeCategoryLabel } from "../src/lib/wallapop-publish/category-menu"
 import { ensureExtraUploadFields } from "../src/lib/wallapop-publish/extra-fields"
 import { selectConsumerGoods } from "../src/lib/wallapop-publish/flow"
 import { dismissSearchOverlay } from "../src/lib/wallapop-publish/nav"
@@ -60,6 +61,15 @@ const COLOR_LIST_HTML = `
       <walla-button id="ok" style="display:block;width:200px;height:40px"></walla-button>
     </div>
   </walla-dropdown>`
+
+describe("normalizeCategoryLabel", () => {
+  it("matches Wallapop aria-label when CRM nameEs trails a space", () => {
+    const crm = "Aire acondicionado y ventiladores "
+    const wallapop = "Aire acondicionado y ventiladores"
+    expect(["Aire acondicionado y ventiladores"].includes(crm)).toBe(false)
+    expect(normalizeCategoryLabel(crm)).toBe(wallapop)
+  })
+})
 
 describe("crmTitleMatchesForm", () => {
   it("treats whitespace as the same title", () => {
@@ -967,6 +977,45 @@ describe("category drill", () => {
         "Sillas y taburetes",
       ])
       expect(await page.locator("#category_leaf_id").inputValue()).toBe("24221")
+    } finally {
+      await browser.close()
+    }
+  })
+
+  it("clicks Aire acondicionado even when CRM nameEs has a trailing space", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><body>
+        <h1>Selecciona una categoría</h1>
+        <walla-dropdown>
+          <div class="walla-dropdown__inner-input" role="button" id="cat-button" aria-label="Categoría y subcategoría" style="display:block;height:40px"></div>
+        </walla-dropdown>
+        <div role="listbox" style="display:block;height:200px;overflow:auto;width:320px">
+          <walla-dropdown-item role="option" aria-label="Chimeneas, Estufas y radiadores" style="display:block;height:36px">Chimeneas, Estufas y radiadores</walla-dropdown-item>
+          <walla-dropdown-item role="option" aria-label="Aire acondicionado y ventiladores" style="display:block;height:36px">Aire acondicionado y ventiladores</walla-dropdown-item>
+          <walla-dropdown-item role="option" aria-label="Combustibles y pellet" style="display:block;height:36px">Combustibles y pellet</walla-dropdown-item>
+        </div>
+        <input id="category_leaf_id" value="">
+        <script>
+          document.querySelector('[role="listbox"]').addEventListener("click", (event) => {
+            const item = event.target.closest("walla-dropdown-item")
+            if (!item || item.getAttribute("aria-label") !== "Aire acondicionado y ventiladores") return
+            document.getElementById("cat-button").setAttribute(
+              "aria-label",
+              "Categoría y subcategoría, Aire acondicionado y ventiladores",
+            )
+            document.getElementById("category_leaf_id").value = "24280"
+            item.closest("[role=listbox]").remove()
+          })
+        </script>
+      </body>`)
+      await ensureCategorySelected(page, [
+        "Hogar y jardín",
+        "Calefacción y climatización",
+        "Aire acondicionado y ventiladores ",
+      ])
+      expect(await page.locator("#category_leaf_id").inputValue()).toBe("24280")
     } finally {
       await browser.close()
     }

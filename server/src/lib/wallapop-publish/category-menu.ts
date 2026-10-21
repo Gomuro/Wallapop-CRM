@@ -9,6 +9,15 @@ type CategoryMenu = {
   control: string;
 };
 
+/** CRM `nameEs` can trail a space; Wallapop aria-label does not. */
+export function normalizeCategoryLabel(label: string): string {
+  return label.replace(/\s+/g, " ").trim();
+}
+
+const NORM_LABEL_FN = `function normLabel(s) {
+  return (s || "").replace(/\\s+/g, " ").trim();
+}`;
+
 /** First `[role=listbox]` is often a 0×0 leftover. Use the painted one. */
 const VISIBLE_LISTBOX_FN = `function visibleListbox() {
   const boxes = [...document.querySelectorAll('[role="listbox"]')];
@@ -69,7 +78,10 @@ export function sameOptionList(left: string[], right: string[]): boolean {
 export async function scrollMenuForLabel(page: Page, label: string): Promise<boolean> {
   for (let step = 0; step < 24; step += 1) {
     const menu = await readCategoryMenu(page);
-    if (menu.options.includes(label)) return true;
+    const wanted = normalizeCategoryLabel(label);
+    if (menu.options.some((row) => normalizeCategoryLabel(row) === wanted)) {
+      return true;
+    }
     const moved = (await page.evaluate(`(() => {
       ${VISIBLE_LISTBOX_FN}
       const listbox = visibleListbox();
@@ -102,10 +114,12 @@ export async function clickOpenMenuOption(
 ): Promise<boolean> {
   const point = (await page.evaluate(`((label) => {
     ${VISIBLE_LISTBOX_FN}
+    ${NORM_LABEL_FN}
     const listbox = visibleListbox();
     if (!listbox) return null;
+    const wanted = normLabel(label);
     const el = [...listbox.querySelectorAll('walla-dropdown-item[role="option"]')].find(
-      (item) => (item.getAttribute("aria-label") || "").trim() === label,
+      (item) => normLabel(item.getAttribute("aria-label")) === wanted,
     );
     if (!el) return null;
     el.scrollIntoView({ block: "nearest", inline: "nearest" });
@@ -141,10 +155,12 @@ export async function clickOpenMenuOption(
   if (via === "host") {
     const clicked = (await page.evaluate(`((label) => {
       ${VISIBLE_LISTBOX_FN}
+      ${NORM_LABEL_FN}
       const listbox = visibleListbox();
       if (!listbox) return false;
+      const wanted = normLabel(label);
       const el = [...listbox.querySelectorAll('walla-dropdown-item[role="option"]')].find(
-        (item) => (item.getAttribute("aria-label") || "").trim() === label,
+        (item) => normLabel(item.getAttribute("aria-label")) === wanted,
       );
       if (!el) return false;
       el.click();
@@ -273,6 +289,9 @@ export function categoryLeafChosen(
   after: CategoryMenu,
   leaf: string,
 ): boolean {
-  if (after.control.includes(leaf)) return true;
+  const wanted = normalizeCategoryLabel(leaf);
+  if (wanted && normalizeCategoryLabel(after.control).includes(wanted)) {
+    return true;
+  }
   return Boolean(after.leafId) && after.leafId !== before.leafId;
 }

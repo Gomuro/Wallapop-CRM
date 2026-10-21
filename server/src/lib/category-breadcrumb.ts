@@ -55,8 +55,8 @@ function spanishLabelsInOrder(
   nameById: ReadonlyMap<number, string>,
 ): string[] {
   return wallapopIds
-    .map((id: number) => nameById.get(id))
-    .filter((name): name is string => Boolean(name?.trim()));
+    .map((id: number) => nameById.get(id)?.replace(/\s+/g, " ").trim())
+    .filter((name): name is string => Boolean(name));
 }
 
 /** Spanish labels root → leaf from materialized `Category.path` (wallapop_id segments). */
