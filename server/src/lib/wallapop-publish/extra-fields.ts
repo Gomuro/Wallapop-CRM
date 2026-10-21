@@ -101,65 +101,45 @@ async function clickPanelButton(page: Page, names: string[]): Promise<boolean> {
   })()`)) as boolean;
 }
 
-async function optionIsChosen(
-  page: Page,
-  id: string,
-  title: string,
-): Promise<boolean> {
-  return (await page.evaluate(`((title, id) => {
-    ${FIND_OPTION_FN}
-    const el = findFieldOption(title, id);
-    if (!el) return false;
-    const input = el.querySelector("input");
-    return el.getAttribute("aria-selected") === "true" || Boolean(input && input.checked);
-  })(${JSON.stringify(title)}, ${JSON.stringify(id)})`)) as boolean;
-}
+const OPTION_TARGET_JS = `function fieldOptionTarget(title, id) {
+  ${FIND_OPTION_FN}
+  const el = findFieldOption(title, id);
+  if (!el) return null;
+  const input = el.querySelector("input");
+  const box = input ? input.getBoundingClientRect() : null;
+  const target = box && box.width > 2 && box.height > 2 ? input : el;
+  target.scrollIntoView({ block: "center", inline: "nearest" });
+  return target;
+}`;
 
+/** Checkbox of the visible row. A coordinate click on the row misses when the list sits at the bottom of the window. */
 async function clickOneFieldOption(
   page: Page,
   id: string,
   title: string,
 ): Promise<boolean> {
-  const point = (await page.evaluate(`((title, id) => {
-    ${FIND_OPTION_FN}
-    const el = findFieldOption(title, id);
-    if (!el) return null;
-    el.scrollIntoView({ block: "nearest", inline: "nearest" });
-    const panel = el.closest(".walla-dropdown__floating-area");
-    let scroller = panel;
-    let node = panel;
-    while (node && node !== document.body) {
-      if (node.scrollHeight > node.clientHeight + 8) {
-        scroller = node;
-        break;
-      }
-      node = node.parentElement;
-    }
-    const box = (panel || el).getBoundingClientRect();
-    const rect = el.getBoundingClientRect();
-    if (scroller && rect.bottom > box.bottom - 4) scroller.scrollTop += rect.bottom - box.bottom + 8;
-    if (scroller && rect.top < box.top + 4) scroller.scrollTop -= box.top - rect.top + 8;
-    const rect2 = el.getBoundingClientRect();
-    if (rect2.width < 2 || rect2.height < 2) return null;
-    return { x: rect2.x + rect2.width / 2, y: rect2.y + Math.min(rect2.height / 2, 20) };
-  })(${JSON.stringify(title)}, ${JSON.stringify(id)})`)) as {
-    x: number;
-    y: number;
-  } | null;
-  if (!point) return false;
-  await page.mouse.click(point.x, point.y);
-  await page.waitForTimeout(200);
-  if (await optionIsChosen(page, id, title)) return true;
-  await page.evaluate(`((title, id) => {
-    ${FIND_OPTION_FN}
-    const el = findFieldOption(title, id);
-    if (!el) return;
-    const input = el.querySelector("input");
-    if (input) input.click();
-    else el.click();
-  })(${JSON.stringify(title)}, ${JSON.stringify(id)})`);
-  await page.waitForTimeout(150);
-  return optionIsChosen(page, id, title);
+  const handle = await page.evaluateHandle(
+    `((title, id) => { ${OPTION_TARGET_JS} return fieldOptionTarget(title, id); })(${JSON.stringify(title)}, ${JSON.stringify(id)})`,
+  );
+  const element = handle.asElement();
+  if (!element) {
+    await handle.dispose();
+    return false;
+  }
+  try {
+    await element.click({ timeout: 8_000 });
+    await page.waitForTimeout(200);
+    return true;
+  } catch (error) {
+    log("warn", "wallapop_publish_extra_field_click_failed", {
+      id,
+      title,
+      message: error instanceof Error ? error.message.split("\n")[0] : String(error),
+    });
+    return false;
+  } finally {
+    await element.dispose().catch(() => {});
+  }
 }
 
 /** Click the painted option row. Duplicate #id in leftover menus is ignored. */
@@ -216,29 +196,33 @@ async function clickOpenedField(
   }
 }
 
-const FIELD_SHOWS_JS = `((id, label, titles) => {
+const FIELD_COMMITTED_JS = `((id, label, titles) => {
   const host = ${FIND_HOST_JS}(id, label);
   if (!host) return false;
-  const blob = [
-    host.getAttribute("aria-label"),
-    host.innerText,
-    ...[...host.querySelectorAll("[aria-label]")].map((el) =>
-      el.getAttribute("aria-label"),
-    ),
-  ]
-    .filter(Boolean)
-    .join(" ")
-    .replace(/\\s+/g, " ");
-  return titles.some((title) => title && blob.includes(title));
+  const closedInput = [...host.querySelectorAll("input")].find(
+    (el) =>
+      !el.closest(".walla-dropdown__floating-area") &&
+      !el.closest("walla-dropdown-item"),
+  );
+  const trigger = host.querySelector('[role="button"]');
+  const parts = [];
+  if (closedInput && closedInput.value) parts.push(closedInput.value);
+  if (trigger) {
+    parts.push(trigger.getAttribute("aria-label") || "");
+    parts.push(trigger.innerText || "");
+    if (trigger.shadowRoot) parts.push(trigger.shadowRoot.textContent || "");
+  }
+  const blob = parts.join(" ").replace(/\\s+/g, " ");
+  return titles.every((title) => title && blob.includes(title));
 })`;
 
-async function fieldShowsTitles(
+async function fieldCommitted(
   page: Page,
   field: CategoryUploadField,
   titles: string[],
 ): Promise<boolean> {
   return (await page.evaluate(
-    `${FIELD_SHOWS_JS}(${JSON.stringify(field.id)}, ${JSON.stringify(field.label)}, ${JSON.stringify(titles)})`,
+    `${FIELD_COMMITTED_JS}(${JSON.stringify(field.id)}, ${JSON.stringify(field.label)}, ${JSON.stringify(titles)})`,
   )) as boolean;
 }
 
@@ -273,19 +257,18 @@ async function fillOneExtraField(
   const opened = (await page.evaluate(
     `${OPEN_FIELD_JS}(${JSON.stringify(field.id)}, ${JSON.stringify(field.label)})`,
   )) as boolean;
-  let clicked = await clickOpenedField(page, titles, ids, opened);
-  const alreadyOn = await fieldShowsTitles(page, field, titles);
-  if (clicked < 1 && alreadyOn) clicked = titles.length;
+  const clicked = await clickOpenedField(page, titles, ids, opened);
   await closeOpenDropdowns(page);
+  const committed = await fieldCommitted(page, field, titles);
   log("info", "wallapop_publish_extra_field", {
     id: field.id,
     opened,
     clicked,
     titles,
     ids,
-    alreadyOn,
+    committed,
   });
-  if (field.required && clicked < 1 && !alreadyOn) {
+  if (field.required && !committed) {
     throw new WallapopPublishError(
       "form",
       `No se pudo seleccionar ${field.label} en Wallapop.`,

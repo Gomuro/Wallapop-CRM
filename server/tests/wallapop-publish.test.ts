@@ -902,6 +902,13 @@ describe("upload Color field", () => {
         button.addEventListener("click", () => {
           button.setAttribute("data-clicked", "1")
         })
+        const host = document.querySelector("walla-dropdown")
+        const closed = document.createElement("input")
+        closed.id = "color-value"
+        host?.prepend(closed)
+        document.querySelector('[aria-label="Negro"]')?.addEventListener("click", () => {
+          closed.value = "Negro"
+        })
       }, COLOR_LIST_HTML)
       await done
       expect(await page.locator("#ok").getAttribute("data-clicked")).toBe("1")
@@ -919,6 +926,7 @@ describe("upload Color field", () => {
           <walla-dropdown-item role="option" aria-label="ghost"><input id="black"></walla-dropdown-item>
         </div>
         <walla-dropdown data-testid="color">
+          <input id="color-value">
           <div role="button" aria-label="Color">Color*</div>
           <div class="walla-dropdown__floating-area" style="display:block;height:220px;width:320px">
             <walla-button id="clear">Borrar</walla-button>
@@ -936,6 +944,7 @@ describe("upload Color field", () => {
             const item = event.currentTarget
             item.setAttribute("aria-selected", "true")
             item.querySelector("input").checked = true
+            document.getElementById("color-value").value = "Negro"
           })
           document.getElementById("ok").addEventListener("click", () => {
             document.getElementById("ok").setAttribute("data-clicked", "1")
@@ -1017,6 +1026,71 @@ describe("upload Color field", () => {
       await expect(
         ensureExtraUploadFields(page, [material], { material: ["other"] }),
       ).rejects.toBeInstanceOf(WallapopPublishError)
+    } finally {
+      await browser.close()
+    }
+  })
+
+  it("does not accept Material when Madera is only an option in the open list", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><body>
+        <walla-dropdown data-testid="material">
+          <input id="material-value">
+          <div role="button">Material*</div>
+          <div class="walla-dropdown__floating-area" style="display:block;height:80px;width:320px">
+            <walla-dropdown-item role="option" aria-label="Madera" style="display:block;height:40px">
+              <input id="wood" type="checkbox">
+            </walla-dropdown-item>
+          </div>
+        </walla-dropdown>
+      </body>`)
+      const material: CategoryUploadField = {
+        ...colorField,
+        id: "material",
+        label: "Material",
+        options: [{ id: "wood", title: "Madera" }],
+      }
+      await expect(
+        ensureExtraUploadFields(page, [material], { material: ["wood"] }),
+      ).rejects.toBeInstanceOf(WallapopPublishError)
+      expect(await page.locator("#material-value").inputValue()).toBe("")
+    } finally {
+      await browser.close()
+    }
+  })
+
+  it("writes Madera into the closed field when the checkbox is clicked", async () => {
+    const browser = await chromium.launch({ headless: true })
+    try {
+      const page = await browser.newPage()
+      await page.setContent(`<!DOCTYPE html><body>
+        <walla-dropdown data-testid="material">
+          <input id="material-value">
+          <div role="button">Material*</div>
+          <div class="walla-dropdown__floating-area" style="display:block;height:80px;width:320px">
+            <walla-dropdown-item role="option" aria-label="Madera" style="display:block;height:40px">
+              <input id="wood" type="checkbox">
+            </walla-dropdown-item>
+          </div>
+        </walla-dropdown>
+        <script>
+          document.getElementById("wood").addEventListener("click", () => {
+            document.getElementById("material-value").value = "Madera"
+          })
+        </script>
+      </body>`)
+      const material: CategoryUploadField = {
+        ...colorField,
+        id: "material",
+        label: "Material",
+        options: [{ id: "wood", title: "Madera" }],
+      }
+      await expect(
+        ensureExtraUploadFields(page, [material], { material: ["wood"] }),
+      ).resolves.toBeUndefined()
+      expect(await page.locator("#material-value").inputValue()).toBe("Madera")
     } finally {
       await browser.close()
     }
