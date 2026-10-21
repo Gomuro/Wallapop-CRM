@@ -70,7 +70,7 @@ export function CatalogDeletePackBar({
   remove,
 }: CatalogDeletePackBarProps) {
   return (
-    <div className="sticky bottom-3 z-30 mt-4 flex flex-col gap-2 rounded-2xl bg-background/95 p-3 shadow-lg ring-1 ring-border backdrop-blur">
+    <div className="sticky bottom-[calc(5.75rem+env(safe-area-inset-bottom))] z-30 mt-4 flex max-h-[min(22rem,calc(100dvh-9rem))] flex-col gap-2 overflow-y-auto rounded-2xl bg-background/95 p-3 shadow-lg ring-1 ring-border backdrop-blur md:bottom-3">
       <button
         type="button"
         className="h-11 w-full rounded-full bg-muted text-sm font-semibold disabled:opacity-50"
@@ -99,46 +99,49 @@ export function CatalogDeletePackBar({
           })}
         </div>
       ) : null}
-      <ConfirmAction
-        open={queue.open}
-        onOpenChange={queue.onOpenChange}
-        triggerLabel={
-          queue.accountName
-            ? `Poner en cola · ${queue.accountName} (${queue.toQueue})`
-            : "Poner en cola"
-        }
-        triggerClassName="h-12 w-full"
-        triggerDisabled={queue.disabled}
-        title={queue.accountName ? `Cola de ${queue.accountName}` : "Cola"}
-        description={queueDescription(queue)}
-        confirmLabel="Poner en cola"
-        pendingLabel="Guardando…"
-        error={queue.error}
-        notice={queue.notice}
-        pending={queue.pending}
-        onConfirm={queue.onConfirm}
-      />
+      <div className="grid grid-cols-2 gap-2">
+        <ConfirmAction
+          open={queue.open}
+          onOpenChange={queue.onOpenChange}
+          triggerLabel={
+            queue.accountName
+              ? `Cola · ${queue.accountName} (${queue.toQueue})`
+              : "Poner en cola"
+          }
+          triggerClassName="h-12 w-full px-2 text-sm"
+          triggerDisabled={queue.disabled}
+          title={queue.accountName ? `Cola de ${queue.accountName}` : "Cola"}
+          description={queueDescription(queue)}
+          confirmLabel="Poner en cola"
+          pendingLabel="Guardando…"
+          error={queue.error}
+          notice={queue.notice}
+          pending={queue.pending}
+          onConfirm={queue.onConfirm}
+        />
+        <ConfirmAction
+          open={remove.open}
+          onOpenChange={remove.onOpenChange}
+          triggerLabel={`Eliminar (${remove.selected})`}
+          triggerClassName="h-12 w-full px-2 text-sm"
+          triggerDisabled={remove.selected === 0}
+          triggerVariant="destructive"
+          title="Eliminar del catálogo"
+          description={
+            remove.progress ??
+            "Se borran los productos elegidos del CRM. Si el anuncio sigue en Wallapop, primero se elimina allí."
+          }
+          confirmLabel="Eliminar"
+          pendingLabel="En curso…"
+          confirmVariant="destructive"
+          error={remove.error}
+          pending={remove.pending}
+          onConfirm={remove.onConfirm}
+        />
+      </div>
       <button type="button" className="h-11 text-sm font-semibold" onClick={onCancel}>
         Cancelar
       </button>
-      <ConfirmAction
-        open={remove.open}
-        onOpenChange={remove.onOpenChange}
-        triggerLabel={`Eliminar del catálogo (${remove.selected})`}
-        triggerClassName="h-12 w-full"
-        triggerDisabled={remove.selected === 0}
-        title="Eliminar del catálogo"
-        description={
-          remove.progress ??
-          "Se borran los productos elegidos del CRM. Si el anuncio sigue en Wallapop, primero se elimina allí."
-        }
-        confirmLabel="Eliminar"
-        pendingLabel="En curso…"
-        confirmVariant="destructive"
-        error={remove.error}
-        pending={remove.pending}
-        onConfirm={remove.onConfirm}
-      />
     </div>
   )
 }
