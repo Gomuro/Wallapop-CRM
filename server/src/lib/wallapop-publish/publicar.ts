@@ -26,17 +26,13 @@ import {
 import {
   classifyPublishLanding,
   isPublicarContextDestroyedError,
+  playwrightClickMessage,
   readLandingAfterPublicarClick,
   wallapopUploadReviewMessage,
 } from "./verify";
 
-const FINAL_PUBLISH_CLICK_JS = `(() => {
+const FINAL_PUBLISH_ELEMENT_JS = `(() => {
     const re = new RegExp(${JSON.stringify(FINAL_RE.source)}, ${JSON.stringify(FINAL_RE.flags)});
-    const visible = (el) => {
-      const s = window.getComputedStyle(el);
-      const r = el.getBoundingClientRect();
-      return s.display !== "none" && s.visibility !== "hidden" && r.width > 0 && r.height > 0;
-    };
     const labelOf = (el) => {
       const shadowBtn = el.shadowRoot?.querySelector?.("button");
       return (
@@ -52,70 +48,53 @@ const FINAL_PUBLISH_CLICK_JS = `(() => {
     };
     const nodes = [...document.querySelectorAll("button, [role=button], walla-button")];
     for (const el of nodes) {
-      if (!visible(el)) continue;
-      if (!re.test(labelOf(el))) continue;
-      const target = el.shadowRoot?.querySelector?.("button") || el;
-      target.click();
-      return true;
-    }
-    return false;
-  })()`;
-
-const FINAL_PUBLISH_POINT_JS = `(() => {
-    const re = new RegExp(${JSON.stringify(FINAL_RE.source)}, ${JSON.stringify(FINAL_RE.flags)});
-    const visible = (el) => {
-      const s = window.getComputedStyle(el);
-      const r = el.getBoundingClientRect();
-      return s.display !== "none" && s.visibility !== "hidden" && r.width > 0 && r.height > 0;
-    };
-    const labelOf = (el) => {
-      const shadowBtn = el.shadowRoot?.querySelector?.("button");
-      return (
-        el.innerText ||
-        el.getAttribute("aria-label") ||
-        el.getAttribute("text") ||
-        shadowBtn?.innerText ||
-        shadowBtn?.getAttribute("aria-label") ||
-        ""
-      )
-        .trim()
-        .replace(/\\s+/g, " ");
-    };
-    const nodes = [...document.querySelectorAll("button, [role=button], walla-button")];
-    for (const el of nodes) {
-      if (!visible(el)) continue;
       if (!re.test(labelOf(el))) continue;
       const target = el.shadowRoot?.querySelector?.("button") || el;
       const r = target.getBoundingClientRect();
       if (r.width < 2 || r.height < 2) continue;
-      return { x: r.x + r.width / 2, y: r.y + r.height / 2 };
+      target.scrollIntoView({ block: "center", inline: "nearest" });
+      return target;
     }
     return null;
   })()`;
 
-async function clickFinalPublish(page: Page): Promise<boolean> {
+function clickLeftTheButton(error: unknown): boolean {
+  if (isPublicarContextDestroyedError(error)) return true;
+  const message = error instanceof Error ? error.message : String(error);
+  return /not attached to the DOM|element was detached|frame was detached/i.test(
+    message,
+  );
+}
+
+async function clickFinalPublish(page: Page): Promise<void> {
   throwIfPublishAborted();
+  const handle = await page.evaluateHandle(FINAL_PUBLISH_ELEMENT_JS);
+  const element = handle.asElement();
+  if (!element) {
+    await handle.dispose();
+    throw new WallapopPublishError(
+      "before_publicar",
+      "No se encontró el botón Publicar.",
+    );
+  }
   try {
-    const point = (await page.evaluate(FINAL_PUBLISH_POINT_JS)) as {
-      x: number;
-      y: number;
-    } | null;
-    if (point) {
-      await page.mouse.click(point.x, point.y);
-      return true;
-    }
-    return Boolean(await page.evaluate(FINAL_PUBLISH_CLICK_JS));
+    await element.click({ timeout: 8_000 });
   } catch (error) {
     if (isInFlightPublishAborted() || isPublishAbortedError(error)) {
       throw isPublishAbortedError(error) ? error : new PublishAbortedError();
     }
-    if (isPublicarContextDestroyedError(error)) {
+    if (clickLeftTheButton(error)) {
       log("warn", "wallapop_publish_publicar_evaluate_torn_down", {
         message: error instanceof Error ? error.message : String(error),
       });
-      return true;
+      return;
     }
-    throw error;
+    throw new WallapopPublishError(
+      "before_publicar",
+      playwrightClickMessage(error),
+    );
+  } finally {
+    await element.dispose().catch(() => {});
   }
 }
 
@@ -174,14 +153,8 @@ async function publishLive(
   input: PublishWallapopInput,
 ): Promise<PublishWallapopResult> {
   throwIfPublishAborted();
-  const published = await clickFinalPublish(page);
-  log("info", "wallapop_publish_publicar_click", { published });
-  if (!published) {
-    throw new WallapopPublishError(
-      "before_publicar",
-      "No se pudo hacer click en Publicar.",
-    );
-  }
+  await clickFinalPublish(page);
+  log("info", "wallapop_publish_publicar_click", { published: true });
   return resolvePublishedResult(page, input);
 }
 

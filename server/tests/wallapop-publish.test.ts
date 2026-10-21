@@ -22,6 +22,7 @@ import {
   firstCatalogItemUrl,
   grabCatalogItemUrl,
   isPublicarContextDestroyedError,
+  playwrightClickMessage,
   queryMarcaCombo,
   readBrandValue,
   isWallapopPublishedCatalogUrl,
@@ -509,6 +510,36 @@ describe("pickUniqueCatalogItemUrl", () => {
     } finally {
       await browser.close()
     }
+  })
+})
+
+describe("playwrightClickMessage", () => {
+  it("keeps the Playwright click error and its cause", () => {
+    const error = new Error(
+      [
+        "elementHandle.click: Timeout 8000ms exceeded.",
+        "Call log:",
+        "  - attempting click action",
+        "    - element is outside of the viewport",
+      ].join("\n"),
+    )
+    error.name = "TimeoutError"
+    expect(playwrightClickMessage(error)).toBe(
+      "elementHandle.click: Timeout 8000ms exceeded. element is outside of the viewport",
+    )
+  })
+
+  it("keeps an intercept line from the Playwright call log", () => {
+    const error = new Error(
+      [
+        "elementHandle.click: Timeout 8000ms exceeded.",
+        "Call log:",
+        '  - <div class="overlay">…</div> intercepts pointer events',
+      ].join("\n"),
+    )
+    expect(playwrightClickMessage(error)).toBe(
+      "elementHandle.click: Timeout 8000ms exceeded. <div class=\"overlay\">…</div> intercepts pointer events",
+    )
   })
 })
 

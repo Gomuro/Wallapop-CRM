@@ -60,7 +60,7 @@ export function classifyPublishLanding(input: {
       ok: false,
       reason: "still_on_upload",
       message:
-        "Wallapop no publicó el anuncio; el formulario de alta sigue abierto.",
+        "Publicar se pulsó, pero el formulario de alta sigue abierto.",
     };
   }
   if (isWallapopPublishedCatalogUrl(input.url)) {
@@ -134,6 +134,26 @@ const UPLOAD_REVIEW_MESSAGE_EVAL = `(() => {
   }
   return null;
 })()`;
+
+const CLICK_CAUSE_RE =
+  /outside of the viewport|intercepts pointer events|element is not visible|element is not enabled|element is not stable|element was detached|not attached to the DOM|Timeout \d+ms exceeded/i;
+
+/** One line: Playwright's click error, plus the cause from its call log. */
+export function playwrightClickMessage(error: unknown): string {
+  const raw = error instanceof Error ? error.message : String(error);
+  const lines = raw
+    .split(/\r?\n/)
+    .map((line) => line.trim())
+    .filter(Boolean);
+  const head = lines[0] ?? "Playwright click failed";
+  const cause = [...lines]
+    .reverse()
+    .find((line) => CLICK_CAUSE_RE.test(line) && line !== head);
+  if (!cause) return head;
+  const detail = cause.replace(/^[-–—]\s*/, "").replace(/^\d+\s*×\s*/, "");
+  if (detail === head) return head;
+  return `${head} ${detail}`;
+}
 
 export async function wallapopUploadReviewMessage(
   page: Page,

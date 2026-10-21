@@ -57,6 +57,7 @@ export {
   isWallapopPublishedCatalogUrl,
   isWallapopUploadFormUrl,
   listingUrlFromPageUrl,
+  playwrightClickMessage,
   readLandingAfterPublicarClick,
   readUrlAfterPublicarClick,
 } from "./verify";
@@ -107,18 +108,45 @@ async function rethrowPublishFailure(
     throw isPublishAbortedError(error) ? error : new PublishAbortedError();
   }
   const message = error instanceof Error ? error.message : String(error);
+  const clickFailure =
+    error instanceof Error &&
+    /elementHandle\.click|locator\.click|No se encontró el botón Publicar/i.test(
+      message,
+    );
+  const snap = clickFailure
+    ? {}
+    : withoutHtmlDump(
+        await snapshotPublishForm(
+          page,
+          /estado|marca|revisa/i.test(message) ? 'id="condition"' : undefined,
+        ),
+      );
   log("error", "wallapop_publish_abort", {
     step: failStep,
     message,
     unexpected: !(error instanceof WallapopPublishError),
     err: serializeError(error),
     url: safePageUrl(page),
-    ...(await snapshotPublishForm(
-      page,
-      /estado|marca|revisa/i.test(message) ? 'id="condition"' : undefined,
-    )),
+    ...snap,
   });
   throw error;
+}
+
+const HTML_DUMP_KEYS = [
+  "htmlAround",
+  "htmlNeedle",
+  "htmlHitLine",
+  "htmlFromLine",
+  "htmlToLine",
+  "htmlTotalLines",
+] as const;
+
+function withoutHtmlDump(
+  snap: Record<string, unknown>,
+): Record<string, unknown> {
+  const next = { ...snap };
+  for (const key of HTML_DUMP_KEYS) delete next[key];
+  return next;
 }
 
 async function publishWallapopInBrowserAfterAttach(
