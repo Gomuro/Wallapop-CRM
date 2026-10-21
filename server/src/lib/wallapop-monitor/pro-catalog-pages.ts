@@ -6,6 +6,7 @@ import type { PublishedCatalogRow } from "./catalog"
 import type { SoldCatalogRow } from "./diff"
 import {
   CLICK_NEXT_EVAL,
+  CLICK_PREV_EVAL,
   PRO_CATALOG_ROWS_EVAL,
   clickTabEval,
   parseProPager,
@@ -16,7 +17,17 @@ const PAGE_WAIT_MS = 8_000
 /** Activos can still show the pre-publish table after the pager already matches. */
 const ACTIVOS_ROW_WAIT_MS = 45_000
 
-type ProCatalogRow = PublishedCatalogRow & { sold: boolean }
+type ProCatalogRow = PublishedCatalogRow & {
+  sold: boolean
+  title: string
+  priceText: string
+}
+
+export type ProActivosSnapshot = {
+  rows: ProCatalogRow[]
+  total: number | null
+  complete: boolean
+}
 
 type PageShot = {
   rows: ProCatalogRow[]
@@ -93,16 +104,31 @@ async function selectedTabLabel(page: Page): Promise<string | null> {
 async function openTab(page: Page, prefix: string): Promise<void> {
   const before = await readShot(page)
   const label = await selectedTabLabel(page)
+  const listed = pageIsListed(before, parseProPager(before.pager)?.total ?? null)
   const already =
-    label?.toLowerCase().startsWith(prefix.toLowerCase()) &&
-    pageIsListed(before, parseProPager(before.pager)?.total ?? null)
+    label?.toLowerCase().startsWith(prefix.toLowerCase()) && listed
   if (already) return
-  await page.evaluate(clickTabEval(prefix))
+  const clicked = Boolean(await page.evaluate(clickTabEval(prefix)))
+  if (!clicked) return
   await waitForListedPage(page, {
     tab: prefix,
     previousPager: before.pager,
     previousHref: before.rows[0]?.href,
   })
+}
+
+async function rewindToFirstProPage(page: Page): Promise<void> {
+  for (let i = 0; i < MAX_PAGES; i += 1) {
+    const shot = await readShot(page)
+    const parsed = parseProPager(shot.pager)
+    if (!parsed || parsed.from <= 1) return
+    const moved = Boolean(await page.evaluate(CLICK_PREV_EVAL))
+    if (!moved) return
+    await waitForListedPage(page, {
+      previousPager: shot.pager,
+      previousHref: shot.rows[0]?.href,
+    })
+  }
 }
 
 function activosRowsContainEval(needles: string[]): string {
@@ -230,6 +256,18 @@ async function readAllPages(
   }
   logProTab(tab, seen, total)
   return { rows: [...seen.values()], total }
+}
+
+/** Activos, every pager page. `complete` is false when the pager total was not reached. */
+export async function scrapeProActivos(page: Page): Promise<ProActivosSnapshot> {
+  await rewindToFirstProPage(page)
+  await openTab(page, "Activos")
+  const { seen, total } = await collectProPages(page)
+  return {
+    rows: [...seen.values()],
+    total,
+    complete: !proCatalogIncomplete(total, seen.size),
+  }
 }
 
 export async function scrapeProCatalogs(

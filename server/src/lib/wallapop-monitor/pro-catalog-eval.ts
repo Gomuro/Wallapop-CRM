@@ -31,6 +31,9 @@ export const PRO_CATALOG_ROWS_EVAL = `(() => {
       if (el.shadowRoot) walk(el.shadowRoot, visit)
     })
   }
+  function text(el) {
+    return String(el.innerText || el.textContent || "").replace(/\\s+/g, " ").trim()
+  }
   const rows = []
   document.querySelectorAll('tr[id^="CatalogItem_"]').forEach((row) => {
     let href = ""
@@ -49,7 +52,28 @@ export const PRO_CATALOG_ROWS_EVAL = `(() => {
       if (kind === "reserved") reserved = true
       if (kind === "sold") sold = true
     })
-    if (href) rows.push({ href, reserved, sold })
+    if (!href) return
+    const titleEl = row.querySelector("span.Title")
+    let title = titleEl ? text(titleEl) : ""
+    const bits = []
+    row.querySelectorAll("td").forEach((td) => {
+      const value = text(td)
+      if (value) bits.push(value)
+    })
+    const priceText =
+      bits.find((value) => /€/.test(value) && value !== title && !value.startsWith(title)) ||
+      bits.find((value) => /€/.test(value)) ||
+      ""
+    if (!title) {
+      title =
+        bits.find(
+          (value) =>
+            value !== priceText &&
+            !/^\\d{1,2}\\/\\d{1,2}\\/\\d{4}/.test(value) &&
+            !/^\\d+$/.test(value),
+        ) || ""
+    }
+    rows.push({ href, reserved, sold, title, priceText })
   })
   const info = document.querySelector(
     "tsl-pagination-actions .PaginationActions__info",
@@ -81,5 +105,21 @@ export const CLICK_NEXT_EVAL = `(() => {
     return false
   }
   next.click()
+  return true
+})()`
+
+/** First pager icon is the previous page. A lone Next icon is not a previous control. */
+export const CLICK_PREV_EVAL = `(() => {
+  const host = document.querySelector("tsl-pagination-actions")
+  if (!host) return false
+  const info = host.querySelector(".PaginationActions__info")
+  const text = (info && info.textContent ? info.textContent : "").replace(/\\s+/g, " ").trim()
+  const match = text.match(/(\\d+)\\s*-\\s*(\\d+)\\s*de\\s*(\\d+)/i)
+  if (!match || Number(match[1]) <= 1) return false
+  const icons = [...host.querySelectorAll("walla-icon.PaginationActions__action")]
+  if (icons.length < 2) return false
+  const prev = icons[0]
+  if (!prev || prev.classList.contains("PaginationActions__action--disabled")) return false
+  prev.click()
   return true
 })()`

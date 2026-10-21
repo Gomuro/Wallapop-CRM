@@ -2,16 +2,17 @@ import type { Page } from "playwright";
 
 import { wallapopItemUrlOrNull } from "../../../../lib/inventory/wallapop-item-url";
 import { log } from "../log";
+import { scrapeProActivos } from "../wallapop-monitor/pro-catalog";
 import {
   normalizePublishTitle,
   truncateSummary,
   type PublishedCatalogItem,
   type PublishLandingVerdict,
 } from "./types";
-import { collectProCatalogPages, proPagerHasMore, readProPager } from "./catalog-pager";
 
-const CATALOG_URL_POLL_MS = 150;
-const CATALOG_URL_TIMEOUT_MS = 8_000;
+const CATALOG_URL_POLL_MS = 1_000;
+/** Activos can still be the pre-publish table after the pager already matches. */
+const CATALOG_URL_TIMEOUT_MS = 45_000;
 
 /**
  * Pro catalog rows. Same host as the monitor (`tr[id^="CatalogItem_"]`).
@@ -210,25 +211,6 @@ type CatalogGrab = {
   scanned: number;
 };
 
-async function finishCatalogGrab(
-  page: Page,
-  wanted: { title: string; price: number },
-  pro: PublishedCatalogItem[],
-  classic: PublishedCatalogItem[],
-): Promise<CatalogGrab> {
-  if (pro.length > 0 && proPagerHasMore(await readProPager(page))) {
-    const all = await collectProCatalogPages(page, scrapeProCatalogItems);
-    const picked = pickUniqueCatalogItemUrl(all, wanted);
-    return { href: picked.href, reason: picked.reason, scanned: all.length };
-  }
-  if (pro.length > 0) {
-    const picked = pickUniqueCatalogItemUrl(pro, wanted);
-    return { href: picked.href, reason: picked.reason, scanned: pro.length };
-  }
-  const picked = pickUniqueCatalogItemUrl(classic, wanted);
-  return { href: picked.href, reason: picked.reason, scanned: classic.length };
-}
-
 export async function grabCatalogItemUrl(
   page: Page,
   wanted: { title: string; price: number },
@@ -236,14 +218,26 @@ export async function grabCatalogItemUrl(
 ): Promise<CatalogGrab> {
   const deadline = Date.now() + timeoutMs;
   let classic: PublishedCatalogItem[] = [];
-  let pro: PublishedCatalogItem[] = [];
+  let last: CatalogGrab = { href: null, reason: "none", scanned: 0 };
   while (true) {
-    pro = await scrapeProCatalogItems(page);
+    await dismissYuhuModal(page);
+    const pro = await scrapeProCatalogItems(page);
     if (pro.length > 0) {
-      const picked = pickUniqueCatalogItemUrl(pro, wanted);
-      if (picked.href) {
-        return { href: picked.href, reason: picked.reason, scanned: pro.length };
-      }
+      const activos = await scrapeProActivos(page);
+      const items = activos.rows.map((row) => ({
+        title: row.title,
+        href: row.href,
+        priceText: row.priceText,
+      }));
+      const picked = pickUniqueCatalogItemUrl(items, wanted);
+      last = { href: picked.href, reason: picked.reason, scanned: items.length };
+      log("info", "wallapop_publish_catalog_scan", {
+        rows: items.length,
+        total: activos.total,
+        complete: activos.complete,
+        reason: picked.reason,
+      });
+      if (picked.href || picked.reason === "ambiguous") return last;
     } else {
       classic = await scrapePublishedCatalogItems(page);
       const first = firstCatalogItemUrl(classic);
@@ -254,7 +248,8 @@ export async function grabCatalogItemUrl(
     if (Date.now() >= deadline) break;
     await page.waitForTimeout(CATALOG_URL_POLL_MS);
   }
-  return finishCatalogGrab(page, wanted, pro, classic);
+  if (last.scanned > 0) return last;
+  return { href: null, reason: "none", scanned: classic.length };
 }
 
 export async function dismissYuhuModal(page: Page): Promise<void> {
@@ -285,6 +280,5 @@ export async function resolveItemUrlAfterPublish(
       : "wallapop_publish_item_url_unresolved",
     { reason: grabbed.reason, href: grabbed.href, scanned: grabbed.scanned },
   );
-  await dismissYuhuModal(page);
   return wallapopItemUrlOrNull(grabbed.href);
 }

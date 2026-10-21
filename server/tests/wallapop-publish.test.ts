@@ -355,7 +355,7 @@ describe("pickUniqueCatalogItemUrl", () => {
     }
   })
 
-  it("waits on the first Pro page until the new row appears", async () => {
+  it("waits on the Activos page until the new row is in the table", async () => {
     const browser = await chromium.launch({ headless: true })
     try {
       const page = await browser.newPage()
@@ -368,7 +368,7 @@ describe("pickUniqueCatalogItemUrl", () => {
           </tr>
         </tbody></table>
         <tsl-pagination-actions>
-          <span class="PaginationActions__info">1 - 40 de 128</span>
+          <span class="PaginationActions__info">1 - 1 de 1</span>
           <walla-icon class="PaginationActions__action" id="next"></walla-icon>
         </tsl-pagination-actions>
       </body>`)
@@ -378,8 +378,10 @@ describe("pickUniqueCatalogItemUrl", () => {
           if (!rows) return
           rows.insertAdjacentHTML(
             "afterbegin",
-            '<tr id="CatalogItem_new"><td>Einhell Carro esparcidor manual</td><td>19,95 €</td><td><a href="https://es.wallapop.com/item/einhell-carro-esparcidor-manual-1312904303">foto</a></td></tr>',
+            '<tr id="CatalogItem_new"><td><span class="Title">Einhell Carro esparcidor manual</span></td><td>19,95 €</td><td><a href="https://es.wallapop.com/item/einhell-carro-esparcidor-manual-1312904303">foto</a></td></tr>',
           )
+          const info = document.querySelector(".PaginationActions__info")
+          if (info) info.textContent = "1 - 2 de 2"
         }, 350)
         document.getElementById("next")?.addEventListener("click", () => {
           document.body.dataset.paged = "1"
