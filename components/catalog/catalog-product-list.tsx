@@ -346,6 +346,9 @@ export function CatalogProductList({
         setItems((prev) => prev.filter((product) => !ids.includes(product.id)));
       }}
       onSelectAll={() => {
+        const accountId =
+          queueAccountId ?? displayed[0]?.accountStates?.[0]?.accountId ?? null;
+        if (accountId && !queueAccountId) setQueueAccountId(accountId);
         void selectEntireCatalog({
           selectingAll,
           inFlight,
@@ -356,7 +359,7 @@ export function CatalogProductList({
           total,
           query,
           extraProducts,
-          queueAccountId,
+          queueAccountId: accountId,
           setSelectingAll,
           setSelecting,
           setError,

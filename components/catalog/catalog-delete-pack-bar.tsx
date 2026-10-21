@@ -104,9 +104,7 @@ export function CatalogDeletePackBar({
           open={queue.open}
           onOpenChange={queue.onOpenChange}
           triggerLabel={
-            queue.accountName
-              ? `Cola · ${queue.accountName} (${queue.toQueue})`
-              : "Poner en cola"
+            queue.accountName ? `Cola (${queue.toQueue})` : "Poner en cola"
           }
           triggerClassName="h-12 w-full px-2 text-sm"
           triggerDisabled={queue.disabled}
@@ -139,6 +137,12 @@ export function CatalogDeletePackBar({
           onConfirm={remove.onConfirm}
         />
       </div>
+      {queue.accountName && queue.already > 0 ? (
+        <p className="text-center text-xs leading-snug text-muted-foreground">
+          {queue.already} no entran: ya publicados o reservados en{" "}
+          {queue.accountName}.
+        </p>
+      ) : null}
       <button type="button" className="h-11 text-sm font-semibold" onClick={onCancel}>
         Cancelar
       </button>
