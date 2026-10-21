@@ -56,20 +56,25 @@ async function applyReserved(
   }
 }
 
-async function applyMissing(
-  prisma: MonitorDb,
-  plan: MonitorPlan,
+/** One or many: keep URL, warehouse untouched. Idempotent if already MISSING. */
+export async function markListingsMissing(
+  listingIds: string[],
   accountId: string | null,
-): Promise<void> {
-  if (plan.toMissing.length === 0) return
+): Promise<number> {
+  if (listingIds.length === 0) return 0
+  const prisma = getPrisma()
+  if (!prisma) {
+    log("warn", "wallapop_monitor_apply_no_db")
+    return 0
+  }
   const rows = await prisma.productListing.findMany({
     where: {
-      id: { in: plan.toMissing },
+      id: { in: listingIds },
       status: { in: ["ACTIVE", "RESERVED"] },
     },
     select: { id: true, productId: true, externalUrl: true },
   })
-  if (rows.length === 0) return
+  if (rows.length === 0) return 0
   await prisma.productListing.updateMany({
     where: {
       id: { in: rows.map((row) => row.id) },
@@ -85,6 +90,14 @@ async function applyMissing(
       url: row.externalUrl,
     })
   }
+  return rows.length
+}
+
+async function applyMissing(
+  plan: MonitorPlan,
+  accountId: string | null,
+): Promise<void> {
+  await markListingsMissing(plan.toMissing, accountId)
 }
 
 async function applyClearedReserved(
@@ -116,6 +129,6 @@ export async function applyMonitorPlan(
   }
   await applySoldProducts(prisma, plan, accountId)
   await applyReserved(prisma, plan, accountId)
-  await applyMissing(prisma, plan, accountId)
+  await applyMissing(plan, accountId)
   await applyClearedReserved(prisma, plan)
 }
