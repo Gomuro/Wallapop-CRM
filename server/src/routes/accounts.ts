@@ -13,6 +13,7 @@ export {
   getAccountConnectionStatus,
 } from "./account-session"
 export { deleteAccount } from "./account-delete"
+export { dismissAccountRestriction } from "./account-restriction"
 export {
   getAccountAutopost,
   patchAccountAutopost,

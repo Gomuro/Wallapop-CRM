@@ -1,8 +1,11 @@
+import { chromePortForAccount } from "../account-chrome"
 import { getPrisma } from "../db"
 import { log } from "../log"
 import { markProductSoldTx } from "../product-sold"
 import { scheduleSiblingReserved } from "../sibling-reserve"
 import { scheduleSiblingSold } from "../sibling-eliminar"
+import { isCrmRemovalWorkerBusy } from "../wallapop-cdp"
+import { recordUnseenMisses } from "../wallapop-restriction"
 import type { MonitorPlan } from "./diff"
 
 type MonitorDb = NonNullable<ReturnType<typeof getPrisma>>
@@ -56,6 +59,18 @@ async function applyReserved(
   }
 }
 
+const MISSING_ROW_SELECT = {
+  id: true,
+  productId: true,
+  accountId: true,
+  status: true,
+  externalUrl: true,
+} as const
+
+async function crmWorkerBusyOn(accountId: string): Promise<boolean> {
+  return isCrmRemovalWorkerBusy(await chromePortForAccount(accountId))
+}
+
 /** One or many: keep URL, warehouse untouched. Idempotent if already MISSING. */
 export async function markListingsMissing(
   listingIds: string[],
@@ -72,7 +87,7 @@ export async function markListingsMissing(
       id: { in: listingIds },
       status: { in: ["ACTIVE", "RESERVED"] },
     },
-    select: { id: true, productId: true, externalUrl: true },
+    select: MISSING_ROW_SELECT,
   })
   if (rows.length === 0) return 0
   await prisma.productListing.updateMany({
@@ -82,6 +97,7 @@ export async function markListingsMissing(
     },
     data: { status: "MISSING" },
   })
+  await recordUnseenMisses(prisma, rows, crmWorkerBusyOn)
   for (const row of rows) {
     log("info", "wallapop_monitor_listing_missing", {
       accountId,

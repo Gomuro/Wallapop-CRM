@@ -16,6 +16,10 @@ import {
   WALLAPOP_CMP_ACCEPT_SELECTORS,
 } from "../wallapop-cdp"
 import { log } from "../log"
+import {
+  LoginSignalError,
+  REJECTED_CREDENTIALS_PATTERN,
+} from "../wallapop-restriction"
 
 const LOGIN_URL = "https://es.wallapop.com/login"
 
@@ -225,12 +229,27 @@ async function fillWallapopLoginForm(
   await submit.click()
 }
 
+async function detectRejectedCredentials(page: Page): Promise<boolean> {
+  return page
+    .getByText(REJECTED_CREDENTIALS_PATTERN)
+    .first()
+    .isVisible()
+    .catch(() => false)
+}
+
 async function resolveLoginOutcome(page: Page): Promise<BrowserLoginOutcome> {
   const outcome = await waitForLoginOutcome(page)
   if (outcome !== "FAILED") return outcome
   if (await detectRecaptcha(page)) {
-    throw new Error(
+    throw new LoginSignalError(
+      "LOGIN_RECAPTCHA",
       "Wallapop muestra reCAPTCHA. Resuélvelo manualmente en Chrome o reintenta más tarde.",
+    )
+  }
+  if (await detectRejectedCredentials(page)) {
+    throw new LoginSignalError(
+      "LOGIN_REJECTED",
+      "Wallapop rechaza el email o la contraseña. Revisa los datos.",
     )
   }
   throw new Error(

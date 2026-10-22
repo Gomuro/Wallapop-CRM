@@ -11,6 +11,7 @@ import {
   createAccount,
   deleteAccount,
   disconnectAccount,
+  dismissAccountRestriction,
   getAccountConnectionStatus,
   getDefaultAccount,
   listAccounts,
@@ -103,6 +104,7 @@ catalog.get("/accounts/:id/autopost", getAccountAutopost)
 catalog.patch("/accounts/:id/autopost", patchAccountAutopost)
 catalog.post("/accounts/:id/autopost/start", startAccountAutopost)
 catalog.post("/accounts/:id/autopost/stop", stopAccountAutopost)
+catalog.post("/accounts/:id/restriction/dismiss", dismissAccountRestriction)
 catalog.delete("/accounts/:id", deleteAccount)
 catalog.get("/accounts/status", getAccountConnectionStatus)
 catalog.post("/accounts/connect", connectAccount)

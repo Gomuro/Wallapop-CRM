@@ -5,6 +5,7 @@ import { listingJsonSelect, toListingJson } from "../lib/listing-json"
 import { log, serializeError } from "../lib/log"
 import { isBrowserBusyError, isPublishAbortedError } from "../lib/wallapop-cdp"
 import { publishWallapopInBrowser, WallapopPublishError } from "../lib/wallapop-publish"
+import { noteForcedSignout } from "./product-publish-restriction"
 import {
   extraUploadFields,
   uploadFieldsFromCategoryAttributes,
@@ -304,6 +305,7 @@ export async function executeLivePublish(
     return await verifyProductPublish(prepared, result)
   } catch (error) {
     applyPublishErrorFlags(error, flags)
+    await noteForcedSignout(prepared, error)
     return mapPublishCatch(error, productId, prepared.accountId, flags.postedOnWallapop)
   } finally {
     await revertPublishClaimIfNeeded({

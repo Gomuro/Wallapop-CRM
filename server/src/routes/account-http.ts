@@ -5,6 +5,7 @@ import type { PrismaClient } from "../../generated/prisma/client"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import { loadAutopostStatus } from "../lib/wallapop-autopost"
+import { restrictionBlockMessage } from "../lib/wallapop-restriction"
 import { listWorkerJobs } from "../lib/wallapop-worker-jobs"
 import type { WallapopSessionSnapshot } from "../lib/wallapop-session"
 
@@ -23,6 +24,8 @@ type AccountRowPlace = {
   wallapopEmail: string | null
   autopostIntervalMs: number | null
   autopostEnabled: boolean
+  restrictionSuspectedAt: Date | null
+  restrictionReason: string | null
 }
 
 export type AccountRow = AccountRowIdentity & AccountRowPlace
@@ -34,6 +37,21 @@ export function requirePrisma(res: Response): PrismaClient | null {
     return null
   }
   return prisma
+}
+
+/** Autopost must not restart while the account is suspected of a restriction. */
+export function restrictionBlocksStart(
+  res: Response,
+  account: { restrictionSuspectedAt: Date | null; restrictionReason: string | null },
+): boolean {
+  if (!account.restrictionSuspectedAt) return false
+  sendError(
+    res,
+    409,
+    "RESTRICTION_SUSPECTED",
+    restrictionBlockMessage(account.restrictionReason),
+  )
+  return true
 }
 
 export function rejectedZod(res: Response, error: unknown): boolean {
@@ -72,6 +90,8 @@ export function toAccountJson(row: AccountRow) {
     autopostIntervalMs: row.autopostIntervalMs,
     autopostEnabled: row.autopostEnabled,
     wallapopEmail: row.wallapopEmail,
+    restrictionSuspectedAt: row.restrictionSuspectedAt?.toISOString() ?? null,
+    restrictionReason: row.restrictionReason,
     createdAt: row.createdAt.toISOString(),
     updatedAt: row.updatedAt.toISOString(),
   }

@@ -13,6 +13,7 @@ import { recoverStalePostingListings } from "../wallapop-posting-watchdog"
 import { runProductPublish } from "../../routes/product-publish"
 import { isAutopostLivePublishEnabled } from "./interval"
 import { pickNextAutopostListing, queueHeldForReserveWhere } from "./pick"
+import { isRestrictionSuspected } from "../wallapop-restriction"
 import { isDefaultAccountAutopostEnabled } from "./status"
 
 async function recoverStalePostingOnTick(prisma: PrismaClient): Promise<void> {
@@ -47,6 +48,10 @@ async function autopostTickGates(
   const accountId = await findDefaultAccountId(prisma)
   if (!accountId) {
     log("warn", "wallapop_autopost_skip_no_account")
+    return null
+  }
+  if (await isRestrictionSuspected(prisma, accountId)) {
+    log("warn", "wallapop_autopost_skip_restriction", { accountId })
     return null
   }
   return accountId
@@ -149,9 +154,13 @@ async function skipAccountAutopost(
   if (!isAutopostLivePublishEnabled()) return true
   const account = await prisma.account.findUnique({
     where: { id: accountId },
-    select: { autopostEnabled: true },
+    select: { autopostEnabled: true, restrictionSuspectedAt: true },
   })
   if (!account?.autopostEnabled) return true
+  if (account.restrictionSuspectedAt) {
+    log("warn", "wallapop_autopost_skip_restriction", { accountId })
+    return true
+  }
   if (peekWallapopSession(accountId).status !== "ACTIVE") {
     log("info", "wallapop_autopost_skip_session", {
       accountId,

@@ -14,7 +14,13 @@ import {
 } from "../lib/wallapop-autopost"
 import { abortInFlightPublish } from "../lib/wallapop-cdp"
 import { peekWallapopSession } from "../lib/wallapop-session"
-import { accountIdFrom, rejectedZod, requirePrisma, sendAccountPayload } from "./account-http"
+import {
+  accountIdFrom,
+  rejectedZod,
+  requirePrisma,
+  restrictionBlocksStart,
+  sendAccountPayload,
+} from "./account-http"
 
 async function loadAccount(res: Response, accountId: string) {
   const prisma = requirePrisma(res)
@@ -83,6 +89,7 @@ export async function startAccountAutopost(req: Request, res: Response) {
   }
   const loaded = await loadAccount(res, accountId)
   if (!loaded) return
+  if (restrictionBlocksStart(res, loaded.account)) return
   const updated = await loaded.prisma.account.update({
     where: { id: loaded.account.id },
     data: { autopostEnabled: true },

@@ -97,6 +97,7 @@ export async function selectConsumerGoods(
     throw new WallapopPublishError(
       "consumer_goods",
       WALLAPOP_LOGGED_OUT_MESSAGE,
+      { forcedSignout: true },
     );
   }
   if (choice === "ready") return;

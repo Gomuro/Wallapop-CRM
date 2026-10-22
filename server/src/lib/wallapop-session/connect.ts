@@ -9,7 +9,9 @@ import {
   quitChromeIfNoWorkerSlots,
   setKeepChromeWarm,
 } from "../wallapop-cdp"
-import { log } from "../log"
+import { getPrisma } from "../db"
+import { log, serializeError } from "../log"
+import { noteLoginFailure } from "../wallapop-restriction"
 import { parseChromeProxy } from "../../../../lib/accounts/chrome-proxy"
 import { writeChromeProxyForAccount } from "../account-chrome-proxy"
 import { snapshotWithChromeProxy } from "./proxy"
@@ -105,6 +107,20 @@ function finishConnectFailure(
   return { ok: false, session: snapshotOf(row), message, code: "CONNECT_FAILED" }
 }
 
+async function noteLoginSignal(
+  accountId: string,
+  email: string,
+  error: unknown,
+): Promise<void> {
+  const prisma = getPrisma()
+  if (!prisma) return
+  try {
+    await noteLoginFailure(prisma, accountId, email, error)
+  } catch (caught) {
+    log("warn", "wallapop_restriction_note_failed", serializeError(caught))
+  }
+}
+
 export async function connectWallapopSession(input: {
   email: string
   password: string
@@ -135,6 +151,7 @@ export async function connectWallapopSession(input: {
         session: await snapshotWithChromeProxy(target.accountId, snapshotOf(row)),
       }
     }
+    await noteLoginSignal(target.accountId, input.email, error)
     const failed = finishConnectFailure(error, prev, row)
     return {
       ...failed,

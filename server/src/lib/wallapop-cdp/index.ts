@@ -53,6 +53,7 @@ export {
   isPublishAbortedError,
   PublishAbortedError,
   resetWallapopPublishAbortForTests,
+  isCrmRemovalWorkerBusy,
   runWithBrowserBusy,
   waitForSessionSlotToClear,
   throwIfPublishAborted,

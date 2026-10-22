@@ -125,6 +125,12 @@ export function isBrowserSessionBusy(port = firstCdpPort()): boolean {
   return desk(port).workerSlots.has("session")
 }
 
+/** Eliminar / Vendido / Reservar are removing or changing ads on this Chrome. */
+export function isCrmRemovalWorkerBusy(port = firstCdpPort()): boolean {
+  const slots = desk(port).workerSlots
+  return slots.has("eliminar") || slots.has("sold") || slots.has("reserve")
+}
+
 export function isAnyWorkerSlotBusy(port = firstCdpPort()): boolean {
   return desk(port).workerSlots.size > 0
 }

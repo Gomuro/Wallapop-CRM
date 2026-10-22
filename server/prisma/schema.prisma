@@ -71,6 +71,9 @@ model Account {
   chromeSlot   Int             @unique @map("chrome_slot")
   // Operator Chrome proxy (host:port:user:pass). Source of truth for spawn.
   chromeProxy  String?         @map("chrome_proxy")
+  // Suspicion only, never a verdict. Set by wallapop-restriction signals; cleared by the operator.
+  restrictionSuspectedAt DateTime? @map("restriction_suspected_at")
+  restrictionReason      String?   @map("restriction_reason")
   listings     ProductListing[]
   soldProducts Product[]        @relation("ProductSoldBy")
   createdAt    DateTime         @default(now()) @map("created_at")
@@ -193,6 +196,8 @@ model ProductListing {
   shippingEnabled    Boolean       @default(true) @map("shipping_enabled")
   shippingUpToKg     Int?          @map("shipping_up_to_kg")
   lastPostedAt       DateTime?     @map("last_posted_at")
+  // When the monitor found the ad gone without a CRM worker acting on it.
+  missingAt          DateTime?     @map("missing_at")
   lastEditedAt       DateTime?     @map("last_edited_at")
   postingAttempts    Int           @default(0) @map("posting_attempts")
   lastPublishError   String?       @map("last_publish_error")

@@ -17,6 +17,12 @@ export async function deleteAccountCard(id: string): Promise<void> {
   })
 }
 
+export async function dismissAccountRestriction(id: string): Promise<void> {
+  await apiClientFetch(`/accounts/${encodeURIComponent(id)}/restriction/dismiss`, {
+    method: "POST",
+  })
+}
+
 export async function createAccountCard(name: string): Promise<ApiAccountCard> {
   const body = await apiClientFetch<{ account: ApiAccountCard }>("/accounts", {
     method: "POST",

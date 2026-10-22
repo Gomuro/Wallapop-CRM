@@ -111,10 +111,17 @@ export class WallapopPublishError extends Error {
   keepBrowser: boolean;
   /** True: POSTING → FAILED with this message. The warehouse product stays. */
   failListing: boolean;
+  /** True: Wallapop logged the account out mid-publish (restriction hint). */
+  forcedSignout: boolean;
   constructor(
     step: PublishStep,
     message: string,
-    opts?: { keepClaim?: boolean; keepBrowser?: boolean; failListing?: boolean },
+    opts?: {
+      keepClaim?: boolean;
+      keepBrowser?: boolean;
+      failListing?: boolean;
+      forcedSignout?: boolean;
+    },
   ) {
     super(message);
     this.name = "WallapopPublishError";
@@ -122,6 +129,7 @@ export class WallapopPublishError extends Error {
     this.keepClaim = opts?.keepClaim === true;
     this.keepBrowser = opts?.keepBrowser === true;
     this.failListing = opts?.failListing === true || this.keepBrowser;
+    this.forcedSignout = opts?.forcedSignout === true;
   }
 }
 

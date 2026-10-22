@@ -10,6 +10,7 @@ import { ConfirmAction } from "@/components/confirm-action"
 import { AutopostIntervalForm } from "@/components/accounts/autopost-interval-form"
 import { ConnectAccountForm } from "@/components/accounts/connect-account-form"
 import { DevWatchChrome } from "@/components/accounts/dev-watch-chrome"
+import { RestrictionWarning } from "@/components/accounts/restriction-warning"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
 import { PageContainer } from "@/components/shell/page-container"
@@ -74,6 +75,9 @@ function AccountSummary({ account }: { account: ApiAccountCard }) {
         </CardHeader>
         <CardContent className="text-sm text-muted-foreground">
           {autopostLine(account)}
+          {account.restrictionSuspectedAt ? (
+            <span className="block text-destructive">Posible restricción</span>
+          ) : null}
         </CardContent>
       </Card>
     </Link>
@@ -154,6 +158,7 @@ function AccountBody({ account }: { account: ApiAccountCard }) {
         ) : null}
       </CardHeader>
       <CardContent>
+        <RestrictionWarning account={account} />
         <ChromePlace account={account} />
         {process.env.NODE_ENV === "development" ? (
           <DevWatchChrome accountId={account.id} />

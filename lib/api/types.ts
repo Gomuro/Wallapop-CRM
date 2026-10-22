@@ -154,9 +154,15 @@ export type ApiDefaultAccountSchedule = {
   autopostEnabled?: boolean
 }
 
+export type ApiDefaultAccountRestriction = {
+  restrictionSuspectedAt?: string | null
+  restrictionReason?: string | null
+}
+
 export type ApiDefaultAccount = ApiDefaultAccountIdentity &
   ApiDefaultAccountPlace &
-  ApiDefaultAccountSchedule
+  ApiDefaultAccountSchedule &
+  ApiDefaultAccountRestriction
 
 export type ApiAutopostIntervalSource = "account" | "env" | "default"
 
