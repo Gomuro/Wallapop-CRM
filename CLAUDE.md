@@ -7,7 +7,7 @@
 2. Після кожної зміни в `app/`, `components/`, `lib/`, `server/src/`, `proxy.ts` запускай лише по змінених файлах: `npx eslint <шляхи файлів>`. Не запускай eslint по всьому репозиторію.
 3. Виправляй усі warnings і errors у рядках, які ти написав чи змінив, за підказкою рядка й правила з виводу лінтера. Наявні warnings в інших місцях не чіпай, якщо це не твоє завдання.
 4. Не лінтуй і не редагуй згенероване та сторонні файли: `server/generated`, `lib/generated`, `tmp`, `profiles`, `node_modules`, `components/ui`, `.next`.
-5. Перед завершенням для змін на сервері: `npx tsc --noEmit -p server` і `npm run test:api`. Окремо скажи, що падало ще до тебе, а що нове.
+5. Перед завершенням для змін на сервері: `npx tsc --noEmit -p server` і `npm run test:api`. Окремо скажи, що падало ще до тебе, а що нове. Для змін у `app/`, `components/`, `lib/` додатково запусти `npx tsc --noEmit -p .` (серверний `-p server` не перевіряє `components/`) і, коли можна без секретів, `npm run build`.
 6. Код публікації заморожено, див. розділ «Publish freeze» нижче. Правила 2 і 3 (eslint, SOLID) на заморожені файли не поширюються.
 
 ## Publish freeze

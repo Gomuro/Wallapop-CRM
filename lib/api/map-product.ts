@@ -96,6 +96,10 @@ function mapAccountGlances(
   })
 }
 
+function asTextOrNull(value: unknown): string | null {
+  return typeof value === "string" && value.trim() ? value : null
+}
+
 function asListingStatus(value: unknown): ListingStatusRead {
   return typeof value === "string" && LISTING_STATUSES.has(value as ListingStatusRead)
     ? (value as ListingStatusRead)
@@ -139,6 +143,7 @@ export function mapApiListing(
       typeof listing.updatedAt === "string" && listing.updatedAt.trim()
         ? listing.updatedAt
         : null,
+    lastPublishError: asTextOrNull(listing.lastPublishError),
     shippingEnabled: listing.shippingEnabled !== false,
   }
 }

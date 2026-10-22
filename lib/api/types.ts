@@ -41,6 +41,7 @@ export type ApiListing = {
   isDefault?: boolean
   lastPostedAt: string | null
   updatedAt?: string | null
+  lastPublishError?: string | null
 }
 
 export type ApiProductIdentity = {

@@ -20,6 +20,8 @@ export function toListingJson(row: {
   accountId: string
   lastPostedAt: Date | null
   updatedAt?: Date | null
+  /** Only present when the query selected it (product list and detail). */
+  lastPublishError?: string | null
 }) {
   return {
     id: row.id,
@@ -31,5 +33,8 @@ export function toListingJson(row: {
     accountId: row.accountId,
     lastPostedAt: row.lastPostedAt?.toISOString() ?? null,
     updatedAt: row.updatedAt?.toISOString() ?? null,
+    ...(row.lastPublishError !== undefined
+      ? { lastPublishError: row.lastPublishError }
+      : {}),
   }
 }

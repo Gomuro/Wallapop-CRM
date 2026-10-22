@@ -29,6 +29,7 @@ export type InventoryListing = {
   lastPostedAt: string | null
   updatedAt?: string | null
   shippingEnabled: boolean
+  lastPublishError?: string | null
 }
 
 export type InventoryProductIdentity = {
