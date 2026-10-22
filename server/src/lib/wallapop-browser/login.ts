@@ -16,10 +16,7 @@ import {
   WALLAPOP_CMP_ACCEPT_SELECTORS,
 } from "../wallapop-cdp"
 import { log } from "../log"
-import {
-  LoginSignalError,
-  REJECTED_CREDENTIALS_PATTERN,
-} from "../wallapop-restriction"
+import { classifyLoginFailure } from "./login-signals"
 
 const LOGIN_URL = "https://es.wallapop.com/login"
 
@@ -66,11 +63,6 @@ export const SELECTORS = {
     'walla-button[text="Verificar"]',
   ],
   cookieAccept: [...WALLAPOP_CMP_ACCEPT_SELECTORS],
-  recaptcha: [
-    'iframe[src*="recaptcha"]',
-    "#id-recaptcha-token",
-    ".g-recaptcha",
-  ],
   loggedIn: [
     'img[data-testid="user-avatar"]',
     '[data-testid="section-inview-feed"]',
@@ -115,10 +107,6 @@ export async function detectLoggedIn(page: Page): Promise<boolean> {
     )
   })
   return hasSession
-}
-
-async function detectRecaptcha(page: Page): Promise<boolean> {
-  return (await firstVisible(page, SELECTORS.recaptcha, 1_500)) != null
 }
 
 async function clickEmailLoginEntry(page: Page): Promise<void> {
@@ -229,29 +217,11 @@ async function fillWallapopLoginForm(
   await submit.click()
 }
 
-async function detectRejectedCredentials(page: Page): Promise<boolean> {
-  return page
-    .getByText(REJECTED_CREDENTIALS_PATTERN)
-    .first()
-    .isVisible()
-    .catch(() => false)
-}
-
 async function resolveLoginOutcome(page: Page): Promise<BrowserLoginOutcome> {
   const outcome = await waitForLoginOutcome(page)
   if (outcome !== "FAILED") return outcome
-  if (await detectRecaptcha(page)) {
-    throw new LoginSignalError(
-      "LOGIN_RECAPTCHA",
-      "Wallapop muestra reCAPTCHA. Resuélvelo manualmente en Chrome o reintenta más tarde.",
-    )
-  }
-  if (await detectRejectedCredentials(page)) {
-    throw new LoginSignalError(
-      "LOGIN_REJECTED",
-      "Wallapop rechaza el email o la contraseña. Revisa los datos.",
-    )
-  }
+  const signal = await classifyLoginFailure(page)
+  if (signal) throw signal
   throw new Error(
     "No se pudo completar el login de Wallapop. Revisa email, contraseña o el DOM.",
   )
