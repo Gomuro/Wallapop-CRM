@@ -87,6 +87,31 @@ describe("categoryBreadcrumbLabelsEs", () => {
     ).resolves.toEqual(["Moda y accesorios", "Ropa"])
   })
 
+  it("keeps Motor y accesorios when that root is in the consumer-goods picker", async () => {
+    const rows: CategoryRow[] = [
+      {
+        wallapopId: 12800,
+        nameEs: "Motor y accesorios",
+        verticalId: "consumer_goods",
+      },
+      {
+        wallapopId: 10167,
+        nameEs: "Recambios de coches y furgonetas",
+        verticalId: null,
+      },
+      { wallapopId: 10328, nameEs: "Accesorios", verticalId: null },
+    ]
+    await expect(
+      categoryBreadcrumbLabelsEs(prismaWith("12800/10167/10328/", rows), "cat", {
+        consumerGoodsPublish: true,
+      }),
+    ).resolves.toEqual([
+      "Motor y accesorios",
+      "Recambios de coches y furgonetas",
+      "Accesorios",
+    ])
+  })
+
   it("strips a path that is only excluded roots", async () => {
     const rows: CategoryRow[] = [
       { wallapopId: 100, nameEs: "Coches", verticalId: "cars" },

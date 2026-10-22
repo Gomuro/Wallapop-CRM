@@ -15,6 +15,7 @@ import { uniquifyPublishPhotos } from "../image-unique/run";
 import { log } from "../log";
 import { categoryPickerStillEmpty, categorySectionVisible } from "./category";
 import { logPublishStep, snapshotPublishForm } from "./debug";
+import { ensureEstado, fillPriceIfShown } from "./fields";
 import { fillPublishForm } from "./form";
 import {
   clickEnabledContinuar,
@@ -28,6 +29,7 @@ import {
   PUBLISH_SELECTORS,
   UPLOAD_URL,
   WallapopPublishError,
+  estadoLabel,
   truncateSummary,
   type PublishWallapopInput,
   type PublishWallapopResult,
@@ -201,9 +203,13 @@ async function finalButtonVisible(page: Page): Promise<boolean> {
   return texts.some((t) => FINAL_RE.test(t));
 }
 
-export async function advanceUntilPublicar(page: Page): Promise<boolean> {
+export async function advanceUntilPublicar(
+  page: Page,
+  beforeRound?: () => Promise<void>,
+): Promise<boolean> {
   for (let round = 0; round < 14; round++) {
     throwIfPublishAborted();
+    if (beforeRound) await beforeRound();
     if (await finalButtonVisible(page)) {
       logPublishStep("before_publicar", page, {
         phase: "publicar_visible",
@@ -278,7 +284,10 @@ export async function runPublishAfterAttach(
   const summaryText = await fillSummary(page, input, mark);
   await uploadPhotos(page, input, mark);
   const filled = await fillPublishForm(page, input, summaryText, mark);
-  const reached = await advanceUntilPublicar(page);
+  const reached = await advanceUntilPublicar(page, async () => {
+    await ensureEstado(page, estadoLabel(input.condition), { waitMs: 0 });
+    await fillPriceIfShown(page, input.price, { logAbsent: false });
+  });
   if (!reached) await throwIfPublicarMissing(page);
   return finishPublishOrDryRun({
     page,

@@ -14,6 +14,12 @@ export function normalizeCategoryLabel(label: string): string {
   return label.replace(/\s+/g, " ").trim();
 }
 
+/** Exact row. "Motor y accesorios" is not "Accesorios"; "Sólo seleccionar …" is not the parent. */
+export function optionListHasLabel(options: readonly string[], label: string): boolean {
+  const wanted = normalizeCategoryLabel(label);
+  return Boolean(wanted) && options.some((row) => normalizeCategoryLabel(row) === wanted);
+}
+
 const NORM_LABEL_FN = `function normLabel(s) {
   return (s || "").replace(/\\s+/g, " ").trim();
 }`;
@@ -70,16 +76,40 @@ export async function readCategoryMenu(page: Page): Promise<CategoryMenu> {
   })()`)) as CategoryMenu;
 }
 
-export function sameOptionList(left: string[], right: string[]): boolean {
+export function sameOptionList(left: readonly string[], right: readonly string[]): boolean {
   return left.join("\n") === right.join("\n");
 }
 
-/** Virtual lists only render the rows on screen. Scroll until the label is in the DOM. */
+/** A parent click moved into the next list. A closed menu is not that. */
+export function parentMenuAdvanced(
+  before: readonly string[],
+  after: readonly string[],
+): boolean {
+  return after.length > 0 && !sameOptionList(before, after);
+}
+
+const RESET_CATEGORY_MENU_SCROLL = `(() => {
+  ${VISIBLE_LISTBOX_FN}
+  const listbox = visibleListbox();
+  if (!listbox) return;
+  let node = listbox;
+  while (node && node !== document.body) {
+    if (node.scrollHeight > node.clientHeight + 8) {
+      node.scrollTop = 0;
+      return;
+    }
+    node = node.parentElement;
+  }
+  listbox.scrollTop = 0;
+})()`;
+
+/** Virtual lists only render the rows on screen. Start at the top, then scroll down. */
 export async function scrollMenuForLabel(page: Page, label: string): Promise<boolean> {
+  await page.evaluate(RESET_CATEGORY_MENU_SCROLL);
+  await page.waitForTimeout(100);
   for (let step = 0; step < 24; step += 1) {
     const menu = await readCategoryMenu(page);
-    const wanted = normalizeCategoryLabel(label);
-    if (menu.options.some((row) => normalizeCategoryLabel(row) === wanted)) {
+    if (optionListHasLabel(menu.options, label)) {
       return true;
     }
     const moved = (await page.evaluate(`(() => {
@@ -261,13 +291,16 @@ export async function openCategoryPicker(page: Page): Promise<void> {
   await page.waitForTimeout(900);
 }
 
-/** Parent rows must change the open list. The leaf must land on the closed control. */
+/** Parent rows must open the next non-empty list. The leaf must land on the closed control. */
 export async function clickCategoryOption(
   page: Page,
   label: string,
   leaf: string,
 ): Promise<boolean> {
   for (let attempt = 0; attempt < 3; attempt += 1) {
+    if (!(await categoryDropdownOpen(page))) {
+      await openCategoryPicker(page);
+    }
     if (!(await scrollMenuForLabel(page, label))) return false;
     const before = await readCategoryMenu(page);
     const via = attempt === 0 ? "mouse" : "host";
@@ -276,7 +309,8 @@ export async function clickCategoryOption(
     while (Date.now() < deadline) {
       const after = await readCategoryMenu(page);
       if (label === leaf && categoryLeafChosen(before, after, leaf)) return true;
-      if (label !== leaf && !sameOptionList(before.options, after.options)) return true;
+      if (label !== leaf && parentMenuAdvanced(before.options, after.options)) return true;
+      if (after.options.length === 0) break;
       await page.waitForTimeout(150);
     }
   }

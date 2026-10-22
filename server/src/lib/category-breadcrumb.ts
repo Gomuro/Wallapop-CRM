@@ -1,17 +1,21 @@
 import type { PrismaClient } from "../../generated/prisma/client";
 
-/** Roots that never appear in consumer-goods upload picker (motor, jobs, services, …). */
+/**
+ * Roots the consumer-goods upload list does not show.
+ * Motor y accesorios (12800) and Motos (14000) are consumer_goods and do appear;
+ * they stay when their vertical says so. Coches, jobs and services do not.
+ */
 const CONSUMER_UPLOAD_EXCLUDED_ROOTS = new Set([
   100, // Coches
-  14000, // Motos
-  12800, // Motor y accesorios
+  14000, // Motos, unless vertical is consumer_goods
+  12800, // Motor y accesorios, unless vertical is consumer_goods
   200, // Inmobiliaria
   21000, // Empleo
   13200, // Servicios
 ]);
 
 export type CategoryBreadcrumbOptions = {
-  /** Trim path for «Algo que ya no necesito» upload (no Coches/Motor in picker). */
+  /** Trim path for «Algo que ya no necesito» upload (no Coches/jobs/services). */
   consumerGoodsPublish?: boolean;
 };
 
@@ -43,7 +47,8 @@ function trimConsumerGoodsPath(
   const trimmed = wallapopIds.slice(start);
   while (
     trimmed.length > 0 &&
-    CONSUMER_UPLOAD_EXCLUDED_ROOTS.has(trimmed[0]!)
+    CONSUMER_UPLOAD_EXCLUDED_ROOTS.has(trimmed[0]!) &&
+    verticalById.get(trimmed[0]!) !== "consumer_goods"
   ) {
     trimmed.shift();
   }

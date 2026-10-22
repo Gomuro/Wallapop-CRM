@@ -83,6 +83,7 @@ function relayConnectHeaders(input: {
   upstreamSocket: Socket
   clientSocket: Duplex
   up: ProxyUpstream
+  target: string
   onData: (chunk: Buffer) => void
 }) {
   const end = headerEndIndex(input.buf)
@@ -103,6 +104,7 @@ function relayConnectHeaders(input: {
     upstreamHost: input.up.host,
     upstreamPort: input.up.port,
     status: code,
+    target: input.target,
   })
   input.clientSocket.write(`HTTP/1.1 ${code} Proxy Error\r\nConnection: close\r\n\r\n`)
   input.clientSocket.end()
@@ -128,7 +130,7 @@ function openConnectTunnel(input: {
     let buf = Buffer.alloc(0)
     const onData = (chunk: Buffer) => {
       buf = Buffer.concat([buf, chunk])
-      relayConnectHeaders({ buf, upstreamSocket, clientSocket, up, onData })
+      relayConnectHeaders({ buf, upstreamSocket, clientSocket, up, target, onData })
     }
     upstreamSocket.on("data", onData)
   })

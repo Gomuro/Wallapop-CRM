@@ -7,6 +7,7 @@ import {
   clickCategoryOption,
   normalizeCategoryLabel,
   openCategoryPicker,
+  optionListHasLabel,
   readCategoryMenu,
 } from "./category-menu";
 import { PUBLISH_CATEGORY, WallapopPublishError } from "./types";
@@ -44,10 +45,13 @@ async function categoryAlreadySet(page: Page, leaf: string): Promise<boolean> {
   return controlHasLeaf(menu.control, leaf) && !(await categoryPickerStillEmpty(page));
 }
 
+/** One click only when this list already shows that exact leaf. Do not scroll the roots looking for it. */
 async function selectCategoryLeafSuggested(
   page: Page,
   leaf: string,
 ): Promise<boolean> {
+  const menu = await readCategoryMenu(page);
+  if (!optionListHasLabel(menu.options, leaf)) return false;
   return clickCategoryOption(page, leaf, leaf);
 }
 
@@ -61,15 +65,22 @@ async function selectCategoryBreadcrumb(
       await openCategoryPicker(page);
     }
     const clicked = await clickCategoryOption(page, label, leaf);
+    const menu = await readCategoryMenu(page);
     if (!clicked) {
-      const menu = await readCategoryMenu(page);
       log("warn", "wallapop_publish_category_click_miss", {
         label,
         leafId: menu.leafId,
         control: menu.control,
         options: menu.options,
       });
-    } else if (normalizeCategoryLabel(label) === normalizeCategoryLabel(leaf)) {
+      return false;
+    }
+    log("info", "wallapop_publish_category_click", {
+      label,
+      leafId: menu.leafId,
+      options: menu.options,
+    });
+    if (normalizeCategoryLabel(label) === normalizeCategoryLabel(leaf)) {
       return true;
     }
     await page.waitForTimeout(400);
@@ -139,7 +150,8 @@ async function pickCategoryOnForm(
     leafId: opened.leafId,
     control: opened.control,
   });
-  if (await selectCategoryLeafSuggested(page, leaf)) {
+  // A longer path is walked from the root. The pinned suggestion stays unless it is our only label.
+  if (labels.length === 1 && (await selectCategoryLeafSuggested(page, leaf))) {
     await logCategoryDone(page, leaf, "leaf_suggested");
     return;
   }

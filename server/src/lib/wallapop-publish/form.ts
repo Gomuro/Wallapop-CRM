@@ -7,7 +7,7 @@ import { closeOpenDropdowns } from "./dropdown";
 import { ensureEnvioToggle } from "./envio";
 import {
   ensureEstado,
-  fillPrice,
+  fillPriceIfShown,
   fillPublishDescription,
   fillPublishTitle,
   readPriceAmount,
@@ -38,7 +38,7 @@ async function fillCoreFormFields(
   await fillPublishDescription(page, descriptionText);
   logPublishStep("form", page, { phase: "after_title_description" });
   await ensureEstado(page, estadoLabel(input.condition));
-  await fillPrice(page, input.price);
+  await fillPriceIfShown(page, input.price);
   logPublishStep("form", page, { phase: "after_estado_price" });
   await ensureMarcaIfShown(page, input.brand);
   await ensureExtraUploadFields(
@@ -124,9 +124,7 @@ export async function fillPublishForm(
     input.heightCm,
   );
   await clickMainText(page, "No lo es");
-  if (!(await readPriceAmount(page))) {
-    await fillPrice(page, input.price);
-  }
+  await fillPriceIfShown(page, input.price);
   await logFormBeforeContinuar(page, input, weightBandLabel);
   return { descriptionText, weightBandLabel };
 }

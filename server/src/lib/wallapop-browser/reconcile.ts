@@ -194,10 +194,21 @@ export async function classifyOwnedSessionWindow(
   let keepFor2fa = false
   try {
     log("info", "wallapop_session_worker_probe_nav", { to: PROBE_URL })
-    await page.goto(PROBE_URL, {
-      waitUntil: "domcontentloaded",
-      timeout: NAV_TIMEOUT_MS,
-    })
+    try {
+      await page.goto(PROBE_URL, {
+        waitUntil: "domcontentloaded",
+        timeout: NAV_TIMEOUT_MS,
+      })
+    } catch (error) {
+      const message = error instanceof Error ? error.message : String(error)
+      if (!/ERR_TUNNEL|ERR_PROXY|ERR_CONNECTION/.test(message)) throw error
+      log("warn", "wallapop_session_worker_probe_retry", { message })
+      await page.waitForTimeout(2_000)
+      await page.goto(PROBE_URL, {
+        waitUntil: "domcontentloaded",
+        timeout: NAV_TIMEOUT_MS,
+      })
+    }
     await dismissWallapopConsent(page)
     const classified = await classifyReconcilePage(page)
     if (classified === "REQUIRES_2FA") {

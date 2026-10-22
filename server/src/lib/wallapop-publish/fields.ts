@@ -178,9 +178,31 @@ async function fillPriceViaKeyboard(
   return (await readPriceAmount(page)) === value;
 }
 
+const PRICE_FIELD = "#price_amount, input[name=price_amount]";
+
+async function priceFieldVisible(page: Page): Promise<boolean> {
+  const el = page.locator(PRICE_FIELD).first();
+  if ((await el.count()) === 0) return false;
+  return el.isVisible().catch(() => false);
+}
+
+/** This upload step has no price box. A later Continuar may show it. */
+export async function fillPriceIfShown(
+  page: Page,
+  price: number,
+  options?: { logAbsent?: boolean },
+): Promise<void> {
+  if (!(await priceFieldVisible(page))) {
+    if (options?.logAbsent !== false) log("info", "wallapop_publish_price_absent");
+    return;
+  }
+  if ((await readPriceAmount(page)).trim()) return;
+  await fillPrice(page, price);
+}
+
 export async function fillPrice(page: Page, price: number): Promise<void> {
   const value = String(price);
-  const el = page.locator("#price_amount, input[name=price_amount]").first();
+  const el = page.locator(PRICE_FIELD).first();
   try {
     await el.waitFor({ state: "visible", timeout: 15_000 });
   } catch {
@@ -221,12 +243,25 @@ async function clickEstadoOption(page: Page, label: string): Promise<boolean> {
   return clickFieldDropdownOption(page, "condition", label);
 }
 
-export async function ensureEstado(page: Page, label: string): Promise<void> {
-  await page
-    .locator("#condition")
-    .first()
-    .waitFor({ state: "attached", timeout: 12_000 })
-    .catch(() => {});
+/** `waitMs: 0` only checks the DOM. The field can appear after the next Continuar. */
+export async function ensureEstado(
+  page: Page,
+  label: string,
+  options?: { waitMs?: number },
+): Promise<void> {
+  const waitMs = options?.waitMs ?? 2_000;
+  const field = page.locator("#condition").first();
+  const attached =
+    waitMs > 0
+      ? await field
+          .waitFor({ state: "attached", timeout: waitMs })
+          .then(() => true)
+          .catch(() => false)
+      : (await field.count()) > 0;
+  if (!attached) {
+    if (waitMs > 0) log("info", "wallapop_publish_estado_absent", { label });
+    return;
+  }
   if ((await readConditionValue(page)).trim()) return;
   for (let attempt = 0; attempt < 3; attempt++) {
     const opened = await openEstadoDropdown(page);
