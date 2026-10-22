@@ -151,7 +151,7 @@ export function QueueAccountButton({
   )
 }
 
-/** Desactivado / desaparecido → Listo para publicar. Autopost will post it as a new /item/. */
+/** Desactivado / desaparecido / con error → Listo para publicar. Autopost will post it as a new /item/. */
 export function RequeueListingButton({
   productId,
   accountId,

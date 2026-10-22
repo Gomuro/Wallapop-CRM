@@ -56,6 +56,13 @@ function listingEstadoLabel(
   return LISTING_ESTADO[listing.status] ?? "Sin publicar"
 }
 
+/** Why autopost paused or gave up on this listing. */
+function FailedReasonRow({ listing }: { listing: InventoryListing | null }) {
+  const reason =
+    listing?.status === "FAILED" ? listing.lastPublishError?.trim() : null
+  return reason ? <MetaRow label="Motivo">{reason}</MetaRow> : null
+}
+
 function ListingLinkValue({
   itemUrl,
   junkUrl,
@@ -188,6 +195,7 @@ export function ListingDetailSection({
       </div>
       <div className="divide-y divide-border px-3">
         <MetaRow label="Estado">{estado}</MetaRow>
+        <FailedReasonRow listing={listing} />
         {listing?.accountName?.trim() &&
         listing.accountName.trim() !== heading ? (
           <MetaRow label="Caja">{listing.accountName.trim()}</MetaRow>

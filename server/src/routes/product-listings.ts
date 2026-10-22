@@ -58,12 +58,16 @@ async function assertProductExists(
   return true
 }
 
-function buildUpsertUpdate(
+/** The operator put the listing back in the queue: start the attempt count and the reason over. */
+const RETRY_RESET = { postingAttempts: 0, lastPublishError: null } as const
+
+export function buildUpsertUpdate(
   body: ReturnType<typeof productListingApiPutBodySchema.parse>,
 ): Prisma.ProductListingUpdateInput {
   const data: Prisma.ProductListingUpdateInput = {}
   if (body.externalUrl !== undefined) data.externalUrl = body.externalUrl
   if (body.status !== undefined) data.status = body.status
+  if (body.status === "READY_TO_POST") Object.assign(data, RETRY_RESET)
   if (body.shippingEnabled !== undefined) data.shippingEnabled = body.shippingEnabled
   if (body.shippingUpToKg !== undefined) data.shippingUpToKg = body.shippingUpToKg
   return data

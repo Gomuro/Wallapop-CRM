@@ -88,7 +88,7 @@ export function canRequeueListing(
 ): boolean {
   if (product.status === "SOLD") return false
   const status = listing?.status ?? product.listing?.status
-  return status === "DEACTIVATED" || status === "MISSING"
+  return status === "DEACTIVATED" || status === "MISSING" || status === "FAILED"
 }
 
 /** «Devolución»: sold SKU comes back (Eliminar on Wallapop if needed, then cola). */

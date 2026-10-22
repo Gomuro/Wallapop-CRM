@@ -2,6 +2,7 @@ import type { PrismaClient } from "../../generated/prisma/client"
 
 import { getPrisma } from "./db"
 import { log, serializeError } from "./log"
+import { failExhaustedListings } from "./wallapop-listing-attempts"
 import {
   getBrowserBusy,
   getWallapopHandle,
@@ -121,10 +122,23 @@ async function applyStalePostingRecovery(
   return nextStatus
 }
 
+/** A failing sweep must never stop the autopost tick. */
+async function pauseExhaustedQuietly(
+  prisma: PrismaClient,
+  maxAttempts: number,
+): Promise<void> {
+  try {
+    await failExhaustedListings(prisma, maxAttempts)
+  } catch (error) {
+    log("warn", "wallapop_listing_attempts_sweep_failed", serializeError(error))
+  }
+}
+
 export async function recoverStalePostingListings(
   prisma: PrismaClient,
   deps: RecoverStalePostingDeps = {},
 ): Promise<{ recovered: number; failed: number; skipped: boolean }> {
+  await pauseExhaustedQuietly(prisma, deps.maxAttempts ?? readPostingMaxAttempts())
   const busy = deps.busy ?? getBrowserBusy()
   const chromeAlive = deps.chromeAlive ?? isWallapopChromeAlive()
   const pageClosed = deps.pageClosed ?? isWallapopHandlePageClosed()
