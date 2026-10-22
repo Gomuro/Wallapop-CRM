@@ -11,6 +11,7 @@ import {
   getWallapopHandle,
   NAV_TIMEOUT_MS,
   runWithBrowserBusy,
+  waitForSessionSlotToClear,
   setWallapopHandle,
   WALLAPOP_CMP_ACCEPT_SELECTORS,
 } from "../wallapop-cdp"
@@ -275,6 +276,7 @@ export async function loginWallapopInBrowser(input: {
   proxy?: string | null
   cdpPort?: number
 }): Promise<BrowserLoginOutcome> {
+  await waitForSessionSlotToClear(input.cdpPort)
   return runWithBrowserBusy(
     "login",
     () => runWallapopEmailLogin(input),

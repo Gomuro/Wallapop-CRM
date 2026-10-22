@@ -261,6 +261,23 @@ function release(op: Exclude<BrowserBusy, "idle">, port = firstCdpPort()): void 
   row.exclusiveBusy = null
 }
 
+export const LOGIN_WAIT_FOR_SESSION_MS = 15_000
+
+/**
+ * Login outranks the session probe: wait for a running probe to finish
+ * instead of failing at once with BROWSER_BUSY. Other occupants still fail.
+ */
+export async function waitForSessionSlotToClear(
+  port = firstCdpPort(),
+  timeoutMs = LOGIN_WAIT_FOR_SESSION_MS,
+  pollMs = 250,
+): Promise<void> {
+  const deadline = Date.now() + timeoutMs
+  while (desk(port).workerSlots.has("session") && Date.now() < deadline) {
+    await new Promise((resolve) => setTimeout(resolve, pollMs))
+  }
+}
+
 export async function runWithBrowserBusy<T>(
   op: Exclude<BrowserBusy, "idle">,
   fn: () => Promise<T>,

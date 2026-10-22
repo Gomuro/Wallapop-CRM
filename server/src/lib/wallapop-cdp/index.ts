@@ -54,6 +54,7 @@ export {
   PublishAbortedError,
   resetWallapopPublishAbortForTests,
   runWithBrowserBusy,
+  waitForSessionSlotToClear,
   throwIfPublishAborted,
   type BrowserBusy,
   type BrowserWorkerSlot,
