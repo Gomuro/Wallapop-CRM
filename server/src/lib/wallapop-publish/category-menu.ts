@@ -1,5 +1,6 @@
 import type { Page } from "playwright";
 
+import { log } from "../log";
 import { PUBLISH_CATEGORY } from "./types";
 
 type CategoryMenu = {
@@ -136,52 +137,53 @@ export async function scrollMenuForLabel(page: Page, label: string): Promise<boo
   return false;
 }
 
-/** Keep the click inside the open list. `block:center` on the last row jumps outside it. */
+/** The painted row, scrolled into the list at once so no smooth scroll is still running. */
+const OPEN_MENU_ROW_JS = `((label) => {
+  ${VISIBLE_LISTBOX_FN}
+  ${NORM_LABEL_FN}
+  const listbox = visibleListbox();
+  if (!listbox) return null;
+  const wanted = normLabel(label);
+  const el = [...listbox.querySelectorAll('walla-dropdown-item[role="option"]')].find(
+    (item) => normLabel(item.getAttribute("aria-label")) === wanted,
+  );
+  if (!el) return null;
+  el.scrollIntoView({ block: "nearest", inline: "nearest", behavior: "instant" });
+  return el;
+})`;
+
+/**
+ * Click the row itself, not a point saved before the click. Playwright waits until the row
+ * stops moving and checks the hit. VPS 2026-10-23: a point aimed at Otros opened Transporte del bebé.
+ */
+async function clickOpenMenuRow(page: Page, label: string): Promise<boolean> {
+  const handle = await page.evaluateHandle<Element | null>(
+    `${OPEN_MENU_ROW_JS}(${JSON.stringify(label)})`,
+  );
+  const element = handle.asElement();
+  if (!element) {
+    await handle.dispose();
+    return false;
+  }
+  try {
+    await element.click({ timeout: 5_000 });
+    return true;
+  } catch (error) {
+    log("warn", "wallapop_publish_category_row_click_failed", {
+      label,
+      message: error instanceof Error ? error.message.split("\n")[0] : String(error),
+    });
+    return false;
+  } finally {
+    await element.dispose().catch(() => {});
+  }
+}
+
 export async function clickOpenMenuOption(
   page: Page,
   label: string,
   via: "mouse" | "host" = "mouse",
 ): Promise<boolean> {
-  const point = (await page.evaluate(`((label) => {
-    ${VISIBLE_LISTBOX_FN}
-    ${NORM_LABEL_FN}
-    const listbox = visibleListbox();
-    if (!listbox) return null;
-    const wanted = normLabel(label);
-    const el = [...listbox.querySelectorAll('walla-dropdown-item[role="option"]')].find(
-      (item) => normLabel(item.getAttribute("aria-label")) === wanted,
-    );
-    if (!el) return null;
-    el.scrollIntoView({ block: "nearest", inline: "nearest" });
-    let scroller = listbox;
-    let node = listbox;
-    while (node && node !== document.body) {
-      if (node.scrollHeight > node.clientHeight + 8) {
-        scroller = node;
-        break;
-      }
-      node = node.parentElement;
-    }
-    const box = listbox.getBoundingClientRect();
-    const rect = el.getBoundingClientRect();
-    if (rect.bottom > box.bottom - 4) scroller.scrollTop += rect.bottom - box.bottom + 8;
-    if (rect.top < box.top + 4) scroller.scrollTop -= box.top - rect.top + 8;
-    const box2 = listbox.getBoundingClientRect();
-    const rect2 = el.getBoundingClientRect();
-    if (rect2.width < 2 || rect2.height < 2) return null;
-    const x = Math.min(
-      Math.max(rect2.x + rect2.width / 2, box2.x + 8),
-      box2.x + box2.width - 8,
-    );
-    const y = Math.min(
-      Math.max(rect2.y + rect2.height / 2, box2.y + 8),
-      box2.y + box2.height - 8,
-    );
-    if (y < box2.y || y > box2.bottom) return null;
-    return { x, y };
-  })(${JSON.stringify(label)})`)) as { x: number; y: number } | null;
-  if (!point) return false;
-  await page.waitForTimeout(200);
   if (via === "host") {
     const clicked = (await page.evaluate(`((label) => {
       ${VISIBLE_LISTBOX_FN}
@@ -200,8 +202,7 @@ export async function clickOpenMenuOption(
     })(${JSON.stringify(label)})`)) as boolean;
     if (clicked) return true;
   }
-  await page.mouse.click(point.x, point.y);
-  return true;
+  return clickOpenMenuRow(page, label);
 }
 
 const CATEGORY_DROPDOWN_OPEN_EVAL = `(() => {
@@ -297,6 +298,7 @@ export async function clickCategoryOption(
   label: string,
   leaf: string,
 ): Promise<boolean> {
+  const isLeaf = label === leaf;
   for (let attempt = 0; attempt < 3; attempt += 1) {
     if (!(await categoryDropdownOpen(page))) {
       await openCategoryPicker(page);
@@ -308,9 +310,12 @@ export async function clickCategoryOption(
     const deadline = Date.now() + 2_500;
     while (Date.now() < deadline) {
       const after = await readCategoryMenu(page);
-      if (label === leaf && categoryLeafChosen(before, after, leaf)) return true;
-      if (label !== leaf && parentMenuAdvanced(before.options, after.options)) return true;
-      if (after.options.length === 0) break;
+      const done = isLeaf
+        ? categoryLeafChosen(before, after, leaf)
+        : parentMenuAdvanced(before.options, after.options);
+      if (done) return true;
+      // After a parent click the list can be blank until the next one paints (VPS 2026-10-22).
+      if (isLeaf && after.options.length === 0) break;
       await page.waitForTimeout(150);
     }
   }
