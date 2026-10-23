@@ -1,7 +1,16 @@
 import { chromium, type Browser } from "playwright"
-import { afterAll, beforeAll, describe, expect, it } from "vitest"
+import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
-import { ensureCategorySelected } from "../src/lib/wallapop-publish/category"
+import { log } from "../src/lib/log"
+import {
+  controlShowsLeaf,
+  ensureCategorySelected,
+} from "../src/lib/wallapop-publish/category"
+
+vi.mock("../src/lib/log", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("../src/lib/log")>()
+  return { ...actual, log: vi.fn(actual.log) }
+})
 
 type PickerConfig = {
   /** "root" and every parent name → the rows Wallapop shows for it. */
@@ -13,6 +22,8 @@ type PickerConfig = {
   blankMs?: number
   /** After the first scroll in this list, Wallapop moves it back by `rows` rows. */
   settle?: { level: string; rows: number }
+  /** A stray click: a click on the key row lands on the value row. */
+  misroute?: Record<string, string>
   listHeight?: number
 }
 
@@ -67,7 +78,8 @@ function categoryPickerHtml(cfg: PickerConfig): string {
       panel.addEventListener("click", (event) => {
         const item = event.target.closest("walla-dropdown-item")
         if (!item) return
-        const name = item.getAttribute("aria-label")
+        const clicked = item.getAttribute("aria-label")
+        const name = (cfg.misroute && cfg.misroute[clicked]) || clicked
         window.clicks.push(name)
         if (cfg.levels[name]) {
           if (!cfg.blankMs) return render(name)
@@ -121,6 +133,10 @@ afterAll(async () => {
   await browser?.close()
 })
 
+beforeEach(() => {
+  vi.mocked(log).mockClear()
+})
+
 async function pick(cfg: PickerConfig, labels: string[]) {
   const page = await browser.newPage()
   try {
@@ -138,6 +154,56 @@ async function pick(cfg: PickerConfig, labels: string[]) {
     await page.close()
   }
 }
+
+function mismatchLogs() {
+  return vi
+    .mocked(log)
+    .mock.calls.filter((call) => call[1] === "wallapop_publish_category_leaf_mismatch")
+}
+
+describe("controlShowsLeaf", () => {
+  it("passes the CRM leaf followed by its path, the Sólo seleccionar line or nothing", () => {
+    expect(
+      controlShowsLeaf("Categoría y subcategoría, Accesorios Hogar y jardín > Jardín y exteriores", "Accesorios"),
+    ).toBe(true)
+    expect(
+      controlShowsLeaf(
+        'Categoría y subcategoría, Pequeños electrodomésticos Sólo seleccionar "Electrodomésticos"',
+        "Pequeños electrodomésticos",
+      ),
+    ).toBe(true)
+    expect(controlShowsLeaf("Categoría y subcategoría, Otros", "Otros")).toBe(true)
+  })
+
+  it("turns down another leaf and an empty control", () => {
+    expect(controlShowsLeaf("Categoría y subcategoría, Motos", "Accesorios")).toBe(false)
+    expect(controlShowsLeaf("Categoría y subcategoría", "Accesorios")).toBe(false)
+  })
+
+  it("compares names after the same space cleanup as the CRM labels", () => {
+    expect(
+      controlShowsLeaf(
+        "Categoría y subcategoría,  Aire acondicionado y  ventiladores ",
+        "Aire acondicionado y ventiladores ",
+      ),
+    ).toBe(true)
+  })
+
+  it("does not take a longer leaf name for the CRM leaf", () => {
+    expect(
+      controlShowsLeaf(
+        "Categoría y subcategoría, Herramientas eléctricas Construcción y reformas > Herramientas y maquinaria",
+        "Herramientas",
+      ),
+    ).toBe(false)
+    expect(
+      controlShowsLeaf(
+        "Categoría y subcategoría, Herramientas Construcción y reformas > Herramientas y maquinaria",
+        "Herramientas",
+      ),
+    ).toBe(true)
+  })
+})
 
 describe("category pick", () => {
   it("keeps walking when the next list paints after a blank moment", async () => {
@@ -218,5 +284,68 @@ describe("category pick", () => {
     )
     expect(result.error).toBeNull()
     expect(result.leafId).toBe("24299")
+  })
+
+  it("turns down Motos picked for Accesorios on the main path and logs the mismatch", async () => {
+    const result = await pick(
+      {
+        levels: {
+          root: ["Hogar y jardín", "Motos"],
+          "Hogar y jardín": ["Cocina", "Jardín y exteriores"],
+          "Jardín y exteriores": ["Barbacoas", "Accesorios"],
+        },
+        leaves: { Accesorios: "24260", Motos: "14000" },
+        misroute: { Accesorios: "Motos" },
+      },
+      ["Hogar y jardín", "Jardín y exteriores", "Accesorios"],
+    )
+    expect(result.error).toMatch(
+      /No se pudo seleccionar la categoría \(Accesorios\)\. Wallapop dejó «Categoría y subcategoría, Motos»/,
+    )
+    expect(mismatchLogs()).toEqual([
+      [
+        "warn",
+        "wallapop_publish_category_leaf_mismatch",
+        {
+          expected: "Accesorios",
+          shown: "Categoría y subcategoría, Motos",
+          leafId: "14000",
+          via: "breadcrumb",
+        },
+      ],
+    ])
+  })
+
+  it("single label: keeps Otros and turns down a stray Motos on the main path", async () => {
+    const levels = { root: ["Motos", "Otros"] }
+    const leaves = { Otros: "12485", Motos: "14000" }
+    const kept = await pick({ levels, leaves }, ["Otros"])
+    expect(kept.error).toBeNull()
+    expect(kept.leafId).toBe("12485")
+    expect(mismatchLogs()).toHaveLength(0)
+    const stray = await pick({ levels, leaves, misroute: { Otros: "Motos" } }, ["Otros"])
+    expect(stray.error).toMatch(
+      /No se pudo seleccionar la categoría \(Otros\)\. Wallapop dejó «Categoría y subcategoría, Motos»/,
+    )
+    expect(mismatchLogs()).toHaveLength(1)
+    expect(mismatchLogs()[0]?.[2]).toMatchObject({ expected: "Otros", via: "leaf_suggested" })
+  })
+
+  it("does not take Herramientas eléctricas for Herramientas on the main path", async () => {
+    const result = await pick(
+      {
+        levels: {
+          root: ["Construcción y reformas", "Hogar y jardín"],
+          "Construcción y reformas": ["Ferretería", "Herramientas y maquinaria"],
+          "Herramientas y maquinaria": ["Herramientas", "Herramientas eléctricas", "Maquinaria"],
+        },
+        leaves: { Herramientas: "10317", "Herramientas eléctricas": "10318" },
+        misroute: { Herramientas: "Herramientas eléctricas" },
+      },
+      ["Construcción y reformas", "Herramientas y maquinaria", "Herramientas"],
+    )
+    expect(result.error).toMatch(/No se pudo seleccionar la categoría \(Herramientas\)/)
+    expect(result.leafId).toBe("10318")
+    expect(mismatchLogs()).toHaveLength(1)
   })
 })

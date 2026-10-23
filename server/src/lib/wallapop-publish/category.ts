@@ -40,6 +40,22 @@ function controlHasLeaf(control: string, leaf: string): boolean {
   return Boolean(wanted) && normalizeCategoryLabel(control).includes(wanted);
 }
 
+/**
+ * The closed control names exactly this leaf: "Categoría y subcategoría, Accesorios Hogar y jardín > …".
+ * The path after the leaf starts with a capital; a longer leaf name goes on in lower case
+ * ("Herramientas eléctricas"), so it is not taken for "Herramientas".
+ */
+export function controlShowsLeaf(control: string, leaf: string): boolean {
+  const wanted = normalizeCategoryLabel(leaf);
+  const text = normalizeCategoryLabel(control);
+  const trigger = PUBLISH_CATEGORY.triggerText;
+  if (!wanted || !text.startsWith(trigger)) return false;
+  const shown = text.slice(trigger.length).replace(/^,\s*/, "");
+  if (!shown.startsWith(wanted)) return false;
+  const rest = shown.slice(wanted.length);
+  return rest === "" || /^ \p{Lu}/u.test(rest);
+}
+
 async function categoryAlreadySet(page: Page, leaf: string): Promise<boolean> {
   const menu = await readCategoryMenu(page);
   return controlHasLeaf(menu.control, leaf) && !(await categoryPickerStillEmpty(page));
@@ -106,27 +122,31 @@ async function logCategoryDone(page: Page, leaf: string, via?: string): Promise<
   });
 }
 
+/**
+ * Every path ends here: the closed control must name the CRM leaf. A new hidden leaf id is not
+ * proof. On the VPS (2026-10-23) a stray click left Motos for Accesorios and it was published.
+ */
 async function assertCategoryPicked(
   page: Page,
   labels: string[],
   leaf: string,
-  openedLeafId: string,
+  via?: string,
 ): Promise<void> {
   const menu = await readCategoryMenu(page);
-  const wanted = normalizeCategoryLabel(leaf);
-  const menuClosedOnNewLeaf =
-    Boolean(menu.leafId) &&
-    menu.leafId !== openedLeafId &&
-    !menu.options.some((row) => normalizeCategoryLabel(row) === wanted);
-  const chosen = controlHasLeaf(menu.control, leaf) || menuClosedOnNewLeaf;
-  if (!chosen) {
+  if (!controlShowsLeaf(menu.control, leaf)) {
+    log("warn", "wallapop_publish_category_leaf_mismatch", {
+      expected: leaf,
+      shown: menu.control,
+      leafId: menu.leafId,
+      ...(via ? { via } : {}),
+    });
     const shown = menu.control || menu.leafId || "vacía";
     throw new WallapopPublishError(
       "form",
       `No se pudo seleccionar la categoría (${leaf}). Wallapop dejó «${shown}».${categoryMissHint(labels)}`,
     );
   }
-  await logCategoryDone(page, leaf);
+  await logCategoryDone(page, leaf, via);
 }
 
 async function pickCategoryOnForm(
@@ -152,14 +172,11 @@ async function pickCategoryOnForm(
   });
   // A longer path is walked from the root. The pinned suggestion stays unless it is our only label.
   if (labels.length === 1 && (await selectCategoryLeafSuggested(page, leaf))) {
-    await logCategoryDone(page, leaf, "leaf_suggested");
+    await assertCategoryPicked(page, labels, leaf, "leaf_suggested");
     return;
   }
-  if (await selectCategoryBreadcrumb(page, labels, leaf)) {
-    await logCategoryDone(page, leaf, "breadcrumb");
-    return;
-  }
-  await assertCategoryPicked(page, labels, leaf, opened.leafId);
+  const walked = await selectCategoryBreadcrumb(page, labels, leaf);
+  await assertCategoryPicked(page, labels, leaf, walked ? "breadcrumb" : undefined);
 }
 
 export async function ensureCategorySelected(

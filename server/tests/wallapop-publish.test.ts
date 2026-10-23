@@ -1195,6 +1195,7 @@ const CATEGORY_DRILL_HTML = `<!DOCTYPE html><body>
       if (name === "Hogar y jardín") render(levels.hogar)
       else if (name === "Muebles y organización") render(levels.muebles)
       else if (name === "Sillas y taburetes") {
+        button.setAttribute("aria-label", "Categoría y subcategoría, Sillas y taburetes")
         button.textContent = "Hogar y jardín > Muebles y organización"
         leaf.value = "24221"
       }
@@ -1254,6 +1255,7 @@ describe("category drill", () => {
             if (name === "Hogar y jardín") render(["Cocina", "Baño"])
             else if (name === "Cocina") render(["Accesorios"])
             else if (name === "Accesorios") {
+              button.setAttribute("aria-label", "Categoría y subcategoría, Accesorios")
               button.textContent = "Hogar y jardín > Cocina"
               leaf.value = "24299"
             }
