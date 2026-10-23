@@ -9,6 +9,7 @@ import { runSoldAfterAttach } from "./flow"
 import {
   MarkWallapopSoldInput,
   MarkWallapopSoldResult,
+  soldErrorAt,
   SoldStep,
   WallapopSoldError,
 } from "./types"
@@ -43,14 +44,14 @@ async function markWallapopSoldInner(
       step = next
     })
   } catch (error) {
-    const failStep = error instanceof WallapopSoldError ? error.step : step
-    const message = error instanceof Error ? error.message : String(error)
+    const failed = soldErrorAt(step, error)
     log("error", "wallapop_sold_abort", {
-      step: failStep,
-      message,
+      step: failed.step,
+      message: failed.message,
+      url: page.isClosed() ? null : page.url(),
       err: serializeError(error),
     })
-    throw error
+    throw failed
   }
 }
 

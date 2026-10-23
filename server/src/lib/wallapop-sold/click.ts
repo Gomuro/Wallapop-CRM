@@ -60,6 +60,15 @@ export const CLICK_MARK_AS_SOLD_EVAL = `(() => {
   return "clicked";
 })()`
 
+/** The confirm is on this page. Does not click it. */
+export const FIND_MARK_AS_SOLD_EVAL = `Boolean(document.querySelector("walla-button#markAsSoldButton"))`
+
+/** The tab went on to its next page while we read it. The next read sees the new page. */
+export function isNavigationError(error: unknown): boolean {
+  const message = error instanceof Error ? error.message : String(error)
+  return /execution context was destroyed|cannot find context with specified id/i.test(message)
+}
+
 export async function findItemAlreadySold(
   page: Page,
 ): Promise<"badge" | "not"> {

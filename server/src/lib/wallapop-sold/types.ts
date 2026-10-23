@@ -17,6 +17,15 @@ export class WallapopSoldError extends Error {
   }
 }
 
+/**
+ * The job shows "<step>: <message>". A raw Playwright error keeps the step it stopped at.
+ * VPS 2026-10-23 10:29: a confirm-step navigation error was shown as "attach".
+ */
+export function soldErrorAt(step: SoldStep, error: unknown): WallapopSoldError {
+  if (error instanceof WallapopSoldError) return error
+  return new WallapopSoldError(step, error instanceof Error ? error.message : String(error))
+}
+
 export type MarkWallapopSoldInput = {
   itemUrl: string
   dryRun: boolean
