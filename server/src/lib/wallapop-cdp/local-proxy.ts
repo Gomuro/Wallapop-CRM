@@ -6,6 +6,7 @@ import {
   createServer as createHttpServer,
   request as httpRequest,
   type IncomingMessage,
+  type Server,
   type ServerResponse,
 } from "node:http"
 import { connect as netConnect, type Socket } from "node:net"
@@ -25,6 +26,12 @@ type Forwarder = {
   port: number
   close: () => Promise<void>
 }
+
+/** A tunnel that never closes must not hold up the Chrome quit (VPS 2026-10-23: next publish waited 9 min). */
+export const PROXY_CLOSE_TIMEOUT_MS = 4_000
+
+/** Sockets Chrome has open on the forwarder, for the close-timeout report. */
+type OpenSocket = { target: string; since: number; upstream?: Socket }
 
 const forwarders = new Map<number, Forwarder>()
 
@@ -118,7 +125,7 @@ function openConnectTunnel(input: {
   head: Buffer
   up: ProxyUpstream
   auth: string | undefined
-}) {
+}): Socket {
   const { req, clientSocket, head, up, auth } = input
   const target = req.url ?? ""
   const upstreamSocket = netConnect(up.port, up.host, () => {
@@ -141,16 +148,80 @@ function openConnectTunnel(input: {
     }
   })
   clientSocket.on("error", () => upstreamSocket.destroy())
+  return upstreamSocket
 }
 
-export function startAuthForwarder(up: ProxyUpstream): Promise<Forwarder> {
+function socketState(socket: Duplex) {
+  return {
+    destroyed: socket.destroyed,
+    readableEnded: socket.readableEnded,
+    writableEnded: socket.writableEnded,
+  }
+}
+
+function describeOpenSockets(open: Map<Duplex, OpenSocket>) {
+  const now = Date.now()
+  return [...open].slice(0, 10).map(([client, row]) => ({
+    target: row.target,
+    ageMs: now - row.since,
+    client: socketState(client),
+    upstream: row.upstream ? socketState(row.upstream) : null,
+  }))
+}
+
+/** server.close() waits for every open socket. Give it a few seconds, then cut what is left. */
+function closeForwarder(input: {
+  server: Server
+  open: Map<Duplex, OpenSocket>
+  localPort: number
+  timeoutMs: number
+}): Promise<void> {
+  const { server, open, localPort, timeoutMs } = input
+  return new Promise((done) => {
+    const timer = setTimeout(() => {
+      log("warn", "wallapop_proxy_close_timeout", {
+        localPort,
+        timeoutMs,
+        open: open.size,
+        sockets: describeOpenSockets(open),
+      })
+      for (const [client, row] of open) {
+        row.upstream?.destroy()
+        client.destroy()
+      }
+      done()
+    }, timeoutMs)
+    server.close(() => {
+      clearTimeout(timer)
+      done()
+    })
+  })
+}
+
+function trackOpenSockets(server: Server, open: Map<Duplex, OpenSocket>): void {
+  server.on("connection", (socket: Socket) => {
+    open.set(socket, { target: "", since: Date.now() })
+    socket.once("close", () => open.delete(socket))
+  })
+}
+
+export function startAuthForwarder(
+  up: ProxyUpstream,
+  closeTimeoutMs = PROXY_CLOSE_TIMEOUT_MS,
+): Promise<Forwarder> {
   return new Promise((resolve, reject) => {
     const auth = proxyAuthorization(up)
+    const open = new Map<Duplex, OpenSocket>()
     const server = createHttpServer((clientReq, clientRes) => {
+      const row = open.get(clientReq.socket)
+      if (row) row.target = clientReq.headers.host ?? ""
       pipeHttp(clientReq, clientRes, up, auth)
     })
+    trackOpenSockets(server, open)
     server.on("connect", (req, clientSocket, head) => {
-      openConnectTunnel({ req, clientSocket, head, up, auth })
+      const upstream = openConnectTunnel({ req, clientSocket, head, up, auth })
+      const row = open.get(clientSocket)
+      if (row) Object.assign(row, { target: req.url ?? "", upstream })
     })
     server.once("error", reject)
     server.listen(0, "127.0.0.1", () => {
@@ -162,9 +233,7 @@ export function startAuthForwarder(up: ProxyUpstream): Promise<Forwarder> {
       resolve({
         port: addr.port,
         close: () =>
-          new Promise((done) => {
-            server.close(() => done())
-          }),
+          closeForwarder({ server, open, localPort: addr.port, timeoutMs: closeTimeoutMs }),
       })
     })
   })
