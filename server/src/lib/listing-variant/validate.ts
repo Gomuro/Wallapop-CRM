@@ -113,11 +113,39 @@ function plain(text: string): string {
   return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase()
 }
 
+/** Condition warnings a buyer must still see: "sin caja", "faltan piezas", "abolladura", "montada". */
+const CONDITION_MARKS: { pattern: RegExp; label: string }[] = [
+  { pattern: /\bfaltan?\b/u, label: "falta / faltan" },
+  { pattern: /\babolladura/u, label: "abolladura" },
+  { pattern: /\bgolpe/u, label: "golpe" },
+  { pattern: /\brayad[oa]s?\b|\barañazo/u, label: "rayado" },
+  { pattern: /\brot[oa]s?\b/u, label: "roto" },
+  { pattern: /\bdefect|\bdesperfect/u, label: "defecto" },
+  { pattern: /\bmontad[oa]s?\b/u, label: "montado" },
+]
+
+/** "Sin caja!", "sin filtro", "sin accesorios": every "sin <word>" of the original. */
+function sinPhrases(text: string): Set<string> {
+  return new Set([...text.matchAll(/\bsin\s+(\p{L}{3,})/gu)].map((match) => `sin ${match[1]}`))
+}
+
+export function conditionProblems(source: VariantSource, text: VariantText): string[] {
+  const before = plain(`${source.title} ${source.description}`)
+  const after = plain(`${text.title} ${text.description}`)
+  const missing = [...sinPhrases(before)].filter((phrase) => !after.includes(phrase))
+  for (const mark of CONDITION_MARKS) {
+    if (mark.pattern.test(before) && !mark.pattern.test(after)) missing.push(mark.label)
+  }
+  if (!missing.length) return []
+  return [`Falta el aviso sobre el estado del original: ${missing.map((m) => `«${m}»`).join(", ")}.`]
+}
+
 /** Empty list = the rewrite can be used. */
 export function variantProblems(source: VariantSource, text: VariantText): string[] {
   return [
     ...titleProblems(source, text),
     ...descriptionProblems(source, text),
     ...factProblems(source, text),
+    ...conditionProblems(source, text),
   ]
 }

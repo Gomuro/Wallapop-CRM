@@ -65,6 +65,26 @@ describe("variantProblems", () => {
     expect(variantProblems(short, longer)).toEqual([])
   })
 
+  it("keeps condition warnings: «sin filtro» may not turn into «incluye filtro»", () => {
+    const noFilter = {
+      title: "Dispensador agua Philips 3L",
+      description: "Sin filtro! Dispensador de agua Philips de 3L, libre de BPA, montado y probado.",
+      brand: null,
+    }
+    const lost = {
+      title: "Dispensador Philips 3L agua fría",
+      description: "Dispensador de agua de la marca Philips con 3L de capacidad. Incluye filtro, libre de BPA.",
+    }
+    const problems = variantProblems(noFilter, lost).join(" ")
+    expect(problems).toMatch(/«sin filtro»/)
+    expect(problems).toMatch(/«montado»/)
+    const kept = {
+      title: "Dispensador Philips 3L agua fría",
+      description: "Se entrega sin filtro. Depósito Philips para agua con 3L, ya montado y comprobado; plástico apto, BPA cero.",
+    }
+    expect(variantProblems(noFilter, kept)).toEqual([])
+  })
+
   it("rejects the original wording and a missing brand", () => {
     expect(variantProblems(SOURCE, { title: SOURCE.title, description: SOURCE.description }).join(" "))
       .toMatch(/igual al original.*igual a la original/)
