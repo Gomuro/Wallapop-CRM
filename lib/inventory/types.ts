@@ -19,6 +19,18 @@ export type AccountListingGlance = {
   lastPublishError?: string | null
 }
 
+/** Own wording and ,98 price of a duplicate (listing on a non-default account). */
+export type DuplicateVariant = {
+  title: string | null
+  description: string | null
+  price: number | null
+  source: "ai" | "manual" | null
+  generatedAt: string | null
+  error: string | null
+  /** The product text changed after this variant was written. */
+  stale: boolean
+}
+
 export type InventoryListing = {
   id: string
   accountId: string
@@ -30,6 +42,10 @@ export type InventoryListing = {
   updatedAt?: string | null
   shippingEnabled: boolean
   lastPublishError?: string | null
+} & ListingVariantPart
+
+export type ListingVariantPart = {
+  variant?: DuplicateVariant | null
 }
 
 export type InventoryProductIdentity = {

@@ -42,6 +42,9 @@ export type ApiListing = {
   lastPostedAt: string | null
   updatedAt?: string | null
   lastPublishError?: string | null
+} & {
+  /** Raw duplicate variant; validated in mapApiListing. */
+  variant?: unknown
 }
 
 export type ApiProductIdentity = {

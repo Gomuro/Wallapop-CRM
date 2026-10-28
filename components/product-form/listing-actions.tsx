@@ -119,6 +119,8 @@ export function QueueAccountButton({
         await apiClientFetch(`/products/${encodeURIComponent(productId)}/queue`, {
           method: "POST",
           body: JSON.stringify({ accountId }),
+          // A second account first gets its own AI text, which can take a while.
+          timeoutMs: 90_000,
         })
         state.setOpen(false)
         router.refresh()
@@ -141,7 +143,7 @@ export function QueueAccountButton({
       triggerClassName="h-12 w-full"
       triggerVariant="secondary"
       title={`Publicar en ${accountLabel}`}
-      description="Se pondrá en la cola de esta cuenta y saldrá como anuncio nuevo. Las demás cuentas no cambian."
+      description="Se pondrá en la cola de esta cuenta y saldrá como anuncio nuevo, con título y descripción redactados de nuevo y precio terminado en ,98. Las demás cuentas no cambian."
       confirmLabel="Poner en cola"
       pendingLabel="Guardando…"
       error={state.error}

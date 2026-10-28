@@ -1,4 +1,5 @@
 import { resolveMediaUrl } from "@/lib/api/config"
+import { asDuplicateVariant } from "@/lib/api/map-variant"
 import type {
   ApiAccountGlance,
   ApiCategory,
@@ -145,6 +146,7 @@ export function mapApiListing(
         : null,
     lastPublishError: asTextOrNull(listing.lastPublishError),
     shippingEnabled: listing.shippingEnabled !== false,
+    variant: asDuplicateVariant(listing.variant),
   }
 }
 
