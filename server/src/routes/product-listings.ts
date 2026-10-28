@@ -15,12 +15,8 @@ import {
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import { listingJsonSelect, toListingJson } from "../lib/listing-json"
-import {
-  buildListingVariant,
-  VARIANT_FAILED_CODE,
-  VARIANT_FAILED_MESSAGE,
-  type VariantData,
-} from "../lib/listing-variant/store"
+import { queueStatusFor } from "../lib/listing-variant/store"
+import { kickListingVariantWorker } from "../lib/listing-variant/worker"
 import {
   rescheduleAutopostLoop,
   scheduleAccountAutopost,
@@ -253,15 +249,15 @@ export async function putProductListing(req: Request, res: Response) {
   ) {
     return
   }
-  const variant = await variantForQueuedListing(prisma, { productId, account, body, res })
-  if (variant === false) return
+  const waiting = await queuedDuplicateOverride(prisma, { productId, account, body })
 
   const listing = await prisma.productListing.upsert({
     where: { productId_accountId: { productId, accountId } },
-    create: { ...buildUpsertCreate(productId, accountId, body), ...variant },
-    update: { ...buildUpsertUpdate(body), ...variant },
+    create: { ...buildUpsertCreate(productId, accountId, body), ...waiting },
+    update: { ...buildUpsertUpdate(body), ...waiting },
     select: listingJsonSelect,
   })
+  if (listing.status === "PREPARING") kickListingVariantWorker()
   if (listing.status === "READY_TO_POST") await afterReadyToPost(prisma, productId, account)
   res.json({ listing: toListingJson(listing) })
 }
@@ -279,28 +275,15 @@ async function afterReadyToPost(
   else await scheduleAccountAutopost(account.id)
 }
 
-/**
- * Queueing a duplicate (non-default account) needs its own text first.
- * {} = nothing to add, false = answered 422 and the listing stays as it was.
- */
-async function variantForQueuedListing(
+/** A duplicate (non-default account) queued without its own text waits in PREPARING. */
+async function queuedDuplicateOverride(
   prisma: PrismaDb,
-  input: {
-    productId: string
-    account: { id: string; isDefault: boolean }
-    body: { status?: string }
-    res: Response
-  },
-): Promise<Partial<VariantData> | false> {
+  input: { productId: string; account: { id: string; isDefault: boolean }; body: { status?: string } },
+) {
   if (input.body.status !== "READY_TO_POST" || input.account.isDefault) return {}
-  const outcome = await buildListingVariant(prisma, input.productId, input.account.id)
-  if (outcome.ok) return outcome.data ?? {}
-  await prisma.productListing.updateMany({
-    where: { productId: input.productId, accountId: input.account.id },
-    data: { variantError: outcome.error },
-  })
-  sendError(input.res, 422, VARIANT_FAILED_CODE, `${VARIANT_FAILED_MESSAGE} ${outcome.error}`)
-  return false
+  const status = await queueStatusFor(prisma, input.productId, input.account.id)
+  if (status === "READY_TO_POST") return {}
+  return { status, variantAttempts: 0, variantNextAttemptAt: null }
 }
 
 /** Live or in-flight ads stay. A sold row can return to the queue even if its old /item/ link is still saved. */

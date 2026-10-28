@@ -21,6 +21,8 @@ enum AccountStatus {
 
 enum ListingStatus {
   READY_TO_POST
+  // Duplicate waiting for its own text. Autopost only takes READY_TO_POST, so it waits here.
+  PREPARING
   POSTING
   ACTIVE
   RESERVED
@@ -214,6 +216,9 @@ model ProductListing {
   variantBasis       String?       @map("variant_basis")
   variantGeneratedAt DateTime?     @map("variant_generated_at")
   variantError       String?       @map("variant_error")
+  // Background retries while PREPARING: failed runs so far and when to try again.
+  variantAttempts      Int         @default(0) @map("variant_attempts")
+  variantNextAttemptAt DateTime?   @map("variant_next_attempt_at")
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
 

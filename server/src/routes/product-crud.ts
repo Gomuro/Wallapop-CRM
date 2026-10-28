@@ -16,6 +16,7 @@ import { sendError } from "../lib/http-error"
 import { isUniqueConstraint, prismaErrorCode } from "../lib/prisma-error"
 import { rescheduleAutopostLoop, scheduleAccountAutopost } from "../lib/wallapop-autopost"
 import { insertProductWithListing } from "./product-insert"
+import { kickListingVariantWorker, prepareStaleDuplicates } from "../lib/listing-variant/worker"
 import {
   buildListWhere,
   loadProductCard,
@@ -161,6 +162,7 @@ export async function createProduct(req: Request, res: Response) {
       return
     }
     await rescheduleAutopostLoop()
+    kickListingVariantWorker()
     for (const accountId of created.autopostAccountIds) {
       await scheduleAccountAutopost(accountId)
     }
@@ -286,6 +288,7 @@ export async function patchProduct(req: Request, res: Response) {
     return
   }
 
+  await prepareStaleDuplicates(prisma, id)
   const product = await loadProductCard(prisma, id)
   if (!product) {
     sendError(res, 404, "NOT_FOUND", "Product not found.")

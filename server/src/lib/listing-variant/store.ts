@@ -2,13 +2,8 @@ import { createHash } from "node:crypto"
 
 import type { PrismaClient } from "../../../generated/prisma/client"
 import { duplicatePrice } from "../../../../lib/inventory/duplicate-price"
-import { log } from "../log"
 import { generateVariantText } from "./generate"
 import type { VariantSource } from "./validate"
-
-export const VARIANT_FAILED_CODE = "VARIANT_FAILED" as const
-export const VARIANT_FAILED_MESSAGE =
-  "No se pudo preparar el texto del duplicado, no se pone en cola."
 
 export type VariantData = {
   variantTitle: string
@@ -129,20 +124,28 @@ export async function buildListingVariant(
   return freshVariant(inputs)
 }
 
-/** Build and save on an existing listing. A failure is saved too, so the card can show it. */
-export async function ensureListingVariant(
+/**
+ * The saved variant if it can be published as is, without calling the AI.
+ * data null = default account (publishes the original). ready false = still to write.
+ */
+export async function savedListingVariant(
   prisma: PrismaClient,
   productId: string,
   accountId: string,
-  options: { regenerate?: boolean } = {},
-): Promise<VariantOutcome> {
-  const outcome = await buildListingVariant(prisma, productId, accountId, options)
-  const where = { productId, accountId }
-  if (outcome.ok && outcome.data) {
-    await prisma.productListing.updateMany({ where, data: outcome.data })
-  } else if (!outcome.ok) {
-    await prisma.productListing.updateMany({ where, data: { variantError: outcome.error } })
-    log("warn", "listing_variant_failed", { productId, accountId, error: outcome.error })
-  }
-  return outcome
+): Promise<{ ready: true; data: VariantData | null } | { ready: false }> {
+  const inputs = await loadVariantInputs(prisma, productId, accountId)
+  if (!inputs) return { ready: false }
+  if (inputs.isDefault) return { ready: true, data: null }
+  const saved = reusableVariant(inputs)
+  return saved ? { ready: true, data: saved } : { ready: false }
+}
+
+/** Status for a listing entering the queue: a duplicate without its text waits in PREPARING. */
+export async function queueStatusFor(
+  prisma: PrismaClient,
+  productId: string,
+  accountId: string,
+): Promise<"READY_TO_POST" | "PREPARING"> {
+  const saved = await savedListingVariant(prisma, productId, accountId)
+  return saved.ready ? "READY_TO_POST" : "PREPARING"
 }

@@ -4,7 +4,9 @@ import { duplicatePrice } from "../../../lib/inventory/duplicate-price"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import { listingVariantSelect, toVariantJson } from "../lib/listing-variant/json"
-import { ensureListingVariant, variantBasis } from "../lib/listing-variant/store"
+import { variantBasis } from "../lib/listing-variant/store"
+import { writeListingVariant } from "../lib/listing-variant/worker"
+import { scheduleAccountAutopost } from "../lib/wallapop-autopost"
 import { VARIANT_TITLE_MAX } from "../lib/listing-variant/validate"
 import { paramId } from "./products"
 
@@ -17,6 +19,8 @@ type VariantTarget = {
   prisma: PrismaDb
   productId: string
   accountId: string
+  status: string
+  variantAttempts: number
   source: { title: string; description: string; brand: string | null; price: number }
 }
 
@@ -32,6 +36,7 @@ async function loadTarget(req: Request, res: Response): Promise<VariantTarget | 
     where: { productId_accountId: { productId, accountId } },
     select: {
       status: true,
+      variantAttempts: true,
       account: { select: { isDefault: true } },
       product: { select: { title: true, description: true, brand: true, price: true } },
     },
@@ -45,7 +50,14 @@ async function loadTarget(req: Request, res: Response): Promise<VariantTarget | 
     return null
   }
   const { price, ...text } = listing.product
-  return { prisma, productId, accountId, source: { ...text, price: Number(price.toString()) } }
+  return {
+    prisma,
+    productId,
+    accountId,
+    status: listing.status,
+    variantAttempts: listing.variantAttempts,
+    source: { ...text, price: Number(price.toString()) },
+  }
 }
 
 async function sendVariant(target: VariantTarget, res: Response) {
@@ -59,13 +71,12 @@ async function sendVariant(target: VariantTarget, res: Response) {
 export async function regenerateProductVariant(req: Request, res: Response) {
   const target = await loadTarget(req, res)
   if (!target) return
-  const outcome = await ensureListingVariant(target.prisma, target.productId, target.accountId, {
-    regenerate: true,
-  })
+  const outcome = await writeListingVariant(target.prisma, target, { regenerate: true })
   if (!outcome.ok) {
     sendError(res, 422, "VARIANT_FAILED", outcome.error)
     return
   }
+  if (target.status === "PREPARING") await scheduleAccountAutopost(target.accountId)
   await sendVariant(target, res)
 }
 
@@ -98,7 +109,11 @@ export async function putProductVariant(req: Request, res: Response) {
       variantBasis: variantBasis(target.source),
       variantGeneratedAt: new Date(),
       variantError: null,
+      variantAttempts: 0,
+      variantNextAttemptAt: null,
+      ...(target.status === "PREPARING" ? { status: "READY_TO_POST" as const } : {}),
     },
   })
+  if (target.status === "PREPARING") await scheduleAccountAutopost(target.accountId)
   await sendVariant(target, res)
 }

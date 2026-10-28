@@ -47,7 +47,8 @@ export async function insertProductWithListing(
       data: accountIds.ids.map((accountId) => ({
         productId: product.id,
         accountId,
-        status: "READY_TO_POST" as const,
+        // A new product has no duplicate text yet: other accounts wait for it.
+        status: accountId === defaultAccountId ? ("READY_TO_POST" as const) : ("PREPARING" as const),
       })),
     })
     return product.id

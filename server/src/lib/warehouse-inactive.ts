@@ -3,7 +3,7 @@ import type { Prisma } from "../../generated/prisma/client"
 import { getPrisma } from "./db"
 import { log, serializeError } from "./log"
 
-const QUEUE_STATUSES = ["READY_TO_POST", "FAILED"] as const
+const QUEUE_STATUSES = ["READY_TO_POST", "PREPARING", "FAILED"] as const
 
 type ListingClient = {
   productListing: {

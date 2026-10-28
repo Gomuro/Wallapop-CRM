@@ -65,7 +65,8 @@ function listingListWhere(
     return { some: { account, status: "RESERVED", ...onWallapop } }
   }
   if (listing === "queue") {
-    return { some: { account, status: "READY_TO_POST" } }
+    // A duplicate waiting for its own text is queued too.
+    return { some: { account, status: { in: ["READY_TO_POST", "PREPARING"] } } }
   }
   if (listing === "error") {
     return { some: { account, status: "FAILED" } }

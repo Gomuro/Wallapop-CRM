@@ -5,7 +5,7 @@ import { getPrisma } from "./db"
 import { log } from "./log"
 
 /** Not on Wallapop yet. A sale takes these off the queue. Live ads are marked sold and keep their URL. */
-const QUEUE_LISTING_STATUSES = ["READY_TO_POST", "POSTING"] as const
+const QUEUE_LISTING_STATUSES = ["READY_TO_POST", "PREPARING", "POSTING"] as const
 
 const OFF_QUEUE_DATA = {
   status: "DEACTIVATED" as const,

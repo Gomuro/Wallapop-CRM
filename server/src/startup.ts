@@ -1,3 +1,4 @@
+import { startListingVariantWorker } from "./lib/listing-variant/worker"
 import { log } from "./lib/log"
 import { startWallapopAutopostLoop } from "./lib/wallapop-autopost"
 import { startWallapopMonitorLoop } from "./lib/wallapop-monitor"
@@ -15,6 +16,8 @@ export function runStartupHooks(): void {
     startWallapopMonitorLoop()
     startWallapopAutopostLoop()
   }
+  // Talks to the AI only, never to Wallapop, so it also runs offline.
+  if (process.env.LISTING_VARIANT_WORKER !== "0") startListingVariantWorker()
   void recoverStalePostingOnBoot()
   void activateWarehouseForReadyQueueOnBoot()
 }

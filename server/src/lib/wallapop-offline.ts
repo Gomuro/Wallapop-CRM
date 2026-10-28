@@ -1,4 +1,4 @@
-/** Local copy of prod: no Chrome, no Wallapop, no Groq. Unset on the VPS. */
+/** Local copy of prod: no Chrome and no Wallapop. Unset on the VPS. */
 export function isWallapopOffline(): boolean {
   return process.env.WALLAPOP_OFFLINE === "1"
 }
