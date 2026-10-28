@@ -135,6 +135,39 @@ function VariantView({ original, variant }: { original: Original; variant: Dupli
   )
 }
 
+/** Background writes after this many failed runs deserve a look, though they keep going. */
+const ATTEMPTS_WORTH_A_LOOK = 5
+
+function nextTryLabel(iso: string | null): string | null {
+  if (!iso) return null
+  const date = new Date(iso)
+  if (Number.isNaN(date.getTime())) return null
+  return new Intl.DateTimeFormat("es-ES", { hour: "2-digit", minute: "2-digit" }).format(date)
+}
+
+/** PREPARING: the text is being written in the background. A waiting state, not an error. */
+function PreparingNotice({ variant }: { variant: DuplicateVariant | null }) {
+  const attempts = variant?.attempts ?? 0
+  const next = nextTryLabel(variant?.nextAttemptAt ?? null)
+  const worthALook = attempts >= ATTEMPTS_WORTH_A_LOOK
+  return (
+    <div className="space-y-1 py-2.5" role="status">
+      <p className="text-sm font-medium">Preparando el texto del duplicado</p>
+      <p className="text-xs text-muted-foreground">
+        {attempts === 0
+          ? "Se publicará en cuanto el texto esté listo."
+          : `Lleva ${attempts} ${attempts === 1 ? "intento" : "intentos"}${next ? `; el siguiente, a las ${next}` : ""}.`}
+      </p>
+      {worthALook ? (
+        <Badge variant="secondary">Conviene revisarlo: lleva {attempts} intentos</Badge>
+      ) : null}
+      {variant?.error ? (
+        <p className="text-xs text-muted-foreground">Último intento: {variant.error}</p>
+      ) : null}
+    </div>
+  )
+}
+
 /**
  * Duplicate ad on a non-default account: own wording and ,98 price next to the original.
  * Locked while the duplicate is live or posting, so the CRM text matches Wallapop.
@@ -145,18 +178,22 @@ export function DuplicateVariantPanel({
   original,
   variant,
   locked,
+  preparing,
 }: {
   productId: string
   accountId: string
   original: Original
   variant: DuplicateVariant | null
   locked: boolean
+  preparing: boolean
 }) {
   const request = useVariantRequest(productId, accountId)
   const [editing, setEditing] = useState(false)
-  const failure = request.error ?? variant?.error ?? null
+  // While PREPARING the last error is shown calmly inside the notice, not in red.
+  const failure = request.error ?? (preparing ? null : variant?.error) ?? null
   return (
     <div className="rounded-lg bg-muted/30 px-3 pb-3">
+      {preparing && !editing ? <PreparingNotice variant={variant} /> : null}
       {variant?.title ? <VariantBadges variant={variant} /> : null}
       {editing ? (
         <EditForm
@@ -169,7 +206,7 @@ export function DuplicateVariantPanel({
         />
       ) : variant?.title ? (
         <VariantView original={original} variant={variant} />
-      ) : (
+      ) : preparing ? null : (
         <p className="py-2.5 text-sm text-muted-foreground">Todavía no hay texto propio para este duplicado.</p>
       )}
       {failure ? <p className="pb-2 text-sm text-destructive">{failure}</p> : null}

@@ -1,7 +1,7 @@
 import type { ListingStatus, ProductCondition, ProductStatus, ShippingPackageSize } from "@/lib/validations"
 
-/** Listing status as returned by GET (in-flight POSTING, watchdog FAILED). Not writable via PUT. */
-export type ListingStatusRead = ListingStatus | "POSTING" | "FAILED"
+/** Listing status as returned by GET (in-flight POSTING, watchdog FAILED, duplicate PREPARING). Not writable via PUT. */
+export type ListingStatusRead = ListingStatus | "POSTING" | "FAILED" | "PREPARING"
 
 export type InventoryProductImage = {
   id: string
@@ -29,6 +29,9 @@ export type DuplicateVariant = {
   error: string | null
   /** The product text changed after this variant was written. */
   stale: boolean
+  /** Background runs that failed so far, and when the next one is due. */
+  attempts: number
+  nextAttemptAt: string | null
 }
 
 export type InventoryListing = {

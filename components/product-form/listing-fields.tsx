@@ -66,7 +66,9 @@ function syncListingStatus(
 ) {
   if (status === seen) return
   setSeen(status)
-  if (status && status !== "POSTING") setStatus(writableListingStatus(status))
+  if (status && status !== "POSTING" && status !== "PREPARING") {
+    setStatus(writableListingStatus(status))
+  }
 }
 
 function useListingErrorFocus(

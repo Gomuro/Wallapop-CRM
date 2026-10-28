@@ -11,9 +11,10 @@ export const listingStatusSchema = z.enum([
   "DEACTIVATED",
 ])
 
-/** Read/API mapping: includes internal `POSTING` and watchdog `FAILED`. */
+/** Read/API mapping: includes internal `POSTING`, watchdog `FAILED` and a duplicate waiting for its text (`PREPARING`). */
 export const listingStatusReadSchema = z.enum([
   "READY_TO_POST",
+  "PREPARING",
   "POSTING",
   "ACTIVE",
   "RESERVED",

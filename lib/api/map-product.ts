@@ -36,6 +36,7 @@ const LISTING_STATUSES = new Set<ListingStatusRead>([
   "MISSING",
   "DEACTIVATED",
   "READY_TO_POST",
+  "PREPARING",
   "POSTING",
   "FAILED",
 ])

@@ -16,5 +16,7 @@ export function asDuplicateVariant(value: unknown): DuplicateVariant | null {
     generatedAt: textOrNull(row.generatedAt),
     error: textOrNull(row.error),
     stale: row.stale === true,
+    attempts: typeof row.attempts === "number" ? row.attempts : 0,
+    nextAttemptAt: textOrNull(row.nextAttemptAt),
   }
 }

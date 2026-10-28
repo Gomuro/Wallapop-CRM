@@ -110,6 +110,7 @@ function ListingBlock({
           original={{ title: product.title, description: product.description, price: product.price }}
           variant={listing.variant ?? null}
           locked={DUPLICATE_LOCKED.has(listing.status)}
+          preparing={listing.status === "PREPARING"}
         />
       )}
       <ListingActions product={product} listing={listing} />

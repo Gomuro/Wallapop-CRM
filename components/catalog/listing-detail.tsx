@@ -31,6 +31,7 @@ const LISTING_ESTADO: Record<string, string> = {
   MISSING: "Desaparecido de la caja",
   DEACTIVATED: "Desactivado",
   READY_TO_POST: "En cola de publicación",
+  PREPARING: "Preparando texto",
   POSTING: "Publicando…",
   FAILED: "Error al publicar",
 }
@@ -49,7 +50,9 @@ function listingEstadoLabel(
   }
   if (
     warehouseInactive &&
-    (listing.status === "READY_TO_POST" || listing.status === "FAILED")
+    (listing.status === "READY_TO_POST" ||
+      listing.status === "PREPARING" ||
+      listing.status === "FAILED")
   ) {
     return "Sin publicar"
   }
