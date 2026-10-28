@@ -203,6 +203,17 @@ model ProductListing {
   lastEditedAt       DateTime?     @map("last_edited_at")
   postingAttempts    Int           @default(0) @map("posting_attempts")
   lastPublishError   String?       @map("last_publish_error")
+  // Duplicate ad (non-default account): own wording and a ,98 price.
+  // variantTitle is also what the post-publish URL lookup searches for.
+  variantTitle       String?       @map("variant_title")
+  variantDescription String?       @map("variant_description")
+  variantPrice       Decimal?      @map("variant_price") @db.Decimal(10, 2)
+  // "ai" or "manual". A manual text is never overwritten by a regenerate on its own.
+  variantSource      String?       @map("variant_source")
+  // Hash of the product title, description and brand the variant was written from.
+  variantBasis       String?       @map("variant_basis")
+  variantGeneratedAt DateTime?     @map("variant_generated_at")
+  variantError       String?       @map("variant_error")
   createdAt          DateTime      @default(now()) @map("created_at")
   updatedAt          DateTime      @updatedAt @map("updated_at")
 
