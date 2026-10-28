@@ -55,13 +55,23 @@ async function resolveSellerUserId(
 ): Promise<string | null> {
   const cached = sellerUserIdByAccount.get(accountId)
   if (cached) return cached
+  // Stored id first: item HTML answers 403 from the VPS, the JSON API does not.
+  const account = await prisma.account.findUnique({
+    where: { id: accountId },
+    select: { wallapopUserId: true },
+  })
+  const stored = account?.wallapopUserId?.trim()
+  if (stored) {
+    sellerUserIdByAccount.set(accountId, stored)
+    return stored
+  }
   const row = await prisma.productListing.findFirst({
     where: {
       accountId,
       externalUrl: { contains: "/item/" },
     },
     select: { externalUrl: true },
-    orderBy: { lastPostedAt: "desc" },
+    orderBy: { lastPostedAt: { sort: "desc", nulls: "last" } },
   })
   const href = wallapopItemUrlOrNull(row?.externalUrl)
   if (!href) return null

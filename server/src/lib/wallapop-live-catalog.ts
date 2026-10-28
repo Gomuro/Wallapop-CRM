@@ -9,7 +9,8 @@ export type LiveCatalogItem = {
   reserved: boolean
 }
 
-const PAGE_CAP = 8
+/** ~39 items per page; 507 live items on 2026-10-28 already needed 13 pages. */
+const PAGE_CAP = 60
 
 export function priceTextFromAmount(amount: number): string {
   return amount.toFixed(2).replace(".", ",")

@@ -66,6 +66,8 @@ model Account {
   autopostEnabled Boolean @default(false) @map("autopost_enabled")
   // Wallapop login email (not the CRM operator). Kept across disconnect.
   wallapopEmail String? @map("wallapop_email")
+  // Public Wallapop seller id (api/v3/users/<id>/items). Item HTML is 403 from the VPS.
+  wallapopUserId String? @map("wallapop_user_id")
   // Pinned Chrome place (0 = 9222). Not reused after delete, so another account
   // does not inherit this profile.
   chromeSlot   Int             @unique @map("chrome_slot")
