@@ -6,6 +6,9 @@
 export const VARIANT_TITLE_MAX = 50
 const DESCRIPTION_MIN_RATIO = 0.6
 const DESCRIPTION_MAX_RATIO = 1.5
+/** A short comma list grows when it is rewritten as sentences. */
+const SHORT_DESCRIPTION = 300
+const SHORT_DESCRIPTION_MAX_RATIO = 2
 const MAX_WORD_OVERLAP = 0.9
 const SPANISH_HINTS = /\b(de|la|el|los|las|para|con|en|y|del|muy|sin)\b/i
 
@@ -65,8 +68,9 @@ function descriptionLengthProblem(source: VariantSource, description: string): s
   const original = source.description.trim().length
   if (original < 40) return null
   const ratio = description.length / original
+  const maxRatio = original < SHORT_DESCRIPTION ? SHORT_DESCRIPTION_MAX_RATIO : DESCRIPTION_MAX_RATIO
   if (ratio < DESCRIPTION_MIN_RATIO) return "La descripción es demasiado corta frente al original."
-  if (ratio > DESCRIPTION_MAX_RATIO) return "La descripción es demasiado larga frente al original."
+  if (ratio > maxRatio) return "La descripción es demasiado larga frente al original."
   return null
 }
 
@@ -96,12 +100,17 @@ function factProblems(source: VariantSource, text: VariantText): string[] {
   if (lost.length) problems.push(`Faltan cifras del original: ${lost.join(", ")}.`)
   if (added.length) problems.push(`Aparecen cifras que no están en el original: ${added.join(", ")}.`)
   const brand = source.brand?.trim()
-  const original = `${source.title} ${source.description}`.toLowerCase()
-  if (brand && original.includes(brand.toLowerCase())) {
-    const rewritten = `${text.title} ${text.description}`.toLowerCase()
-    if (!rewritten.includes(brand.toLowerCase())) problems.push(`Falta la marca ${brand}.`)
+  const original = plain(`${source.title} ${source.description}`)
+  if (brand && original.includes(plain(brand))) {
+    const rewritten = plain(`${text.title} ${text.description}`)
+    if (!rewritten.includes(plain(brand))) problems.push(`Falta la marca ${brand}.`)
   }
   return problems
+}
+
+/** Brand "Jane" vs text "Jané": compare without case or accents. */
+function plain(text: string): string {
+  return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase()
 }
 
 /** Empty list = the rewrite can be used. */

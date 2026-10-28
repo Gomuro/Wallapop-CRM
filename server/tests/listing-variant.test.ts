@@ -43,6 +43,28 @@ describe("variantProblems", () => {
     expect(problems).toMatch(/no están en el original: 190/)
   })
 
+  it("finds the brand regardless of accents", () => {
+    const jane = {
+      title: "Jané iXpert silla de coche 40 a 105 cm",
+      description: "Silla de coche Jané iXpert de 40 a 105 cm, usada pero en buen estado general.",
+      brand: "Jane",
+    }
+    const rewrite = {
+      title: "Silla auto Jané iXpert 40-105 cm",
+      description: "Silla para coche de la marca Jané, modelo iXpert, para niños de 40 a 105 cm. Usada, en buen estado.",
+    }
+    expect(variantProblems(jane, rewrite)).toEqual([])
+  })
+
+  it("lets a short comma list grow into sentences, up to twice the length", () => {
+    const short = { title: "Aislante persiana 100x28 cm", description: "Aislante 100x28 cm, gris, sin herramientas, térmico." , brand: null }
+    const longer = {
+      title: "Aislamiento gris para persiana 100x28 cm",
+      description: "Aislamiento térmico de color gris de 100x28 cm que se coloca sin herramientas.",
+    }
+    expect(variantProblems(short, longer)).toEqual([])
+  })
+
   it("rejects the original wording and a missing brand", () => {
     expect(variantProblems(SOURCE, { title: SOURCE.title, description: SOURCE.description }).join(" "))
       .toMatch(/igual al original.*igual a la original/)
