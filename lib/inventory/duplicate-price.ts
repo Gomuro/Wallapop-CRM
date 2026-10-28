@@ -1,19 +1,26 @@
 /**
- * Price of a duplicate ad (same product on a second account): always ends in ,98.
- * The nearest X,98 at or below the original, except that ,95 to ,97 round up
- * to ,98 (the client's own examples: 9,95 -> 9,98, 49,95 -> 49,98).
- * 10,00 -> 9,98 and 10,50 -> 9,98, so a duplicate never costs more than 3 cents extra.
+ * Price of a duplicate ad (same product on another account). Each account has its own
+ * ending (accounts.price_ending: 98 for the second account, e.g. 97 for a third), so
+ * duplicates never share a price. The nearest X,<ending> at or below the original,
+ * except that it may round up by at most 3 cents (the client's examples with ending 98:
+ * 9,95 -> 9,98, 49,95 -> 49,98). 10,00 -> 9,98 and 10,50 -> 9,98.
  */
 const ROUND_UP_CENTS = 3
-const ENDING_CENTS = 98
+export const DEFAULT_PRICE_ENDING = 98
 
-export function duplicatePriceCents(originalCents: number): number {
-  const cents = Math.round(originalCents)
-  const sameEuro = Math.floor(cents / 100) * 100 + ENDING_CENTS
-  const picked = sameEuro <= cents + ROUND_UP_CENTS ? sameEuro : sameEuro - 100
-  return Math.max(picked, ENDING_CENTS)
+function validEnding(ending: number): number {
+  const cents = Math.round(ending)
+  return cents >= 0 && cents <= 99 ? cents : DEFAULT_PRICE_ENDING
 }
 
-export function duplicatePrice(original: number): number {
-  return duplicatePriceCents(original * 100) / 100
+export function duplicatePriceCents(originalCents: number, ending = DEFAULT_PRICE_ENDING): number {
+  const cents = Math.round(originalCents)
+  const end = validEnding(ending)
+  const sameEuro = Math.floor(cents / 100) * 100 + end
+  const picked = sameEuro <= cents + ROUND_UP_CENTS ? sameEuro : sameEuro - 100
+  return Math.max(picked, end)
+}
+
+export function duplicatePrice(original: number, ending = DEFAULT_PRICE_ENDING): number {
+  return duplicatePriceCents(original * 100, ending) / 100
 }

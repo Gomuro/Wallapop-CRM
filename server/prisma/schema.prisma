@@ -70,6 +70,9 @@ model Account {
   wallapopEmail String? @map("wallapop_email")
   // Public Wallapop seller id (api/v3/users/<id>/items). Item HTML is 403 from the VPS.
   wallapopUserId String? @map("wallapop_user_id")
+  // Cents a duplicate price ends in on this account (98, a third account e.g. 97),
+  // so duplicates never share a price. Unused on the default account (original price).
+  priceEnding    Int     @default(98) @map("price_ending")
   // Pinned Chrome place (0 = 9222). Not reused after delete, so another account
   // does not inherit this profile.
   chromeSlot   Int             @unique @map("chrome_slot")

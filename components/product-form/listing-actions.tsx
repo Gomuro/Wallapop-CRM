@@ -143,7 +143,7 @@ export function QueueAccountButton({
       triggerClassName="h-12 w-full"
       triggerVariant="secondary"
       title={`Publicar en ${accountLabel}`}
-      description="Se pondrá en la cola de esta cuenta y saldrá como anuncio nuevo, con título y descripción redactados de nuevo y precio terminado en ,98. Las demás cuentas no cambian."
+      description="Se pondrá en la cola de esta cuenta y saldrá como anuncio nuevo, con título y descripción redactados de nuevo y el precio con el final de céntimos de esta cuenta (,98 en la segunda). Las demás cuentas no cambian."
       confirmLabel="Poner en cola"
       pendingLabel="Guardando…"
       error={state.error}

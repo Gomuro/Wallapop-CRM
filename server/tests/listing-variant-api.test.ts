@@ -7,6 +7,7 @@ import { nextChromeSlot } from "../src/lib/account-chrome"
 import { getPrisma } from "../src/lib/db"
 import { setVariantModelForTests } from "../src/lib/listing-variant/generate"
 import { publishTextForListing } from "../src/lib/listing-variant/publish-text"
+import { buildListingVariant } from "../src/lib/listing-variant/store"
 import { prepareStaleDuplicates, processPendingVariants } from "../src/lib/listing-variant/worker"
 import { siblingQueueOffWhere } from "../src/lib/product-sold"
 import { findLeafCategoryId, login, seedCredentials } from "./helpers"
@@ -141,6 +142,29 @@ describe("duplicate text on a second account (Express + Postgres)", () => {
       where: { ...siblingQueueOffWhere(productId, defaultAccountId), accountId: secondAccountId },
     })
     expect(waiting).toBe(1)
+  })
+
+  it("prices each account with its own ending: 98 on the second, 97 on a third", async () => {
+    const prisma = prismaOrThrow()
+    const taken = await prisma.account.findMany({ select: { chromeSlot: true } })
+    const third = await prisma.account.create({
+      data: {
+        name: "Variant test 97",
+        isDefault: false,
+        priceEnding: 97,
+        chromeSlot: nextChromeSlot(taken.map((r) => r.chromeSlot)),
+      },
+      select: { id: true },
+    })
+    try {
+      setVariantModelForTests(async () => REWRITE)
+      const outcome = await buildListingVariant(prisma, productId, third.id)
+      expect(outcome.ok && outcome.data?.variantPrice).toBe(184.97)
+      const second = await buildListingVariant(prisma, productId, secondAccountId, { regenerate: true })
+      expect(second.ok && second.data?.variantPrice).toBe(184.98)
+    } finally {
+      await prisma.account.delete({ where: { id: third.id } })
+    }
   })
 
   it("keeps a manual text, rejects a long title, and locks a live duplicate", async () => {

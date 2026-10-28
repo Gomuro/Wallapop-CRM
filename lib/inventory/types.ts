@@ -19,7 +19,7 @@ export type AccountListingGlance = {
   lastPublishError?: string | null
 }
 
-/** Own wording and ,98 price of a duplicate (listing on a non-default account). */
+/** Own wording and price (account's ending, e.g. ,98) of a duplicate on a non-default account. */
 export type DuplicateVariant = {
   title: string | null
   description: string | null

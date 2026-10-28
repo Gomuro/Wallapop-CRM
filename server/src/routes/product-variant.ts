@@ -21,6 +21,7 @@ type VariantTarget = {
   accountId: string
   status: string
   variantAttempts: number
+  priceEnding: number
   source: { title: string; description: string; brand: string | null; price: number }
 }
 
@@ -37,7 +38,7 @@ async function loadTarget(req: Request, res: Response): Promise<VariantTarget | 
     select: {
       status: true,
       variantAttempts: true,
-      account: { select: { isDefault: true } },
+      account: { select: { isDefault: true, priceEnding: true } },
       product: { select: { title: true, description: true, brand: true, price: true } },
     },
   })
@@ -56,6 +57,7 @@ async function loadTarget(req: Request, res: Response): Promise<VariantTarget | 
     accountId,
     status: listing.status,
     variantAttempts: listing.variantAttempts,
+    priceEnding: listing.account.priceEnding,
     source: { ...text, price: Number(price.toString()) },
   }
 }
@@ -104,7 +106,7 @@ export async function putProductVariant(req: Request, res: Response) {
     data: {
       variantTitle: text.title,
       variantDescription: text.description,
-      variantPrice: duplicatePrice(target.source.price),
+      variantPrice: duplicatePrice(target.source.price, target.priceEnding),
       variantSource: "manual",
       variantBasis: variantBasis(target.source),
       variantGeneratedAt: new Date(),

@@ -29,6 +29,8 @@ type ExistingVariant = {
 
 type VariantInputs = {
   isDefault: boolean
+  /** Cents the duplicate price ends in on this account (accounts.price_ending). */
+  priceEnding: number
   source: VariantSource
   price: number
   existing: ExistingVariant | null
@@ -47,7 +49,10 @@ async function loadVariantInputs(
   accountId: string,
 ): Promise<VariantInputs | null> {
   const [account, product, existing] = await Promise.all([
-    prisma.account.findUnique({ where: { id: accountId }, select: { isDefault: true } }),
+    prisma.account.findUnique({
+      where: { id: accountId },
+      select: { isDefault: true, priceEnding: true },
+    }),
     prisma.product.findUnique({
       where: { id: productId },
       select: { title: true, description: true, brand: true, price: true },
@@ -66,6 +71,7 @@ async function loadVariantInputs(
   if (!account || !product) return null
   return {
     isDefault: account.isDefault,
+    priceEnding: account.priceEnding,
     source: { title: product.title, description: product.description, brand: product.brand },
     price: Number(product.price.toString()),
     existing,
@@ -81,7 +87,7 @@ function reusableVariant(inputs: VariantInputs): VariantData | null {
   return {
     variantTitle: saved.variantTitle,
     variantDescription: saved.variantDescription,
-    variantPrice: duplicatePrice(inputs.price),
+    variantPrice: duplicatePrice(inputs.price, inputs.priceEnding),
     variantSource: saved.variantSource ?? "ai",
     variantBasis: saved.variantBasis ?? variantBasis(inputs.source),
     variantGeneratedAt: saved.variantGeneratedAt ?? new Date(),
@@ -97,7 +103,7 @@ async function freshVariant(inputs: VariantInputs): Promise<VariantOutcome> {
     data: {
       variantTitle: result.text.title,
       variantDescription: result.text.description,
-      variantPrice: duplicatePrice(inputs.price),
+      variantPrice: duplicatePrice(inputs.price, inputs.priceEnding),
       variantSource: "ai",
       variantBasis: variantBasis(inputs.source),
       variantGeneratedAt: new Date(),

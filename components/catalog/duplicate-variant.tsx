@@ -169,7 +169,7 @@ function PreparingNotice({ variant }: { variant: DuplicateVariant | null }) {
 }
 
 /**
- * Duplicate ad on a non-default account: own wording and ,98 price next to the original.
+ * Duplicate ad on a non-default account: own wording and price (account ending) next to the original.
  * Locked while the duplicate is live or posting, so the CRM text matches Wallapop.
  */
 export function DuplicateVariantPanel({

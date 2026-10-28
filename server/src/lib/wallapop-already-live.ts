@@ -33,7 +33,7 @@ const LIVE_TEXT_SELECT = {
   product: { select: { sku: true, title: true, price: true, status: true } },
 } as const
 
-/** A duplicate is on Wallapop under its own title and ,98 price, not the product's. */
+/** A duplicate is on Wallapop under its own title and its account's price ending, not the product's. */
 export function liveText(row: {
   variantTitle: string | null
   variantPrice: { toString(): string } | null
