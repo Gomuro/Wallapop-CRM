@@ -36,6 +36,7 @@ import {
   queueProductOnAccount,
 } from "./product-listings"
 import { publishProduct } from "./product-publish"
+import { putProductVariant, regenerateProductVariant } from "./product-variant"
 import { postProductWallapopDevolucion } from "./product-wallapop-devolucion"
 import { postCatalogDelete } from "./product-catalog-delete"
 import { postProductWallapopEliminar } from "./product-wallapop-eliminar"
@@ -82,6 +83,8 @@ catalog.delete("/products/:id/images/:imageId", deleteProductImage)
 catalog.get("/products/:id/listing", getProductListing)
 catalog.put("/products/:id/listing", putProductListing)
 catalog.post("/products/:id/queue", queueProductOnAccount)
+catalog.post("/products/:id/variant/regenerate", regenerateProductVariant)
+catalog.put("/products/:id/variant", putProductVariant)
 catalog.post("/products/:id/publish", publishProduct)
 catalog.post("/products/:id/wallapop-sold", postProductWallapopSold)
 catalog.post("/products/:id/wallapop-eliminar", postProductWallapopEliminar)

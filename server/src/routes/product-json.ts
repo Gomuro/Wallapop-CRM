@@ -5,6 +5,12 @@ import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import { listingJsonSelect, toListingJson } from "../lib/listing-json"
 import {
+  listingVariantSelect,
+  toVariantJson,
+  type ListingVariantRow,
+} from "../lib/listing-variant/json"
+import { variantBasis } from "../lib/listing-variant/store"
+import {
   accountGlancesForProduct,
   type AccountGlanceSource,
 } from "./product-list-query"
@@ -174,6 +180,7 @@ export function toProductJson(row: ProductJsonRow) {
 
 const productDetailListingSelect = {
   ...listingJsonSelect,
+  ...listingVariantSelect,
   lastPublishError: true,
   account: { select: { name: true, isDefault: true } },
 } as const
@@ -194,10 +201,11 @@ export async function loadProductDetail(
   })
 }
 
-type ProductDetailListing = ProductJsonListing & {
-  account: { name: string; isDefault: boolean }
-  lastPublishError: string | null
-}
+type ProductDetailListing = ProductJsonListing &
+  ListingVariantRow & {
+    account: { name: string; isDefault: boolean }
+    lastPublishError: string | null
+  }
 
 type ProductDetailRow = ProductJsonRow & {
   soldAccountId?: string | null
@@ -213,6 +221,7 @@ export function toProductDetailJson(
     (a, b) => Number(b.account.isDefault) - Number(a.account.isDefault),
   )
   const defaultListing = ordered.find((item) => item.account.isDefault) ?? null
+  const basis = variantBasis(row)
   return {
     ...toProductJson({
       ...row,
@@ -223,6 +232,7 @@ export function toProductDetailJson(
       ...toListingJson(item),
       accountName: item.account.name,
       isDefault: item.account.isDefault,
+      variant: item.account.isDefault ? null : toVariantJson(item, basis),
     })),
     accounts: accountGlancesForProduct(
       accounts,

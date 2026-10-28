@@ -3,6 +3,12 @@ import type { Request, Response } from "express"
 import { getPrisma } from "../lib/db"
 import { sendError } from "../lib/http-error"
 import { listingJsonSelect, toListingJson } from "../lib/listing-json"
+import {
+  buildListingVariant,
+  VARIANT_FAILED_CODE,
+  VARIANT_FAILED_MESSAGE,
+  type VariantData,
+} from "../lib/listing-variant/store"
 import { rescheduleAutopostLoop, scheduleAccountAutopost } from "../lib/wallapop-autopost"
 import { listingBlocksManualQueue, rejectReadyToPostWithoutBrand } from "./product-listings"
 import { paramId } from "./products"
@@ -43,20 +49,20 @@ async function loadQueuePair(prisma: PrismaDb, productId: string, accountId: str
 
 async function writeQueuedListing(
   prisma: PrismaDb,
-  productId: string,
-  accountId: string,
-  productStatus: string,
+  queued: { productId: string; accountId: string; productStatus: string; variant: VariantData | null },
 ) {
+  const { productId, accountId, productStatus } = queued
+  const data = { ...QUEUE_LISTING_DATA, ...(queued.variant ?? {}) }
   return prisma.$transaction(async (tx) => {
     const row = await tx.productListing.upsert({
       where: { productId_accountId: { productId, accountId } },
       create: {
         product: { connect: { id: productId } },
         account: { connect: { id: accountId } },
-        ...QUEUE_LISTING_DATA,
+        ...data,
         shippingEnabled: true,
       },
-      update: QUEUE_LISTING_DATA,
+      update: data,
       select: listingJsonSelect,
     })
     await reactivateWarehouse(tx, productId, productStatus)
@@ -106,7 +112,21 @@ export async function queueProductOnAccount(req: Request, res: Response) {
   if (await rejectQueueListing({ prisma, productId, accountId, status: pair.product.status, res })) {
     return
   }
-  const listing = await writeQueuedListing(prisma, productId, accountId, pair.product.status)
+  const variant = await buildListingVariant(prisma, productId, accountId)
+  if (!variant.ok) {
+    await prisma.productListing.updateMany({
+      where: { productId, accountId },
+      data: { variantError: variant.error },
+    })
+    sendError(res, 422, VARIANT_FAILED_CODE, `${VARIANT_FAILED_MESSAGE} ${variant.error}`)
+    return
+  }
+  const listing = await writeQueuedListing(prisma, {
+    productId,
+    accountId,
+    productStatus: pair.product.status,
+    variant: variant.data,
+  })
   await nudgeAutopost(pair.account)
   res.json({ listing: toListingJson(listing) })
 }

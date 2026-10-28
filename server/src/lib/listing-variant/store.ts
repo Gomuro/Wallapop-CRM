@@ -6,6 +6,10 @@ import { log } from "../log"
 import { generateVariantText } from "./generate"
 import type { VariantSource } from "./validate"
 
+export const VARIANT_FAILED_CODE = "VARIANT_FAILED" as const
+export const VARIANT_FAILED_MESSAGE =
+  "No se pudo preparar el texto del duplicado, no se pone en cola."
+
 export type VariantData = {
   variantTitle: string
   variantDescription: string
