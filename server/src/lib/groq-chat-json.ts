@@ -20,7 +20,17 @@ type GroqChatBody = {
   choices?: { message?: { content?: string } }[]
 }
 
-async function postGroqChat(key: string, system: string, user: string) {
+export type GroqChatOptions = {
+  /** Default 0.1 (matching). Rewriting text wants more variety. */
+  temperature?: number
+}
+
+async function postGroqChat(
+  key: string,
+  system: string,
+  user: string,
+  options: GroqChatOptions,
+) {
   const res = await fetch("https://api.groq.com/openai/v1/chat/completions", {
     method: "POST",
     headers: {
@@ -29,7 +39,7 @@ async function postGroqChat(key: string, system: string, user: string) {
     },
     body: JSON.stringify({
       model: GROQ_MODEL,
-      temperature: 0.1,
+      temperature: options.temperature ?? 0.1,
       response_format: { type: "json_object" },
       messages: [
         { role: "system", content: system },
@@ -48,6 +58,7 @@ function groqRetryable(status: number, message: string) {
 export async function groqChatJson(
   system: string,
   user: string,
+  options: GroqChatOptions = {},
 ): Promise<Record<string, unknown>> {
   const key = process.env.GROQ_API_KEY?.trim()
   if (!key) throw new Error("GROQ_API_KEY is not set")
@@ -56,7 +67,7 @@ export async function groqChatJson(
     if (attempt > 0) {
       await new Promise((resolve) => setTimeout(resolve, 2000 * attempt))
     }
-    const { res, body } = await postGroqChat(key, system, user)
+    const { res, body } = await postGroqChat(key, system, user, options)
     if (!res.ok) {
       last = body.error?.message || `Groq HTTP ${res.status}`
       if (groqRetryable(res.status, last)) continue

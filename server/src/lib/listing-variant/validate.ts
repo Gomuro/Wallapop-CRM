@@ -1,0 +1,114 @@
+/**
+ * Checks an AI rewrite of a product ad before it may be used for a duplicate.
+ * Facts must survive (every number, the brand), wording must change, and the
+ * title must fit Wallapop's 50 characters. Messages are for the CRM operator.
+ */
+export const VARIANT_TITLE_MAX = 50
+const DESCRIPTION_MIN_RATIO = 0.6
+const DESCRIPTION_MAX_RATIO = 1.5
+const MAX_WORD_OVERLAP = 0.9
+const SPANISH_HINTS = /\b(de|la|el|los|las|para|con|en|y|del|muy|sin)\b/i
+
+export type VariantSource = {
+  title: string
+  description: string
+  brand: string | null
+}
+
+export type VariantText = {
+  title: string
+  description: string
+}
+
+/** "1,2 x 2,40m" -> ["1.2", "2.4"]. Numbers are the facts we must not lose or invent. */
+export function factNumbers(text: string): Set<string> {
+  const found = new Set<string>()
+  for (const match of text.matchAll(/\d+(?:[.,]\d+)?/g)) {
+    found.add(String(Number(match[0].replace(",", "."))))
+  }
+  return found
+}
+
+function words(text: string): Set<string> {
+  const out = new Set<string>()
+  for (const word of text.toLowerCase().match(/\p{L}{3,}/gu) ?? []) out.add(word)
+  return out
+}
+
+function overlap(left: Set<string>, right: Set<string>): number {
+  if (left.size === 0 || right.size === 0) return 0
+  let shared = 0
+  for (const word of left) if (right.has(word)) shared += 1
+  return shared / new Set([...left, ...right]).size
+}
+
+function sameText(left: string, right: string): boolean {
+  const norm = (value: string) => value.toLowerCase().replace(/\s+/g, " ").trim()
+  return norm(left) === norm(right)
+}
+
+function titleProblems(source: VariantSource, text: VariantText): string[] {
+  const title = text.title.trim()
+  if (!title) return ["El título está vacío."]
+  const problems: string[] = []
+  if (title.length > VARIANT_TITLE_MAX) {
+    problems.push(`El título tiene ${title.length} caracteres (máximo ${VARIANT_TITLE_MAX}).`)
+  }
+  if (sameText(title, source.title)) problems.push("El título es igual al original.")
+  const allowed = factNumbers(`${source.title} ${source.description}`)
+  const invented = [...factNumbers(title)].filter((n) => !allowed.has(n))
+  if (invented.length) problems.push(`El título añade cifras: ${invented.join(", ")}.`)
+  return problems
+}
+
+function descriptionLengthProblem(source: VariantSource, description: string): string | null {
+  const original = source.description.trim().length
+  if (original < 40) return null
+  const ratio = description.length / original
+  if (ratio < DESCRIPTION_MIN_RATIO) return "La descripción es demasiado corta frente al original."
+  if (ratio > DESCRIPTION_MAX_RATIO) return "La descripción es demasiado larga frente al original."
+  return null
+}
+
+function descriptionProblems(source: VariantSource, text: VariantText): string[] {
+  const description = text.description.trim()
+  if (!description) return ["La descripción está vacía."]
+  const problems: string[] = []
+  if (sameText(description, source.description)) {
+    problems.push("La descripción es igual a la original.")
+  } else if (overlap(words(description), words(source.description)) >= MAX_WORD_OVERLAP) {
+    problems.push("La descripción repite casi las mismas palabras que la original.")
+  }
+  const lengthProblem = descriptionLengthProblem(source, description)
+  if (lengthProblem) problems.push(lengthProblem)
+  if (description.length > 60 && !SPANISH_HINTS.test(description)) {
+    problems.push("La descripción no parece estar en español.")
+  }
+  return problems
+}
+
+function factProblems(source: VariantSource, text: VariantText): string[] {
+  const problems: string[] = []
+  const before = factNumbers(`${source.title} ${source.description}`)
+  const after = factNumbers(`${text.title} ${text.description}`)
+  const lost = [...before].filter((n) => !after.has(n))
+  const added = [...after].filter((n) => !before.has(n))
+  if (lost.length) problems.push(`Faltan cifras del original: ${lost.join(", ")}.`)
+  if (added.length) problems.push(`Aparecen cifras que no están en el original: ${added.join(", ")}.`)
+  const brand = source.brand?.trim()
+  const original = `${source.title} ${source.description}`.toLowerCase()
+  if (brand && original.includes(brand.toLowerCase())) {
+    const rewritten = `${text.title} ${text.description}`.toLowerCase()
+    if (!rewritten.includes(brand.toLowerCase())) problems.push(`Falta la marca ${brand}.`)
+  }
+  return problems
+}
+
+/** Empty list = the rewrite can be used. */
+export function variantProblems(source: VariantSource, text: VariantText): string[] {
+  return [
+    ...titleProblems(source, text),
+    ...descriptionProblems(source, text),
+    ...factProblems(source, text),
+  ]
+}
