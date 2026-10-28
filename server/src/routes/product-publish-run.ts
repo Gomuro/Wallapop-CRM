@@ -15,6 +15,7 @@ import { wallapopBrandFromProduct } from "../../../lib/inventory/wallapop-brand"
 import { weightBandsFromCategoryAttributes } from "../../../lib/inventory/wallapop-weight-band"
 import { wallapopItemUrlOrNull } from "../../../lib/inventory/wallapop-item-url"
 import { liveHrefForListing } from "../lib/wallapop-already-live"
+import { publishTextForListing } from "../lib/listing-variant/publish-text"
 import {
   ALREADY_POSTED_MESSAGE,
   decimalToNumber,
@@ -160,11 +161,17 @@ async function loadCategoryUploadFields(ready: PublishReady) {
 
 async function playwrightProductPublish(ready: PublishReady) {
   const categoryFields = await loadCategoryUploadFields(ready)
+  // Default account: the product as is. Other accounts: the saved duplicate text, never the AI here.
+  const text = await publishTextForListing(
+    ready.prisma,
+    { ...ready.product, price: decimalToNumber(ready.product.price) },
+    ready.accountId,
+  )
   return publishWallapopInBrowser({
     cdpPort: await chromePortForAccount(ready.accountId),
-    title: ready.product.title,
-    description: ready.product.description,
-    price: decimalToNumber(ready.product.price),
+    title: text.title,
+    description: text.description,
+    price: text.price,
     condition: ready.product.condition,
     brand: wallapopBrandFromProduct({
       brand: ready.product.brand,
