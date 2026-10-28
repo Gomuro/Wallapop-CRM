@@ -24,6 +24,10 @@ describe("factNumbers", () => {
   it("normalises decimal commas and splits dimensions", () => {
     expect([...factNumbers("1,2 x 2,40m y 202x122x180")]).toEqual(["1.2", "2.4", "202", "122", "180"])
   })
+
+  it("reads m² and m³ like m2 and m3", () => {
+    expect(factNumbers("1000 m² y 40 m³")).toEqual(factNumbers("1000m2 y 40 m3"))
+  })
 })
 
 describe("variantProblems", () => {

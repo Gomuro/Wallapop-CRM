@@ -26,7 +26,9 @@ export type VariantText = {
 /** "1,2 x 2,40m" -> ["1.2", "2.4"]. Numbers are the facts we must not lose or invent. */
 export function factNumbers(text: string): Set<string> {
   const found = new Set<string>()
-  for (const match of text.matchAll(/\d+(?:[.,]\d+)?/g)) {
+  // "m²" and "m2" are the same fact; the model often switches between them.
+  const digits = text.replace(/²/g, "2").replace(/³/g, "3")
+  for (const match of digits.matchAll(/\d+(?:[.,]\d+)?/g)) {
     found.add(String(Number(match[0].replace(",", "."))))
   }
   return found
