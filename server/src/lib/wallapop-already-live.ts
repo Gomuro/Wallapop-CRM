@@ -27,6 +27,24 @@ export function resetSellerUserIdCacheForTests(): void {
   sellerUserIdByAccount.clear()
 }
 
+const LIVE_TEXT_SELECT = {
+  variantTitle: true,
+  variantPrice: true,
+  product: { select: { sku: true, title: true, price: true, status: true } },
+} as const
+
+/** A duplicate is on Wallapop under its own title and ,98 price, not the product's. */
+export function liveText(row: {
+  variantTitle: string | null
+  variantPrice: { toString(): string } | null
+  product: { title: string; price: { toString(): string } }
+}) {
+  return {
+    title: row.variantTitle ?? row.product.title,
+    price: Number((row.variantPrice ?? row.product.price).toString()),
+  }
+}
+
 export async function loadCrmLiveRows(prisma: PrismaClient): Promise<CrmLiveRow[]> {
   const rows = await prisma.productListing.findMany({
     where: { account: { isDefault: true } },
@@ -34,14 +52,13 @@ export async function loadCrmLiveRows(prisma: PrismaClient): Promise<CrmLiveRow[
       id: true,
       status: true,
       externalUrl: true,
-      product: { select: { sku: true, title: true, price: true, status: true } },
+      ...LIVE_TEXT_SELECT,
     },
   })
   return rows.map((row) => ({
     listingId: row.id,
     sku: row.product.sku,
-    title: row.product.title,
-    price: Number(row.product.price.toString()),
+    ...liveText(row),
     productStatus: row.product.status,
     listingStatus: row.status,
     externalUrl: row.externalUrl,
@@ -126,14 +143,13 @@ async function loadAccountLiveRows(
       id: true,
       status: true,
       externalUrl: true,
-      product: { select: { sku: true, title: true, price: true, status: true } },
+      ...LIVE_TEXT_SELECT,
     },
   })
   return rows.map((row) => ({
     listingId: row.id,
     sku: row.product.sku,
-    title: row.product.title,
-    price: Number(row.product.price.toString()),
+    ...liveText(row),
     productStatus: row.product.status,
     listingStatus: row.status,
     externalUrl: row.externalUrl,

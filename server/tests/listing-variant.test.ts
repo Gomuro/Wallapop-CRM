@@ -3,6 +3,7 @@ import { afterEach, describe, expect, it } from "vitest"
 import { generateVariantText, setVariantModelForTests } from "../src/lib/listing-variant/generate"
 import { factNumbers, variantProblems } from "../src/lib/listing-variant/validate"
 import { variantBasis } from "../src/lib/listing-variant/store"
+import { liveText } from "../src/lib/wallapop-already-live"
 
 const SOURCE = {
   title: "Caja almacenamiento 1450L Caseta",
@@ -82,6 +83,23 @@ describe("generateVariantText", () => {
     const result = await generateVariantText(SOURCE)
     expect(result).toMatchObject({ ok: false, attempts: 1 })
     expect(calls).toBe(1)
+  })
+})
+
+describe("liveText", () => {
+  const product = { title: SOURCE.title, price: { toString: () => "184.95" } }
+
+  it("matches a duplicate on the public profile by its own title and ,98 price", () => {
+    expect(
+      liveText({ variantTitle: GOOD.title, variantPrice: { toString: () => "184.98" }, product }),
+    ).toEqual({ title: GOOD.title, price: 184.98 })
+  })
+
+  it("matches an original listing by the product", () => {
+    expect(liveText({ variantTitle: null, variantPrice: null, product })).toEqual({
+      title: SOURCE.title,
+      price: 184.95,
+    })
   })
 })
 
