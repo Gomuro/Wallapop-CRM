@@ -12,6 +12,7 @@ import {
 import { assignChromePlaces } from "../account-chrome"
 import { getPrisma } from "../db"
 import { log } from "../log"
+import { isWallapopOffline } from "../wallapop-offline"
 import { syncWallapopIdentityOnActive } from "../wallapop-account-identity"
 import { markSessionProbed, shouldProbeSession } from "./probe-backoff"
 import { snapshotWithChromeProxy } from "./proxy"
@@ -113,6 +114,7 @@ async function applyReconcileResult(
 
 /** Open this account's saved Chrome profile, classify, then close the window. */
 async function rehydrateAccountSession(accountId: string, port: number): Promise<void> {
+  if (isWallapopOffline()) return
   const row = sessionRow(accountId)
   if (row.requires2FA || row.status === "ACTIVE") return
   if (!shouldProbeSession(accountId, row.status)) return

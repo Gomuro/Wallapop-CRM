@@ -3,6 +3,7 @@ import type { ListingStatus, PrismaClient } from "../../generated/prisma/client"
 import { wallapopItemUrlOrNull } from "../../../lib/inventory/wallapop-item-url"
 import { findDefaultAccountId } from "./default-account"
 import { log } from "./log"
+import { isWallapopOffline } from "./wallapop-offline"
 import { listingJsonSelect, toListingJson } from "./listing-json"
 import {
   fetchSellerPublishedItems,
@@ -78,6 +79,7 @@ async function loadSellerCatalog(
   prisma: PrismaClient,
   accountId: string,
 ): Promise<LiveCatalogItem[] | null> {
+  if (isWallapopOffline()) return null
   try {
     const userId = await resolveSellerUserId(prisma, accountId, fetch)
     if (!userId) {

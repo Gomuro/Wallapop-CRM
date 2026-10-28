@@ -20,6 +20,7 @@ import {
   writeChromeProxyForPort,
 } from "../account-chrome-proxy"
 import { log } from "../log"
+import { assertWallapopOnline } from "../wallapop-offline"
 import { ensureLocalProxy, stopLocalProxy } from "./local-proxy"
 
 const DEFAULT_CDP_PORT = firstCdpPort()
@@ -175,6 +176,7 @@ export async function spawnRealChrome(
   proxy?: string | null,
   port = DEFAULT_CDP_PORT,
 ): Promise<ChildProcess> {
+  assertWallapopOnline()
   const chromePath = findChromeExecutable()
   const profileDir = profileDirForPort(port)
   fs.mkdirSync(profileDir, { recursive: true })

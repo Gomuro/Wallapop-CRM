@@ -23,6 +23,7 @@ export { killSpawnedChrome }
 
 import { firstCdpPort } from "../../../../lib/accounts/chrome-place"
 import { log } from "../log"
+import { assertWallapopOnline } from "../wallapop-offline"
 import { promiseWithin, waitForChromeQuit } from "./busy"
 
 const CDP_CONNECT_TIMEOUT_MS = 15_000
@@ -101,6 +102,7 @@ export function hasOpenWallapopBrowser(port = CDP_PORT): boolean {
 }
 
 async function connectOverCdp(cdpUrl: string) {
+  assertWallapopOnline()
   const versionUrl = `${cdpUrl.replace(/\/$/, "")}/json/version`
   try {
     const response = await fetch(versionUrl, {
