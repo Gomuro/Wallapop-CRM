@@ -1,5 +1,6 @@
 import { groqChatJson } from "../groq-chat-json"
 import { log } from "../log"
+import { openRouterChatJson } from "../openrouter-chat-json"
 import { VARIANT_SYSTEM_PROMPT, variantUserPrompt } from "./prompt"
 import { variantProblems, type VariantSource, type VariantText } from "./validate"
 
@@ -13,12 +14,21 @@ export type VariantResult =
 
 export type AskModel = (system: string, user: string) => Promise<Record<string, unknown>>
 
-const askGroq: AskModel = (system, user) =>
-  groqChatJson(system, user, { temperature: TEMPERATURE })
+/** Claude Haiku on OpenRouter first; Groq only when OpenRouter does not answer. */
+const askModels: AskModel = async (system, user) => {
+  try {
+    return await openRouterChatJson(system, user, { temperature: TEMPERATURE, reasoningEffort: "low" })
+  } catch (error) {
+    log("warn", "listing_variant_openrouter_failed", {
+      message: error instanceof Error ? error.message : String(error),
+    })
+    return groqChatJson(system, user, { temperature: TEMPERATURE })
+  }
+}
 
 let askOverride: AskModel | null = null
 
-/** Tests only: replace the model call. Pass null to restore Groq. */
+/** Tests only: replace the model call. Pass null to restore OpenRouter + Groq. */
 export function setVariantModelForTests(ask: AskModel | null): void {
   askOverride = ask
 }
@@ -44,9 +54,9 @@ async function askOnce(
   }
 }
 
-/** Never returns the original wording: on failure the caller must not publish a duplicate. */
+/** Never returns the original wording: on failure the duplicate keeps waiting (PREPARING). */
 export async function generateVariantText(source: VariantSource): Promise<VariantResult> {
-  const ask = askOverride ?? askGroq
+  const ask = askOverride ?? askModels
   let problems: string[] = []
   for (let attempt = 1; attempt <= ATTEMPTS; attempt += 1) {
     const result = await askOnce(ask, source, problems)
@@ -55,7 +65,7 @@ export async function generateVariantText(source: VariantSource): Promise<Varian
     }
     problems = result.problems
     log("info", "listing_variant_rejected", { attempt, problems })
-    // groqChatJson already retried the transport; a second round only adds wait.
+    // Both models were tried for this round; the background retry comes back later.
     if (!result.text) return { ok: false, error: problems.join(" "), attempts: attempt }
   }
   return { ok: false, error: problems.join(" "), attempts: ATTEMPTS }
