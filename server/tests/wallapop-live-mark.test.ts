@@ -122,6 +122,24 @@ describe("parseSellerItemsPayload", () => {
     })
   })
 
+  it("reads a reserve as the public page marks it: reserved.flag", () => {
+    const row = (slug: string, extra: Record<string, unknown>) => ({
+      id: slug,
+      title: slug,
+      slug,
+      price: { amount: 14.95, currency: "EUR" },
+      ...extra,
+    })
+    const parsed = parseSellerItemsPayload({
+      data: [
+        row("olla-acero-inoxidable-11-4-litros-1317355266", { reserved: { flag: true } }),
+        row("sarten-1312831557", { reserved: { flag: false } }),
+        row("lampara-1307308862", {}),
+      ],
+    })
+    expect(parsed.items.map((item) => item.reserved)).toEqual([true, false, false])
+  })
+
   it("reads the seller id from an item page", () => {
     expect(sellerUserIdFromItemHtml('{"userId":"wzynvgk152j5"}')).toBe("wzynvgk152j5")
   })

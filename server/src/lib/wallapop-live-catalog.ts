@@ -28,6 +28,18 @@ function cashAmount(price: unknown): number | null {
   return null
 }
 
+/**
+ * api/v3/users/{id}/items marks a reserve as `reserved: { flag: true }` (seen 2026-10-29);
+ * there is no `isReserved` on that page. Reading only `isReserved` made every ad look free
+ * and the monitor cleared 12 reserves.
+ */
+function isReservedRecord(record: { isReserved?: unknown; reserved?: unknown }): boolean {
+  if (record.isReserved === true) return true
+  const reserved = record.reserved as { flag?: unknown } | boolean | null | undefined
+  if (reserved === true) return true
+  return typeof reserved === "object" && reserved !== null && reserved.flag === true
+}
+
 function itemFromRecord(row: unknown): LiveCatalogItem | null {
   if (!row || typeof row !== "object") return null
   const record = row as {
@@ -36,6 +48,7 @@ function itemFromRecord(row: unknown): LiveCatalogItem | null {
     slug?: unknown
     price?: unknown
     isReserved?: unknown
+    reserved?: unknown
   }
   if (typeof record.slug !== "string" || typeof record.title !== "string") return null
   const href = wallapopItemUrlOrNull(`https://es.wallapop.com/item/${record.slug}`)
@@ -47,7 +60,7 @@ function itemFromRecord(row: unknown): LiveCatalogItem | null {
     title: record.title,
     price,
     priceText: priceTextFromAmount(price),
-    reserved: record.isReserved === true,
+    reserved: isReservedRecord(record),
   }
 }
 
