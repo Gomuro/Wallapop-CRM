@@ -13,6 +13,7 @@ import {
   listedPageReadyEval,
   parseProPager,
 } from "./pro-catalog-eval"
+import { logProPage, saveIncompleteActivos } from "./pro-catalog-diag"
 
 const MAX_PAGES = 20
 const DEFAULT_WAITS = {
@@ -225,8 +226,18 @@ function largerTotal(total: number | null, pager: string): number | null {
   return total == null ? parsed.total : Math.max(total, parsed.total)
 }
 
+/** Adds the page's rows; returns how many were not seen before. */
+function absorbShot(seen: Map<string, ProCatalogRow>, shot: PageShot): number {
+  const before = seen.size
+  for (const row of shot.rows) {
+    if (!seen.has(row.href)) seen.set(row.href, row)
+  }
+  return seen.size - before
+}
+
 async function collectProPages(
   page: Page,
+  tab: string,
 ): Promise<{ seen: Map<string, ProCatalogRow>; total: number | null; pager: string }> {
   const seen = new Map<string, ProCatalogRow>()
   let total: number | null = null
@@ -235,9 +246,7 @@ async function collectProPages(
   for (let i = 0; i < MAX_PAGES && shot; i += 1) {
     pager = shot.pager
     total = largerTotal(total, pager)
-    for (const row of shot.rows) {
-      if (!seen.has(row.href)) seen.set(row.href, row)
-    }
+    logProPage(tab, i + 1, shot, absorbShot(seen, shot))
     if (total != null && seen.size >= total) break
     const moved = await page.evaluate(CLICK_NEXT_EVAL)
     if (!moved) break
@@ -255,13 +264,15 @@ async function readAllPages(
 ): Promise<{ rows: ProCatalogRow[]; total: number | null } | null> {
   await openTab(page, tab)
   await confirmActivosIfNeeded(page, tab, confirmHrefs)
-  const { seen, total, pager } = await collectProPages(page)
+  const { seen, total, pager } = await collectProPages(page, tab)
   if (proCatalogIncomplete(total, seen.size)) {
+    const snapshot = tab === "Activos" ? await saveIncompleteActivos(page, { collected: seen.size, total }) : null
     log("warn", "wallapop_monitor_pro_incomplete", {
       tab,
       collected: seen.size,
       total,
       pager,
+      snapshot,
     })
     return null
   }
@@ -273,7 +284,7 @@ async function readAllPages(
 export async function scrapeProActivos(page: Page): Promise<ProActivosSnapshot> {
   await rewindToFirstProPage(page)
   await openTab(page, "Activos")
-  const { seen, total } = await collectProPages(page)
+  const { seen, total } = await collectProPages(page, "Activos")
   return {
     rows: [...seen.values()],
     total,
