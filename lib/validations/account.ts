@@ -127,6 +127,18 @@ export const autopostIntervalPatchSchema = z
     }
   })
 
+/** Cents a duplicate price ends in on a non-default account: 98 gives 59,95 -> 59,98. */
+export const PRICE_ENDING_MIN = 0
+export const PRICE_ENDING_MAX = 99
+
+export const accountPriceEndingSchema = z.object({
+  priceEnding: z
+    .number({ error: "Introduce un número entero." })
+    .int("Introduce un número entero.")
+    .min(PRICE_ENDING_MIN, "La terminación va de 0 a 99.")
+    .max(PRICE_ENDING_MAX, "La terminación va de 0 a 99."),
+})
+
 export type AccountCreateInput = z.infer<typeof accountCreateSchema>
 export type AccountUpdateInput = z.infer<typeof accountUpdateSchema>
 export type AccountStatus = z.infer<typeof accountStatusSchema>

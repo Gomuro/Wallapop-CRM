@@ -156,6 +156,8 @@ export type ApiDefaultAccountPlace = {
 export type ApiDefaultAccountSchedule = {
   autopostIntervalMs: number | null
   autopostEnabled?: boolean
+  /** Cents a duplicate price ends in on this account. Unused on the default account. */
+  priceEnding?: number
 }
 
 export type ApiDefaultAccountRestriction = {

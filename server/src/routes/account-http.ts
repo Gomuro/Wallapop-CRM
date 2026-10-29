@@ -24,6 +24,7 @@ type AccountRowPlace = {
   wallapopEmail: string | null
   autopostIntervalMs: number | null
   autopostEnabled: boolean
+  priceEnding: number
   restrictionSuspectedAt: Date | null
   restrictionReason: string | null
 }
@@ -89,6 +90,7 @@ export function toAccountJson(row: AccountRow) {
     postalCode: row.postalCode,
     autopostIntervalMs: row.autopostIntervalMs,
     autopostEnabled: row.autopostEnabled,
+    priceEnding: row.priceEnding,
     wallapopEmail: row.wallapopEmail,
     restrictionSuspectedAt: row.restrictionSuspectedAt?.toISOString() ?? null,
     restrictionReason: row.restrictionReason,

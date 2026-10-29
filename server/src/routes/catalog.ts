@@ -23,6 +23,7 @@ import {
   stopAccountAutopost,
   stopDefaultAccountAutopost,
 } from "./accounts"
+import { patchAccountPriceEnding } from "./account-price-ending"
 import { getQueueNewProducts, putQueueNewProducts } from "./queue-new-products"
 import { listBrands } from "./brands"
 import { getDevMonitor, postDevAccountWatch, putDevMonitor } from "./dev-monitor"
@@ -107,6 +108,7 @@ catalog.get("/accounts/:id/autopost", getAccountAutopost)
 catalog.patch("/accounts/:id/autopost", patchAccountAutopost)
 catalog.post("/accounts/:id/autopost/start", startAccountAutopost)
 catalog.post("/accounts/:id/autopost/stop", stopAccountAutopost)
+catalog.patch("/accounts/:id/price-ending", patchAccountPriceEnding)
 catalog.post("/accounts/:id/restriction/dismiss", dismissAccountRestriction)
 catalog.delete("/accounts/:id", deleteAccount)
 catalog.get("/accounts/status", getAccountConnectionStatus)

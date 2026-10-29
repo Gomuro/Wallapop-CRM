@@ -10,6 +10,7 @@ import { ConfirmAction } from "@/components/confirm-action"
 import { AutopostIntervalForm } from "@/components/accounts/autopost-interval-form"
 import { ConnectAccountForm } from "@/components/accounts/connect-account-form"
 import { DevWatchChrome } from "@/components/accounts/dev-watch-chrome"
+import { PriceEndingForm } from "@/components/accounts/price-ending-form"
 import { RestrictionWarning } from "@/components/accounts/restriction-warning"
 import { Badge } from "@/components/ui/badge"
 import { Button, buttonVariants } from "@/components/ui/button"
@@ -166,6 +167,9 @@ function AccountBody({ account }: { account: ApiAccountCard }) {
       </CardContent>
       <ConnectAccountForm embedded accountId={account.id} />
       <AutopostIntervalForm embedded accountId={account.id} />
+      {account.isDefault ? null : (
+        <PriceEndingForm accountId={account.id} initialEnding={account.priceEnding} />
+      )}
       <DeleteAccountButton accountId={account.id} accountName={account.name} />
     </Card>
   )
