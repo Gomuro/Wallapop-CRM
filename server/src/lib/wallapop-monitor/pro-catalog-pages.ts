@@ -9,23 +9,11 @@ import {
   CLICK_PREV_EVAL,
   PRO_CATALOG_ROWS_EVAL,
   clickTabEval,
-  firstRowChangedEval,
-  listedPageReadyEval,
   parseProPager,
 } from "./pro-catalog-eval"
 
 const MAX_PAGES = 20
-const DEFAULT_WAITS = {
-  page: 8_000,
-  /** Second, longer wait when the page after Next still shows the rows we already have. */
-  staleRetry: 15_000,
-}
-let waits = DEFAULT_WAITS
-
-/** Tests shorten the waits; null restores them. */
-export function setProPageWaitsForTests(next: typeof DEFAULT_WAITS | null): void {
-  waits = next ?? DEFAULT_WAITS
-}
+const PAGE_WAIT_MS = 8_000
 /** Activos can still show the pre-publish table after the pager already matches. */
 const ACTIVOS_ROW_WAIT_MS = 45_000
 
@@ -51,39 +39,49 @@ async function readShot(page: Page): Promise<PageShot> {
   return { rows: shot?.rows ?? [], pager: shot?.pager ?? "" }
 }
 
+function listedPageReadyEval(input: {
+  tab?: string
+  previousPager?: string
+  previousHref?: string
+}): string {
+  return `(() => {
+    const input = ${JSON.stringify(input)}
+    if (input.tab) {
+      const tab = [...document.querySelectorAll("wallapop-tab")].find((el) =>
+        (el.getAttribute("aria-label") || "")
+          .toLowerCase()
+          .startsWith(input.tab || ""),
+      )
+      if (!tab || tab.getAttribute("aria-selected") !== "true") return false
+    }
+    const info = document.querySelector(
+      "tsl-pagination-actions .PaginationActions__info",
+    )
+    const text = (info && info.textContent ? info.textContent : "").replace(/\\s+/g, " ").trim()
+    const match = text.match(/(\\d+)\\s*-\\s*(\\d+)\\s*de\\s*(\\d+)/i)
+    if (!match) return false
+    const from = Number(match[1])
+    const to = Number(match[2])
+    const total = Number(match[3])
+    const rows = document.querySelectorAll('tr[id^="CatalogItem_"]').length
+    if (total === 0) return rows === 0
+    if (rows !== to - from + 1) return false
+    if (input.previousPager && text === input.previousPager) return false
+    const first = document.querySelector('tr[id^="CatalogItem_"] a[href*="/item/"]')
+    if (input.previousHref && first instanceof HTMLAnchorElement) {
+      return first.href !== input.previousHref
+    }
+    return true
+  })()`
+}
+
 async function waitForListedPage(
   page: Page,
   expected: { tab?: string; previousPager?: string; previousHref?: string },
 ): Promise<void> {
   await page
-    // Options are the third argument; as the second they were the page arg and the 30 s default applied.
-    .waitForFunction(listedPageReadyEval(expected), undefined, { timeout: waits.page })
+    .waitForFunction(listedPageReadyEval(expected), { timeout: PAGE_WAIT_MS })
     .catch(() => {})
-}
-
-/** A page after Next that only shows rows we already have has not loaded yet. */
-function hasNewRows(shot: PageShot, seen: Map<string, ProCatalogRow>): boolean {
-  return shot.rows.some((row) => !seen.has(row.href))
-}
-
-/**
- * The page Next led to, once its own rows are there. The pager text can change before
- * the rows do, so a page with only known rows gets one longer wait and a second read.
- * Null: it never loaded, and reading on would skip a whole page.
- */
-async function nextFreshShot(
-  page: Page,
-  previous: PageShot,
-  seen: Map<string, ProCatalogRow>,
-): Promise<PageShot | null> {
-  await waitForListedPage(page, { previousPager: previous.pager, previousHref: previous.rows[0]?.href })
-  const shot = await readShot(page)
-  if (hasNewRows(shot, seen)) return shot
-  await page
-    .waitForFunction(firstRowChangedEval(previous.rows[0]?.href), undefined, { timeout: waits.staleRetry, polling: 250 })
-    .catch(() => {})
-  const retried = await readShot(page)
-  return hasNewRows(retried, seen) ? retried : null
 }
 
 function pageIsListed(shot: PageShot, totalHint: number | null): boolean {
@@ -214,35 +212,27 @@ function logProTab(
   })
 }
 
-/**
- * The pager total is not stable within one pass (e.g. "de 501" on one page and "de 512"
- * on another with 512 ads), so the pass must reach the largest total it was shown.
- */
-function largerTotal(total: number | null, pager: string): number | null {
-  const parsed = parseProPager(pager)
-  if (!parsed) return total
-  return total == null ? parsed.total : Math.max(total, parsed.total)
-}
-
 async function collectProPages(
   page: Page,
 ): Promise<{ seen: Map<string, ProCatalogRow>; total: number | null; pager: string }> {
   const seen = new Map<string, ProCatalogRow>()
   let total: number | null = null
-  let shot: PageShot | null = await readShot(page)
-  let pager = shot.pager
-  for (let i = 0; i < MAX_PAGES && shot; i += 1) {
+  let pager = ""
+  for (let i = 0; i < MAX_PAGES; i += 1) {
+    const shot = await readShot(page)
     pager = shot.pager
-    total = largerTotal(total, pager)
+    const parsed = parseProPager(pager)
+    if (parsed) total = parsed.total
     for (const row of shot.rows) {
       if (!seen.has(row.href)) seen.set(row.href, row)
     }
     if (total != null && seen.size >= total) break
     const moved = await page.evaluate(CLICK_NEXT_EVAL)
     if (!moved) break
-    const previous: PageShot = shot
-    shot = await nextFreshShot(page, previous, seen)
-    if (!shot) log("warn", "wallapop_monitor_pro_page_stale", { page: i + 2, pager: previous.pager })
+    await waitForListedPage(page, {
+      previousPager: pager,
+      previousHref: shot.rows[0]?.href,
+    })
   }
   return { seen, total, pager }
 }
