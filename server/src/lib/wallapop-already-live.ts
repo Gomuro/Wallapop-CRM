@@ -156,7 +156,7 @@ async function loadAccountLiveRows(
   }))
 }
 
-async function writeLiveMark(
+export async function writeLiveMark(
   prisma: PrismaClient,
   row: CrmLiveRow,
   mark: LiveMark,
@@ -189,16 +189,25 @@ function shouldWrite(mark: LiveMark, row: CrmLiveRow, clearMissing: boolean): bo
   return clearMissing && mark.action === "not_hanging"
 }
 
+export type LiveCatalogPlan = { rows: CrmLiveRow[]; marks: LiveMark[] }
+
+/** Default account rows against its public profile, nothing written. Null when the profile can't be read. */
+export async function planDefaultLiveCatalog(prisma: PrismaClient): Promise<LiveCatalogPlan | null> {
+  const items = await loadDefaultSellerCatalog(prisma)
+  if (!items) return null
+  const rows = await loadCrmLiveRows(prisma)
+  return { rows, marks: planLiveMarks(rows, items) }
+}
+
 export async function syncListingsWithLiveCatalog(
   prisma: PrismaClient,
   options: { clearMissing: boolean },
 ): Promise<{ hanging: number; notHanging: number; ambiguous: string[] }> {
-  const items = await loadDefaultSellerCatalog(prisma)
-  if (!items) return { hanging: 0, notHanging: 0, ambiguous: [] }
-  const rows = await loadCrmLiveRows(prisma)
-  const byId = new Map(rows.map((row) => [row.listingId, row]))
+  const plan = await planDefaultLiveCatalog(prisma)
+  if (!plan) return { hanging: 0, notHanging: 0, ambiguous: [] }
+  const byId = new Map(plan.rows.map((row) => [row.listingId, row]))
   const summary = { hanging: 0, notHanging: 0, ambiguous: [] as string[] }
-  for (const mark of planLiveMarks(rows, items)) {
+  for (const mark of plan.marks) {
     if (mark.action === "leave" && mark.reason === "ambiguous") {
       summary.ambiguous.push(mark.sku)
     }

@@ -1,6 +1,7 @@
 import { startListingVariantWorker } from "./lib/listing-variant/worker"
 import { log } from "./lib/log"
 import { startWallapopAutopostLoop } from "./lib/wallapop-autopost"
+import { startWallapopLiveSyncLoop } from "./lib/wallapop-live-sync"
 import { startWallapopMonitorLoop } from "./lib/wallapop-monitor"
 import { isWallapopOffline } from "./lib/wallapop-offline"
 import { recoverStalePostingOnBoot } from "./lib/wallapop-posting-watchdog"
@@ -14,6 +15,7 @@ export function runStartupHooks(): void {
     log("info", "wallapop_offline_skip_loops")
   } else {
     startWallapopMonitorLoop()
+    startWallapopLiveSyncLoop()
     startWallapopAutopostLoop()
   }
   // Talks to the AI only, never to Wallapop, so it also runs offline.
