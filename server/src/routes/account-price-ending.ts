@@ -20,6 +20,22 @@ function cents(ending: number): string {
   return String(ending).padStart(2, "0")
 }
 
+const EXAMPLES_SHOWN = 3
+
+/** Active products whose price already ends in these cents: their duplicate would cost the same. */
+async function activePricesEndingIn(prisma: PrismaClient, ending: number) {
+  const rows = await prisma.$queryRaw<Array<{ sku: string; title: string; total: bigint }>>`
+    SELECT sku, title, count(*) OVER () AS total FROM products
+    WHERE status = 'ACTIVE' AND round(price * 100)::int % 100 = ${ending}
+    ORDER BY sku LIMIT ${EXAMPLES_SHOWN}`
+  return { total: Number(rows[0]?.total ?? 0), examples: rows.map((row) => `${row.sku} ${row.title}`) }
+}
+
+function endingMatchesMessage(ending: number, found: { total: number; examples: string[] }): string {
+  const what = found.total === 1 ? "1 producto activo cuyo precio ya acaba" : `${found.total} productos activos cuyo precio ya acaba`
+  return `Hay ${what} en ,${cents(ending)} (${found.examples.join("; ")}${found.total > found.examples.length ? "; …" : ""}). Su duplicado costaría lo mismo que el original. Elige otra terminación.`
+}
+
 /** The account to change, or null after an error response. */
 async function editableAccount(prisma: PrismaClient, res: Response, accountId: string | undefined, priceEnding: number) {
   const account = accountId ? await prisma.account.findUnique({ where: { id: accountId } }) : null
@@ -37,6 +53,11 @@ async function editableAccount(prisma: PrismaClient, res: Response, accountId: s
   })
   if (taken) {
     sendError(res, 409, "PRICE_ENDING_TAKEN", `La cuenta ${taken.name} ya usa la terminación ,${cents(priceEnding)}.`)
+    return null
+  }
+  const matching = await activePricesEndingIn(prisma, priceEnding)
+  if (matching.total > 0) {
+    sendError(res, 409, "PRICE_ENDING_MATCHES_PRODUCTS", endingMatchesMessage(priceEnding, matching))
     return null
   }
   return account

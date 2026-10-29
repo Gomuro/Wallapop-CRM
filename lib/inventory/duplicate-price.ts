@@ -24,3 +24,8 @@ export function duplicatePriceCents(originalCents: number, ending = DEFAULT_PRIC
 export function duplicatePrice(original: number, ending = DEFAULT_PRICE_ENDING): number {
   return duplicatePriceCents(original * 100, ending) / 100
 }
+
+/** 19,98 with ending 98 stays 19,98: such a duplicate would cost exactly the original. */
+export function sameCents(left: number, right: number): boolean {
+  return Math.round(left * 100) === Math.round(right * 100)
+}

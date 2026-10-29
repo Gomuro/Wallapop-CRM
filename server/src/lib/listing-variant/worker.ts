@@ -1,7 +1,9 @@
 import type { PrismaClient } from "../../../generated/prisma/client"
+import { sameCents } from "../../../../lib/inventory/duplicate-price"
 import { getPrisma } from "../db"
 import { log, serializeError } from "../log"
 import { scheduleAccountAutopost } from "../wallapop-autopost"
+import { DUPLICATE_SAME_PRICE_MESSAGE } from "./publish-text"
 import { buildListingVariant, variantBasis, type VariantOutcome } from "./store"
 
 const TICK_MS = 5 * 60_000
@@ -17,6 +19,16 @@ export function variantRetryDelayMs(failures: number): number {
 
 type PendingListing = { productId: string; accountId: string; status: string; variantAttempts: number }
 
+/** Text ready: into the queue, unless the duplicate would cost exactly the original. */
+async function promotionFor(prisma: PrismaClient, productId: string, variantPrice: number) {
+  const product = await prisma.product.findUnique({ where: { id: productId }, select: { price: true } })
+  if (product && sameCents(variantPrice, Number(product.price.toString()))) {
+    log("warn", "listing_variant_same_price", { productId, variantPrice })
+    return { status: "FAILED" as const, lastPublishError: DUPLICATE_SAME_PRICE_MESSAGE }
+  }
+  return { status: "READY_TO_POST" as const }
+}
+
 /**
  * Generate and save the duplicate text for one listing. A PREPARING listing moves to
  * READY_TO_POST on success; on failure it stays and gets its next try time.
@@ -31,7 +43,7 @@ export async function writeListingVariant(
   const where = { productId, accountId }
   if (outcome.ok) {
     if (!outcome.data) return outcome
-    const promote = listing.status === "PREPARING" ? { status: "READY_TO_POST" as const } : {}
+    const promote = listing.status === "PREPARING" ? await promotionFor(prisma, productId, outcome.data.variantPrice) : {}
     await prisma.productListing.updateMany({
       where,
       data: { ...outcome.data, ...promote, variantAttempts: 0, variantNextAttemptAt: null },
