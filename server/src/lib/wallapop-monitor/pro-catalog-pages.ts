@@ -16,8 +16,7 @@ import {
 
 const MAX_PAGES = 20
 const DEFAULT_WAITS = {
-  /** What tab switches and Next really waited so far (the old 8 s never applied, see below). */
-  page: 30_000,
+  page: 8_000,
   /** Second, longer wait when the page after Next still shows the rows we already have. */
   staleRetry: 15_000,
 }
