@@ -85,19 +85,13 @@ async function confirmCatalogRead(input: {
   let plan = planMonitorUpdates(catalogs.published, catalogs.sold, listings);
   let linked = planLinkedSales(catalogs.published, catalogs.sold, linkedSold);
   if (!planNeedsConfirm(plan, linked)) return { plan, linked };
-  const confirmHrefs = listings
-    .filter(
-      (listing) =>
-        plan.toMissing.includes(listing.id) && listing.externalUrl,
-    )
-    .map((listing) => listing.externalUrl as string);
   log("info", "wallapop_monitor_reread_activos", {
     accountId,
-    missing: confirmHrefs.length,
+    missing: plan.toMissing.length,
     removedSales: linked.removedProductIds.length,
     relistedSales: linked.relistedProductIds.length,
   });
-  const reread = await scrapeCatalogs(page, accountId, confirmHrefs);
+  const reread = await scrapeCatalogs(page, accountId, listings.length);
   if (!reread) return null;
   plan = planMonitorUpdates(reread.published, reread.sold, listings);
   linked = planLinkedSales(reread.published, reread.sold, linkedSold);
@@ -116,7 +110,7 @@ async function runMonitorAfterAttach(
       accountId,
       count: listings.length,
     });
-    const catalogs = await scrapeCatalogs(page, accountId);
+    const catalogs = await scrapeCatalogs(page, accountId, listings.length);
     if (!catalogs) return [];
     const confirmed = await confirmCatalogRead({
       page,

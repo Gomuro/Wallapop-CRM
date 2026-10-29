@@ -5,6 +5,7 @@
   <!-- Wallapop Pro catalog, Activos tab, 40 rows per page. The pager text changes at once
        on Next; the rows can follow later (slow page) or never (stuck page). -->
   <wallapop-tab aria-label="Activos" aria-selected="true"></wallapop-tab>
+  <wallapop-tab aria-label="Vendidos" aria-selected="false"></wallapop-tab>
   <table><tbody id="rows"></tbody></table>
   <tsl-pagination-actions>
     <walla-icon class="PaginationActions__action" id="prev"></walla-icon>
@@ -19,6 +20,8 @@
       rowDelays: {},
       // Page index -> total the pager claims on that page (Wallapop sometimes shows fewer).
       pagerTotals: {},
+      // Vendidos rows carry the sold badge.
+      tab: "Activos",
       page: 0,
       configure(options) {
         Object.assign(this, { rowDelays: {}, pagerTotals: {} }, options)
@@ -48,7 +51,8 @@
           row.id = "CatalogItem_" + n
           row.innerHTML =
             '<td><a href="https://es.wallapop.com/item/producto-' + n + "-13" + String(n).padStart(8, "0") +
-            '"><span class="Title">Producto ' + n + "</span></a></td><td>" + (10 + n) + ",95 €</td>"
+            '"><span class="Title">Producto ' + n + "</span></a></td><td>" + (10 + n) + ",95 €" +
+            (this.tab === "Vendidos" ? '<wallapop-badge badgetype="sold"></wallapop-badge>' : "") + "</td>"
           body.appendChild(row)
         }
       },
@@ -61,6 +65,15 @@
         else setTimeout(() => this.paintRows(), delay)
       },
     }
+    document.querySelectorAll("wallapop-tab").forEach((tab) =>
+      tab.addEventListener("click", () => {
+        document.querySelectorAll("wallapop-tab").forEach((other) => other.setAttribute("aria-selected", String(other === tab)))
+        window.__catalog.tab = tab.getAttribute("aria-label")
+        window.__catalog.page = 0
+        window.__catalog.paintPager()
+        window.__catalog.paintRows()
+      }),
+    )
     document.getElementById("next").addEventListener("click", () => window.__catalog.move(1))
     document.getElementById("prev").addEventListener("click", () => window.__catalog.move(-1))
     window.__catalog.configure({})

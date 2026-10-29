@@ -6,12 +6,14 @@ import type { Page } from "playwright"
 import { log } from "../log"
 
 /**
- * Diagnostics for incomplete Pro catalog passes (2026-10-29: 440-480 of ~511 collected
- * with no stale page). One log line per Activos page, and the last page's table on an
- * incomplete pass, to see where ads go missing.
+ * Diagnostics for the Pro catalog pages Chrome still reads: Vendidos. On 2026-10-29 Activos
+ * split its pages inconsistently (that is why it now comes from the public profile); these
+ * lines show at once if Vendidos starts doing the same. One log line per page, and the
+ * last page's table on an incomplete pass.
  */
+const DIAG_TAB = "Vendidos"
 const DEFAULT_DIR = path.resolve(process.cwd(), "server", "logs", "monitor-debug")
-/** Files activos-incomplete-0..4: the last five incomplete passes, oldest overwritten. */
+/** Files vendidos-incomplete-0..4: the last five incomplete passes, oldest overwritten. */
 const KEEP_SNAPSHOTS = 5
 const HTML_MAX_CHARS = 300_000
 
@@ -30,7 +32,7 @@ export function logProPage(
   shot: { pager: string; rows: Array<{ href: string }> },
   newRows: number,
 ): void {
-  if (tab !== "Activos") return
+  if (tab !== DIAG_TAB) return
   log("info", "wallapop_monitor_pro_page", {
     tab,
     page: pageNumber,
@@ -54,11 +56,16 @@ const CATALOG_TABLE_HTML_EVAL = `(() => {
   }
 })()`
 
-/** Saves the page the incomplete pass ended on. Never throws. */
-export async function saveIncompleteActivos(page: Page, info: { collected: number; total: number | null }): Promise<string | null> {
+/** Saves the page an incomplete Vendidos pass ended on. Never throws. */
+export async function saveIncompleteCatalog(
+  page: Page,
+  tab: string,
+  info: { collected: number; total: number | null },
+): Promise<string | null> {
+  if (tab !== DIAG_TAB) return null
   try {
     const shot = (await page.evaluate(CATALOG_TABLE_HTML_EVAL)) as { pager: string; rows: number; html: string }
-    const file = path.join(snapshotDir, `activos-incomplete-${snapshotCount % KEEP_SNAPSHOTS}.html`)
+    const file = path.join(snapshotDir, `${tab.toLowerCase()}-incomplete-${snapshotCount % KEEP_SNAPSHOTS}.html`)
     snapshotCount += 1
     const header = `<!-- ${new Date().toISOString()} collected ${info.collected} of ${info.total ?? "?"}; pager "${shot.pager}"; rows on page ${shot.rows} -->\n`
     const html = shot.html.replace(/<script\b[\s\S]*?<\/script>/gi, "")

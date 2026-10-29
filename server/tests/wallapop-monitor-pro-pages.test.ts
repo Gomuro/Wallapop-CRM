@@ -17,7 +17,7 @@ vi.mock("../src/lib/log", async (original) => ({
 import { setProSnapshotDirForTests } from "../src/lib/wallapop-monitor/pro-catalog-diag"
 import {
   scrapeProActivos,
-  scrapeProCatalogs,
+  scrapeProSold,
   setProPageWaitsForTests,
 } from "../src/lib/wallapop-monitor/pro-catalog-pages"
 
@@ -73,27 +73,36 @@ describe("scrapeProActivos with pages that load late", () => {
     expect(snapshot.complete).toBe(true)
   }, 20_000)
 
-  it("logs every Activos page: pager, rows, new rows, first and last link", async () => {
+  it("reads the sales from Vendidos, every page, even when rows arrive late", async () => {
+    await catalog({ total: 100, rowDelays: { 1: 900 } })
+    const sold = await scrapeProSold(page)
+    expect(sold).toHaveLength(100)
+    expect(sold?.every((row) => row.sold)).toBe(true)
+  }, 20_000)
+
+  it("logs every Vendidos page (pager, rows, new rows, first and last link) and no Activos page", async () => {
     logged.length = 0
     await catalog({ total: 100, pagerTotals: { 1: 90 } })
     await scrapeProActivos(page)
+    expect(logged.filter((entry) => entry.msg === "wallapop_monitor_pro_page")).toHaveLength(0)
+    await scrapeProSold(page)
     const pages = logged.filter((entry) => entry.msg === "wallapop_monitor_pro_page").map((entry) => entry.extra)
     expect(pages).toHaveLength(3)
-    expect(pages[1]).toMatchObject({ tab: "Activos", page: 2, pager: "41-80 de 90", rows: 40, newRows: 40 })
+    expect(pages[1]).toMatchObject({ tab: "Vendidos", page: 2, pager: "41-80 de 90", rows: 40, newRows: 40 })
     expect(String(pages[2]?.firstHref)).toContain("/item/producto-80-")
     expect(String(pages[2]?.lastHref)).toContain("/item/producto-99-")
   }, 20_000)
 
-  it("saves the table of the page an incomplete pass ended on, and says where", async () => {
+  it("on an incomplete Vendidos pass returns null and saves the table of the last page", async () => {
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), "pro-catalog-"))
     setProSnapshotDirForTests(dir)
     logged.length = 0
     try {
       await catalog({ total: 100, rowDelays: { 1: -1 } })
-      expect(await scrapeProCatalogs(page)).toBeNull()
+      expect(await scrapeProSold(page)).toBeNull()
       const incomplete = logged.find((entry) => entry.msg === "wallapop_monitor_pro_incomplete")
       const file = String(incomplete?.extra?.snapshot)
-      expect(file).toBe(path.join(dir, "activos-incomplete-0.html"))
+      expect(file).toBe(path.join(dir, "vendidos-incomplete-0.html"))
       const html = fs.readFileSync(file, "utf8")
       expect(html).toContain('collected 40 of 100; pager "41-80 de 100"; rows on page 40')
       expect(html).toContain("CatalogItem_0")

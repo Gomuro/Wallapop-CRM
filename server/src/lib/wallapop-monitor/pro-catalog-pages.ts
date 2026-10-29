@@ -1,6 +1,5 @@
 import type { Page } from "playwright"
 
-import { wallapopItemPathKey } from "../../../../lib/inventory/wallapop-item-url"
 import { log } from "../log"
 import type { PublishedCatalogRow } from "./catalog"
 import type { SoldCatalogRow } from "./diff"
@@ -13,7 +12,7 @@ import {
   listedPageReadyEval,
   parseProPager,
 } from "./pro-catalog-eval"
-import { logProPage, saveIncompleteActivos } from "./pro-catalog-diag"
+import { logProPage, saveIncompleteCatalog } from "./pro-catalog-diag"
 
 const MAX_PAGES = 20
 const DEFAULT_WAITS = {
@@ -28,8 +27,6 @@ let waits = DEFAULT_WAITS
 export function setProPageWaitsForTests(next: typeof DEFAULT_WAITS | null): void {
   waits = next ?? DEFAULT_WAITS
 }
-/** Activos can still show the pre-publish table after the pager already matches. */
-const ACTIVOS_ROW_WAIT_MS = 45_000
 
 type ProCatalogRow = PublishedCatalogRow & {
   sold: boolean
@@ -135,66 +132,6 @@ async function rewindToFirstProPage(page: Page): Promise<void> {
   }
 }
 
-function activosRowsContainEval(needles: string[]): string {
-  return `(() => {
-    const needles = ${JSON.stringify(needles)}
-    function walk(root, visit) {
-      if (!root || !root.querySelectorAll) return
-      root.querySelectorAll("*").forEach((el) => {
-        visit(el)
-        if (el.shadowRoot) walk(el.shadowRoot, visit)
-      })
-    }
-    const need = new Set(needles)
-    walk(document, (node) => {
-      if (node.tagName !== "A") return
-      const href = node.href
-      if (!href) return
-      try {
-        const path = new URL(href).pathname.replace(/\\/$/, "").toLowerCase()
-        if (need.has(path)) need.delete(path)
-      } catch (error) {}
-    })
-    return need.size === 0
-  })()`
-}
-
-export async function waitForActivosHrefs(
-  page: Page,
-  hrefs: string[],
-): Promise<boolean> {
-  const needles = [
-    ...new Set(
-      hrefs
-        .map((href) => wallapopItemPathKey(href))
-        .filter((key): key is string => key != null),
-    ),
-  ]
-  if (needles.length === 0) return false
-  try {
-    await page.waitForFunction(activosRowsContainEval(needles), {
-      timeout: ACTIVOS_ROW_WAIT_MS,
-      polling: 1_000,
-    })
-    return true
-  } catch {
-    return false
-  }
-}
-
-async function confirmActivosIfNeeded(
-  page: Page,
-  tab: string,
-  confirmHrefs?: string[],
-): Promise<void> {
-  if (tab !== "Activos" || !confirmHrefs || confirmHrefs.length === 0) return
-  const appeared = await waitForActivosHrefs(page, confirmHrefs)
-  log("info", "wallapop_monitor_activos_wait", {
-    hrefs: confirmHrefs.length,
-    appeared,
-  })
-}
-
 function proCatalogIncomplete(total: number | null, collected: number): boolean {
   return total == null || collected < total
 }
@@ -260,13 +197,11 @@ async function collectProPages(
 async function readAllPages(
   page: Page,
   tab: string,
-  confirmHrefs?: string[],
 ): Promise<{ rows: ProCatalogRow[]; total: number | null } | null> {
   await openTab(page, tab)
-  await confirmActivosIfNeeded(page, tab, confirmHrefs)
   const { seen, total, pager } = await collectProPages(page, tab)
   if (proCatalogIncomplete(total, seen.size)) {
-    const snapshot = tab === "Activos" ? await saveIncompleteActivos(page, { collected: seen.size, total }) : null
+    const snapshot = await saveIncompleteCatalog(page, tab, { collected: seen.size, total })
     log("warn", "wallapop_monitor_pro_incomplete", {
       tab,
       collected: seen.size,
@@ -292,23 +227,11 @@ export async function scrapeProActivos(page: Page): Promise<ProActivosSnapshot> 
   }
 }
 
-export async function scrapeProCatalogs(
-  page: Page,
-  confirmHrefs?: string[],
-): Promise<{
-  published: PublishedCatalogRow[]
-  sold: SoldCatalogRow[]
-} | null> {
-  const activos = await readAllPages(page, "Activos", confirmHrefs)
-  if (!activos) return null
+/** Vendidos, every pager page: the sales. Null when the pass did not reach the pager total. */
+export async function scrapeProSold(page: Page): Promise<SoldCatalogRow[] | null> {
   const vendidos = await readAllPages(page, "Vendidos")
   if (!vendidos) return null
-  const inactivos = await readAllPages(page, "Inactivos")
-  if (!inactivos) return null
-  return {
-    published: activos.rows,
-    sold: vendidos.rows
-      .filter((row) => row.sold)
-      .map((row) => ({ href: row.href, sold: true as const })),
-  }
+  return vendidos.rows
+    .filter((row) => row.sold)
+    .map((row) => ({ href: row.href, sold: true as const }))
 }

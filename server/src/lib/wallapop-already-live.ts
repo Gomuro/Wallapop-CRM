@@ -102,7 +102,12 @@ async function resolveSellerUserId(
   return userId
 }
 
-async function loadSellerCatalog(
+/**
+ * One account's public seller profile (api.wallapop.com, no Chrome). The single source for
+ * "what is on Wallapop now": the live sync, the post-publish link lookup and the monitor read it.
+ * Null when it could not be read.
+ */
+export async function loadSellerCatalog(
   prisma: PrismaClient,
   accountId: string,
 ): Promise<LiveCatalogItem[] | null> {

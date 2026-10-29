@@ -4,7 +4,7 @@ import { PAGE_KIND_EVAL } from "./pro-catalog-eval"
 
 export { parseProPager, PRO_CATALOG_ROWS_EVAL } from "./pro-catalog-eval"
 export { ensureTodoElCatalogo } from "./pro-catalog-choice"
-export { scrapeProActivos, scrapeProCatalogs, waitForActivosHrefs } from "./pro-catalog-pages"
+export { scrapeProActivos, scrapeProSold } from "./pro-catalog-pages"
 export type { ProActivosSnapshot } from "./pro-catalog-pages"
 
 export async function wallapopCatalogKind(
