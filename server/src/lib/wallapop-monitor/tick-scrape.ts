@@ -15,6 +15,7 @@ import {
   scrapeProCatalogs,
   wallapopCatalogKind,
 } from "./pro-catalog";
+import { closeProCatalogModal } from "./pro-catalog-modal";
 import {
   scrapePublishedCatalogRows,
   scrapeVendidosCatalogRows,
@@ -38,6 +39,7 @@ async function leaveIfSessionBlocked(
 }
 
 async function scrapeProMonitor(page: Page, confirmHrefs?: string[]) {
+  await closeProCatalogModal(page, "catalog");
   const onFullCatalog = await ensureTodoElCatalogo(page);
   if (!onFullCatalog) {
     log("warn", "wallapop_monitor_catalog_not_full", { url: page.url() });

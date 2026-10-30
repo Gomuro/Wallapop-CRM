@@ -11,11 +11,18 @@ import {
   clickTabEval,
   parseProPager,
 } from "./pro-catalog-eval"
+import { closeProCatalogModal } from "./pro-catalog-modal"
 
 const MAX_PAGES = 20
 const PAGE_WAIT_MS = 8_000
 /** Activos can still show the pre-publish table after the pager already matches. */
 const ACTIVOS_ROW_WAIT_MS = 45_000
+/**
+ * Monitor only: pause after each Next before reading. Through the proxy the ready check
+ * can pass while the old rows are still shown; incomplete passes stop on the last page.
+ */
+const PAGE_SETTLE_MS = 3_000
+const LAST_PAGE_SETTLE_MS = 8_000
 
 type ProCatalogRow = PublishedCatalogRow & {
   sold: boolean
@@ -212,8 +219,15 @@ function logProTab(
   })
 }
 
+async function settleAfterNext(page: Page): Promise<void> {
+  const pager = parseProPager((await readShot(page)).pager)
+  const last = pager != null && pager.to >= pager.total
+  await page.waitForTimeout(last ? LAST_PAGE_SETTLE_MS : PAGE_SETTLE_MS)
+}
+
 async function collectProPages(
   page: Page,
+  settle = false,
 ): Promise<{ seen: Map<string, ProCatalogRow>; total: number | null; pager: string }> {
   const seen = new Map<string, ProCatalogRow>()
   let total: number | null = null
@@ -233,6 +247,7 @@ async function collectProPages(
       previousPager: pager,
       previousHref: shot.rows[0]?.href,
     })
+    if (settle) await settleAfterNext(page)
   }
   return { seen, total, pager }
 }
@@ -242,9 +257,10 @@ async function readAllPages(
   tab: string,
   confirmHrefs?: string[],
 ): Promise<{ rows: ProCatalogRow[]; total: number | null } | null> {
+  await closeProCatalogModal(page, tab)
   await openTab(page, tab)
   await confirmActivosIfNeeded(page, tab, confirmHrefs)
-  const { seen, total, pager } = await collectProPages(page)
+  const { seen, total, pager } = await collectProPages(page, true)
   if (proCatalogIncomplete(total, seen.size)) {
     log("warn", "wallapop_monitor_pro_incomplete", {
       tab,
