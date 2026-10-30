@@ -321,11 +321,11 @@ async function runWallapop2faSubmit(
   }
   const otpInput = await fillWallapopOtp(page, code.trim())
   if (!(await detect2FA(page))) {
-    return assertLoginOutcome(await waitForLoginOutcome(page))
+    return assertLoginOutcome(await waitForLoginOutcome(page, port))
   }
   await submitWallapopOtp(page, otpInput)
   page = await retargetAfter2faSubmit(page, port)
-  return assertLoginOutcome(await waitForLoginOutcome(page))
+  return assertLoginOutcome(await waitForLoginOutcome(page, port))
 }
 
 export async function submitWallapop2faInBrowser(

@@ -155,12 +155,13 @@ async function scanPagesForOutcome(
   pages: Page[],
   detect: (p: Page) => Promise<boolean>,
   outcome: BrowserLoginOutcome,
+  port?: number,
 ): Promise<BrowserLoginOutcome | null> {
-  const handle = getWallapopHandle()
+  const handle = getWallapopHandle(port)
   for (const p of pages) {
     try {
       if (await detect(p)) {
-        if (handle) setWallapopHandle({ ...handle, page: p, ownedPage: false })
+        if (handle) setWallapopHandle({ ...handle, page: p, ownedPage: false }, port)
         return outcome
       }
     } catch {
@@ -170,28 +171,31 @@ async function scanPagesForOutcome(
   return null
 }
 
+/** Only this account's Chrome (its CDP port), never another account's pages. */
 async function classifyLoginPages(
   page: Page,
+  port?: number,
 ): Promise<BrowserLoginOutcome | null> {
-  const handle = getWallapopHandle()
+  const handle = getWallapopHandle(port)
   const pages = handle?.context.pages() ?? [page]
   return (
-    (await scanPagesForOutcome(pages, detect2FA, "REQUIRES_2FA")) ??
-    (await scanPagesForOutcome(pages, detectLoggedIn, "ACTIVE"))
+    (await scanPagesForOutcome(pages, detect2FA, "REQUIRES_2FA", port)) ??
+    (await scanPagesForOutcome(pages, detectLoggedIn, "ACTIVE", port))
   )
 }
 
 export async function waitForLoginOutcome(
   page: Page,
+  port?: number,
   timeoutMs = NAV_TIMEOUT_MS,
 ): Promise<BrowserLoginOutcome | "FAILED"> {
   const deadline = Date.now() + timeoutMs
   while (Date.now() < deadline) {
-    const found = await classifyLoginPages(page)
+    const found = await classifyLoginPages(page, port)
     if (found) return found
     await page.waitForTimeout(500).catch(() => {})
   }
-  return (await classifyLoginPages(page)) ?? "FAILED"
+  return (await classifyLoginPages(page, port)) ?? "FAILED"
 }
 
 async function fillWallapopLoginForm(
@@ -217,8 +221,11 @@ async function fillWallapopLoginForm(
   await submit.click()
 }
 
-async function resolveLoginOutcome(page: Page): Promise<BrowserLoginOutcome> {
-  const outcome = await waitForLoginOutcome(page)
+async function resolveLoginOutcome(
+  page: Page,
+  port?: number,
+): Promise<BrowserLoginOutcome> {
+  const outcome = await waitForLoginOutcome(page, port)
   if (outcome !== "FAILED") return outcome
   const signal = await classifyLoginFailure(page)
   if (signal) throw signal
@@ -250,7 +257,7 @@ async function runWallapopEmailLogin(input: {
     await clickEmailLoginEntry(page)
     await dismissWallapopConsent(page)
     await fillWallapopLoginForm(page, input)
-    const outcome = await resolveLoginOutcome(page)
+    const outcome = await resolveLoginOutcome(page, input.cdpPort)
     log("info", "wallapop_login_outcome", { outcome, url: page.url() })
     return outcome
   } catch (error) {
