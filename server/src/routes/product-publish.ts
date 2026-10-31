@@ -4,10 +4,16 @@ import { sendError } from "../lib/http-error"
 import { paramId } from "./products"
 import {
   prepareProductPublish,
+  publishFail,
+  type PublishReady,
   type RunProductPublishOptions,
   type RunProductPublishResult,
 } from "./product-publish-prepare"
-import { adoptAlreadyLiveBeforePublish } from "../lib/wallapop-already-live"
+import {
+  adoptAlreadyLiveBeforePublish,
+  adoptFromOwnCatalogBeforePublish,
+} from "../lib/wallapop-already-live"
+import { findDefaultAccountId } from "../lib/default-account"
 import { log } from "../lib/log"
 import { claimLivePublish, executeLivePublish } from "./product-publish-run"
 
@@ -26,6 +32,37 @@ export {
   shouldRevertPublishClaim,
 } from "./product-publish-run"
 
+export const LIVE_CHECK_UNAVAILABLE_MESSAGE =
+  "No se pudo comprobar el catálogo público de la cuenta. Publicación omitida para no duplicar."
+
+/**
+ * Non-default account: check its own public catalog before any claim.
+ * Null = not there, go on and publish.
+ */
+async function guardOwnCatalog(
+  prepared: PublishReady,
+  productId: string,
+  listingId: string,
+): Promise<RunProductPublishResult | null> {
+  const check = await adoptFromOwnCatalogBeforePublish(prepared.prisma, listingId)
+  if (check.state === "absent") return null
+  if (check.state === "adopted") {
+    log("info", "wallapop_publish_skipped_already_live", {
+      productId,
+      accountId: prepared.accountId,
+      externalUrl: check.listing.externalUrl,
+    })
+    return { ok: true, dryRun: false, listing: check.listing, step: "already_live" }
+  }
+  log("warn", "wallapop_publish_live_check_unavailable", {
+    productId,
+    accountId: prepared.accountId,
+    listingId,
+    reason: check.reason,
+  })
+  return publishFail(409, "LIVE_CHECK_UNAVAILABLE", LIVE_CHECK_UNAVAILABLE_MESSAGE)
+}
+
 /**
  * Shared live publish path for HTTP `POST …/publish` and the in-process autopost loop.
  * Claim / POSTING stays here so both callers use the same anti-duplicate logic.
@@ -37,6 +74,14 @@ export async function runProductPublish(
   const prepared = await prepareProductPublish(productId, options)
   if (!prepared.ok) return prepared
   const listing = prepared.product.listings[0]
+  if (
+    !prepared.dryRun &&
+    listing &&
+    prepared.accountId !== (await findDefaultAccountId(prepared.prisma))
+  ) {
+    const skipped = await guardOwnCatalog(prepared, productId, listing.id)
+    if (skipped) return skipped
+  }
   if (!prepared.dryRun && listing) {
     const adopted = await adoptAlreadyLiveBeforePublish(prepared.prisma, listing.id)
     if (adopted) {

@@ -3,6 +3,8 @@ import type { Page } from "playwright";
 import { wallapopItemUrlOrNull } from "../../../../lib/inventory/wallapop-item-url";
 import { log } from "../log";
 import {
+  PUBLICAR_LANDING_MAX_MS,
+  PUBLICAR_LANDING_POLL_MS,
   PUBLICAR_SETTLE_MS,
   type PageUrlReader,
   type PublishLandingVerdict,
@@ -94,15 +96,25 @@ export function isPublicarContextDestroyedError(error: unknown): boolean {
 
 /**
  * After Publicar: wait, then read the landing URL.
+ * Still on the upload form: keep reading until it leaves or `maxMs` runs out.
  * Target closed → urlReadFailed (D9: not ACTIVE).
  */
 export async function readLandingAfterPublicarClick(
   page: PageUrlReader,
   settleMs = PUBLICAR_SETTLE_MS,
+  maxMs = PUBLICAR_LANDING_MAX_MS,
 ): Promise<{ url: string | null; urlReadFailed: boolean }> {
   try {
     await page.waitForTimeout(settleMs);
-    const url = page.url();
+    let url = page.url();
+    for (
+      let waited = settleMs;
+      url && isWallapopUploadFormUrl(url) && waited < maxMs;
+      waited += PUBLICAR_LANDING_POLL_MS
+    ) {
+      await page.waitForTimeout(PUBLICAR_LANDING_POLL_MS);
+      url = page.url();
+    }
     return { url: url || null, urlReadFailed: !url };
   } catch (error) {
     log("warn", "wallapop_publish_url_after_publicar_failed", {

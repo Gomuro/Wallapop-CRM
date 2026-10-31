@@ -3,6 +3,9 @@ import type { CategoryUploadField } from "../../../../lib/inventory/category-upl
 export const UPLOAD_URL = "https://es.wallapop.com/app/catalog/upload";
 export const SUMMARY_MAX = 50;
 export const PUBLICAR_SETTLE_MS = 5_000;
+/** Still on the form after the settle: keep reading the URL up to this (W2 30.10: ~6 s). */
+export const PUBLICAR_LANDING_MAX_MS = 20_000;
+export const PUBLICAR_LANDING_POLL_MS = 500;
 
 export const FINAL_RE =
   /^(Publicar|Publicar anuncio|Crear producto|Subir anuncio|Subir producto|Опублікувати|Пост|Publish|Post)$/i;

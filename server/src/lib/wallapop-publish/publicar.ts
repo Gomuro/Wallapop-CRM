@@ -1,3 +1,6 @@
+import { mkdirSync } from "node:fs";
+import path from "node:path";
+
 import type { Page } from "playwright";
 
 import {
@@ -107,8 +110,30 @@ function throwIfLandingFailed(
   throw new WallapopPublishError("form", landing.message, { keepClaim });
 }
 
+const PUBLISH_SHOT_DIR = path.resolve(process.cwd(), "server", "logs", "publish-debug");
+
+/** The form outlived the landing wait: keep what the page showed for the operator. */
+async function logStillOnUpload(page: Page, listingId: string): Promise<void> {
+  const file = path.join(PUBLISH_SHOT_DIR, `${listingId}-${Date.now()}.png`);
+  let screenshot: string | null = null;
+  try {
+    mkdirSync(PUBLISH_SHOT_DIR, { recursive: true });
+    await page.screenshot({ path: file, timeout: 10_000 });
+    screenshot = file;
+  } catch {
+    screenshot = null;
+  }
+  log("warn", "wallapop_publish_still_on_upload", {
+    listingId,
+    url: page.url(),
+    title: await page.title().catch(() => null),
+    screenshot,
+  });
+}
+
 async function classifyAfterPublicar(
   page: Page,
+  listingId: string,
 ): Promise<{
   landing: PublishLandingVerdict;
   landingUrl: string | null;
@@ -127,6 +152,7 @@ async function classifyAfterPublicar(
     reason: landing.reason,
     url: landingRead.url,
   });
+  if (landing.reason === "still_on_upload") await logStillOnUpload(page, listingId);
   return { landing, landingUrl: landingRead.url };
 }
 
@@ -134,7 +160,10 @@ async function resolvePublishedResult(
   page: Page,
   input: PublishWallapopInput,
 ): Promise<PublishWallapopResult> {
-  const { landing, landingUrl } = await classifyAfterPublicar(page);
+  const { landing, landingUrl } = await classifyAfterPublicar(
+    page,
+    input.listingId ?? "listing",
+  );
   throwIfLandingFailed(landing);
   const externalUrl = await resolveItemUrlAfterPublish(page, landing, landingUrl, {
     title: input.title,

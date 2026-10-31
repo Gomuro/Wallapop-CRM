@@ -105,15 +105,16 @@ async function resolveSellerUserId(
 async function loadSellerCatalog(
   prisma: PrismaClient,
   accountId: string,
+  fetchImpl: typeof fetch = fetch,
 ): Promise<LiveCatalogItem[] | null> {
   if (isWallapopOffline()) return null
   try {
-    const userId = await resolveSellerUserId(prisma, accountId, fetch)
+    const userId = await resolveSellerUserId(prisma, accountId, fetchImpl)
     if (!userId) {
       log("warn", "wallapop_live_catalog_no_seller", { accountId })
       return null
     }
-    const items = await fetchSellerPublishedItems(userId)
+    const items = await fetchSellerPublishedItems(userId, fetchImpl)
     log("info", "wallapop_live_catalog", { accountId, count: items.length })
     return items
   } catch (error) {
@@ -251,6 +252,47 @@ export async function liveHrefForListing(
   )
   const mark = planLiveMarks(planned, items).find((entry) => entry.listingId === listingId)
   return mark?.action === "hanging" ? mark.externalUrl : null
+}
+
+export type OwnCatalogCheck =
+  | { state: "adopted"; listing: ReturnType<typeof toListingJson> }
+  | { state: "absent" }
+  | { state: "unavailable"; reason: "catalog_unreadable" | "ambiguous" | "not_written" }
+
+/**
+ * Before a non-default account publishes: is this listing already on that
+ * account's own public profile? Adopted rows become En Wallapop, no publish.
+ * Unreadable profile or two matching items: skip, never guess.
+ */
+export async function adoptFromOwnCatalogBeforePublish(
+  prisma: PrismaClient,
+  listingId: string,
+  fetchImpl: typeof fetch = fetch,
+): Promise<OwnCatalogCheck> {
+  const listing = await prisma.productListing.findUnique({
+    where: { id: listingId },
+    select: { accountId: true },
+  })
+  if (!listing) return { state: "absent" }
+  const items = await loadSellerCatalog(prisma, listing.accountId, fetchImpl)
+  if (!items) return { state: "unavailable", reason: "catalog_unreadable" }
+  const rows = await loadAccountLiveRows(prisma, listing.accountId)
+  const mark = planLiveMarks(rows, items).find((entry) => entry.listingId === listingId)
+  const row = rows.find((entry) => entry.listingId === listingId)
+  if (mark?.action === "leave" && mark.reason === "ambiguous") {
+    return { state: "unavailable", reason: "ambiguous" }
+  }
+  if (!row || mark?.action !== "hanging") return { state: "absent" }
+  // Live on Wallapop but the row moved meanwhile: still never publish it again.
+  if (!(await writeLiveMark(prisma, row, mark))) {
+    return { state: "unavailable", reason: "not_written" }
+  }
+  const saved = await prisma.productListing.findUnique({
+    where: { id: listingId },
+    select: listingJsonSelect,
+  })
+  if (!saved) return { state: "unavailable", reason: "not_written" }
+  return { state: "adopted", listing: toListingJson(saved) }
 }
 
 /** READY / FAILED rows that are already on the public profile become En Wallapop. */
