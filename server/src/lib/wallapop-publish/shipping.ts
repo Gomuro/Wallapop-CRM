@@ -120,6 +120,35 @@ async function clickPackageSizeUntilChecked(
   return false;
 }
 
+const PACKAGE_UI_WAIT_MS = 15_000;
+const PACKAGE_UI_POLL_MS = 500;
+
+async function packageSizeShown(page: Page): Promise<boolean> {
+  return (
+    (await roleRadioIsVisible(page, "delivery")) ||
+    (await roleRadioIsVisible(page, "bulky"))
+  );
+}
+
+/**
+ * Non-Pro forms draw Estándar / Voluminoso seconds after the category;
+ * Pro shows the kg bands at once. Wait for either, up to `PACKAGE_UI_WAIT_MS`.
+ */
+async function waitForPackageOrWeightUi(page: Page): Promise<{
+  sizeShown: boolean;
+  weightShown: boolean;
+  waitedMs: number;
+}> {
+  for (let waitedMs = 0; ; waitedMs += PACKAGE_UI_POLL_MS) {
+    const sizeShown = await packageSizeShown(page);
+    const weightShown = await weightUiVisible(page);
+    if (sizeShown || weightShown || waitedMs >= PACKAGE_UI_WAIT_MS) {
+      return { sizeShown, weightShown, waitedMs };
+    }
+    await page.waitForTimeout(PACKAGE_UI_POLL_MS);
+  }
+}
+
 /**
  * Some categories (jardín / bulky) show Estándar vs Voluminoso first;
  * «¿Cuánto pesa?» only after Estándar. Other categories already show kg bands
@@ -129,14 +158,13 @@ export async function ensurePackageSizeIfShown(
   page: Page,
   packageType: ShippingPackageType,
 ): Promise<void> {
-  const sizeShown =
-    (await roleRadioIsVisible(page, "delivery")) ||
-    (await roleRadioIsVisible(page, "bulky"));
-  const weightShown = await weightUiVisible(page);
+  const { sizeShown, weightShown, waitedMs } =
+    await waitForPackageOrWeightUi(page);
   if (!sizeShown) {
     log("info", "wallapop_publish_package_size_absent", {
       packageType,
       weightShown,
+      waitedMs,
     });
     return;
   }
