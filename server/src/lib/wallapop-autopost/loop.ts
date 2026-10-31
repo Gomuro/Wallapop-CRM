@@ -43,16 +43,9 @@ function fireScheduledTick(generation: number): void {
   if (!releaseScheduleTimer(generation)) return
   setAutopostTickRunning(true)
   void runAutopostTick()
-    .then(async (keepGoing) => {
-      if (keepGoing && generation === scheduleGenerationNow()) {
-        await scheduleNextAsync()
-        return
-      }
-      if (!keepGoing && generation === scheduleGenerationNow()) {
-        log("info", "wallapop_autopost_loop_stopped", {
-          reason: "empty_queue",
-        })
-      }
+    // Empty queue: keep the normal interval, so nothing has to wake the loop.
+    .then(async () => {
+      if (generation === scheduleGenerationNow()) await scheduleNextAsync()
     })
     .catch((error) => {
       log("error", "wallapop_autopost_tick_failed", serializeError(error))
@@ -150,8 +143,8 @@ function fireAccountTick(accountId: string, generation: number): void {
   desk.nextAt = null
   desk.running = true
   void runAccountAutopostTick(accountId)
-    .then(async (keepGoing) => {
-      if (keepGoing && generation === desk.generation) {
+    .then(async () => {
+      if (generation === desk.generation) {
         await scheduleAccountAutopost(accountId)
       }
     })

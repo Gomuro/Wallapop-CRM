@@ -2,7 +2,6 @@ import type { PrismaClient } from "../../../generated/prisma/client"
 import { sameCents } from "../../../../lib/inventory/duplicate-price"
 import { getPrisma } from "../db"
 import { log, serializeError } from "../log"
-import { scheduleAccountAutopost } from "../wallapop-autopost"
 import { DUPLICATE_SAME_PRICE_MESSAGE } from "./publish-text"
 import { buildListingVariant, variantBasis, type VariantOutcome } from "./store"
 
@@ -85,7 +84,6 @@ export async function processPendingVariants(
       continue
     }
     written += 1
-    await scheduleAccountAutopost(listing.accountId)
   }
   return { written, failed }
 }
