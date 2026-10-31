@@ -7,16 +7,31 @@ import {
   cropForFrame,
   formatExifDate,
   planPublishPhotos,
+  type Crop,
   type PhoneProfile,
   type PhotoFrame,
+  type PhotoStyle,
   type ShootLook,
 } from "./shoot"
+import { turnFilters, type TurnResult } from "./turn"
 
 type MediaSize = { width: number; height: number; pixFmt: string }
+
+/** What was done to one photo: the source name, its size, the turn and the crop in pixels. */
+export type AppliedPhoto = {
+  file: string
+  source: string
+  width: number
+  height: number
+  degrees: number
+  crop: Crop
+}
 
 export type UniquifiedPhotos = {
   paths: string[]
   model: string
+  look: ShootLook
+  applied: AppliedPhoto[]
   cleanup: () => Promise<void>
 }
 
@@ -93,19 +108,47 @@ function fmt(value: number): string {
   return value.toFixed(4)
 }
 
-function filterTail(
-  size: MediaSize,
-  crop: { left: number; top: number; right: number; bottom: number },
+function plainGeometry(
   look: ShootLook,
-): string {
+  frame: PhotoFrame,
+  size: MediaSize,
+): TurnResult {
+  const crop = cropForFrame(look, frame, size)
   const width = size.width - crop.left - crop.right
   const height = size.height - crop.top - crop.bottom
+  return {
+    degrees: 0,
+    crop,
+    filters: [`crop=${width}:${height}:${crop.left}:${crop.top}`],
+  }
+}
+
+function geometryFor(
+  look: ShootLook,
+  frame: PhotoFrame,
+  size: MediaSize,
+): TurnResult {
+  return frame.turn ? turnFilters(size, frame.turn) : plainGeometry(look, frame, size)
+}
+
+/** The duplicate gets no saturation or hue step at all, so its colour stays real. */
+function colourFilters(look: ShootLook): string[] {
+  const { brightness, contrast, saturation, hue } = look.grade
+  const tone = `eq=brightness=${fmt(brightness)}:contrast=${fmt(contrast)}`
+  if (look.style === "duplicate") return [tone]
+  return [`${tone}:saturation=${fmt(saturation)}`, `hue=h=${fmt(hue)}`]
+}
+
+export function photoFilter(
+  size: { width: number; height: number },
+  geometry: TurnResult,
+  look: ShootLook,
+): string {
   return [
-    `crop=${width}:${height}:${crop.left}:${crop.top}`,
+    ...geometry.filters,
     `scale=${size.width}:${size.height}:flags=lanczos`,
     "format=yuv420p",
-    `eq=brightness=${fmt(look.grade.brightness)}:contrast=${fmt(look.grade.contrast)}:saturation=${fmt(look.grade.saturation)}`,
-    `hue=h=${fmt(look.grade.hue)}`,
+    ...colourFilters(look),
     `noise=alls=${look.grade.noise}:allf=u`,
   ].join(",")
 }
@@ -149,10 +192,10 @@ async function renderFrame(
   dest: string,
   look: ShootLook,
   frame: PhotoFrame,
-): Promise<void> {
+): Promise<AppliedPhoto> {
   const size = await probeImage(source)
-  const crop = cropForFrame(look, frame, size)
-  const tail = filterTail(size, crop, look)
+  const geometry = geometryFor(look, frame, size)
+  const tail = photoFilter(size, geometry, look)
   const args = ["-y", "-hide_banner", "-loglevel", "error", "-i", source]
   if (hasAlpha(size.pixFmt)) {
     args.push(
@@ -175,41 +218,55 @@ async function renderFrame(
   )
   await run("ffmpeg", args, false)
   await run("exiftool", exifArgs(dest, look, frame), false)
+  const { degrees, crop } = geometry
+  const { width, height } = size
+  return { file: dest, source: path.basename(source), width, height, degrees, crop }
 }
 
 async function removeDir(dir: string): Promise<void> {
   await rm(dir, { recursive: true, force: true }).catch(() => undefined)
 }
 
+async function renderAll(
+  dir: string,
+  imagePaths: string[],
+  plan: { look: ShootLook; frames: PhotoFrame[] },
+): Promise<AppliedPhoto[]> {
+  const applied: AppliedPhoto[] = []
+  for (let index = 0; index < imagePaths.length; index++) {
+    const dest = path.join(dir, `${String(index + 1).padStart(2, "0")}.jpg`)
+    const source = imagePaths[index]
+    const frame = plan.frames[index]
+    if (!source || !frame) throw new Error("Photo list and shoot plan diverged.")
+    applied.push(await renderFrame(source, dest, plan.look, frame))
+  }
+  return applied
+}
+
 export async function uniquifyPublishPhotos(input: {
   imagePaths: string[]
   listingId: string
+  style?: PhotoStyle
 }): Promise<UniquifiedPhotos> {
   const listingId = input.listingId.trim()
   if (!listingId) throw new Error("Listing id is required to prepare photos.")
-  if (!input.imagePaths.length) {
-    return { paths: [], model: "", cleanup: async () => undefined }
-  }
   const storageKeys = input.imagePaths.map((file) => path.basename(file))
-  const { look, frames } = planPublishPhotos(listingId, storageKeys)
+  const plan = planPublishPhotos(listingId, storageKeys, input.style)
+  if (!input.imagePaths.length) {
+    return { paths: [], model: "", look: plan.look, applied: [], cleanup: async () => undefined }
+  }
   const dir = await mkdtemp(path.join(os.tmpdir(), "wallapop-unique-"))
-  const paths: string[] = []
   try {
-    for (let index = 0; index < input.imagePaths.length; index++) {
-      const dest = path.join(dir, `${String(index + 1).padStart(2, "0")}.jpg`)
-      const source = input.imagePaths[index]
-      const frame = frames[index]
-      if (!source || !frame) throw new Error("Photo list and shoot plan diverged.")
-      await renderFrame(source, dest, look, frame)
-      paths.push(dest)
+    const applied = await renderAll(dir, input.imagePaths, plan)
+    return {
+      paths: applied.map((photo) => photo.file),
+      model: plan.look.profile.label,
+      look: plan.look,
+      applied,
+      cleanup: () => removeDir(dir),
     }
   } catch (error) {
     await removeDir(dir)
     throw error
-  }
-  return {
-    paths,
-    model: look.profile.label,
-    cleanup: () => removeDir(dir),
   }
 }

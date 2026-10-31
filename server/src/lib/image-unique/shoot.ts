@@ -70,7 +70,11 @@ export type ShootGrade = {
   crop: Crop
 }
 
+/** "duplicate" = the non-default account: stronger crop and a turn, colour untouched. */
+export type PhotoStyle = "default" | "duplicate"
+
 export type ShootLook = {
+  style: PhotoStyle
   profile: PhoneProfile
   takenAt: Date
   offset: string
@@ -79,11 +83,15 @@ export type ShootLook = {
   grade: ShootGrade
 }
 
+/** Duplicate only: signed turn in degrees and the crop per side as a share of that side. */
+export type FrameTurn = { degrees: number; trim: number }
+
 export type PhotoFrame = {
   storageKey: string
   takenAt: Date
   iso: number
   cropExtra: { side: CropSide; px: number }
+  turn?: FrameTurn
   imageUniqueId: string
   documentId: string
   instanceId: string
@@ -206,29 +214,51 @@ function frameFor(
   }
 }
 
+/** Duplicate bounds: turn 1–3° either way, crop 4–8 % per side with the turn inside it. */
+export const DUPLICATE_TURN_DEGREES = { min: 1, max: 3 } as const
+export const DUPLICATE_TRIM = { min: 0.04, max: 0.08 } as const
+
+function turnFor(listingId: string, storageKey: string): FrameTurn {
+  const { min, max } = DUPLICATE_TURN_DEGREES
+  const sign = hashToUint(`${listingId}:${storageKey}:turnSign`) % 2 === 0 ? 1 : -1
+  return {
+    degrees: sign * range(listingId, `${storageKey}:turn`, min, max),
+    trim: range(listingId, `${storageKey}:trim`, DUPLICATE_TRIM.min, DUPLICATE_TRIM.max),
+  }
+}
+
+/** The duplicate keeps the real colour: saturation and hue stay neutral. */
+function gradeFor(listingId: string, style: PhotoStyle): ShootGrade {
+  const keepColour = style === "duplicate"
+  return {
+    brightness: range(listingId, "bright", -0.01, 0.01),
+    contrast: range(listingId, "contrast", 0.98, 1.02),
+    saturation: keepColour ? 1 : range(listingId, "sat", 0.98, 1.02),
+    hue: keepColour ? 0 : range(listingId, "hue", -1, 1),
+    noise: 1 + (hashToUint(`${listingId}:noise`) % 2),
+    qscale: hashToUint(`${listingId}:q`) % 2 === 0 ? 2 : 3,
+    crop: sharedCrop(listingId),
+  }
+}
+
 export function planPublishPhotos(
   listingId: string,
   storageKeys: string[],
+  style: PhotoStyle = "default",
 ): { look: ShootLook; frames: PhotoFrame[] } {
   const takenAt = takenAtFromListing(listingId)
   const look: ShootLook = {
+    style,
     profile: pick(listingId, "phone", PHONE_PROFILES),
     takenAt,
     offset: spainOffset(takenAt),
     exposure: pick(listingId, "exposure", EXPOSURES),
     isoBase: pick(listingId, "iso", ISO_BASES),
-    grade: {
-      brightness: range(listingId, "bright", -0.01, 0.01),
-      contrast: range(listingId, "contrast", 0.98, 1.02),
-      saturation: range(listingId, "sat", 0.98, 1.02),
-      hue: range(listingId, "hue", -1, 1),
-      noise: 1 + (hashToUint(`${listingId}:noise`) % 2),
-      qscale: hashToUint(`${listingId}:q`) % 2 === 0 ? 2 : 3,
-      crop: sharedCrop(listingId),
-    },
+    grade: gradeFor(listingId, style),
   }
-  return {
-    look,
-    frames: storageKeys.map((storageKey, index) => frameFor(listingId, look, storageKey, index)),
-  }
+  const frames = storageKeys.map((storageKey, index) => {
+    const frame = frameFor(listingId, look, storageKey, index)
+    return style === "duplicate" ? { ...frame, turn: turnFor(listingId, storageKey) } : frame
+  })
+  return { look, frames }
 }

@@ -5,6 +5,7 @@ import {
   RequeueListingButton,
 } from "@/components/product-form/listing-actions"
 import { SoldSyncButton } from "@/components/product-form/product-actions"
+import { DuplicatePhotosButton } from "@/components/catalog/duplicate-photos-button"
 import { DuplicateVariantPanel } from "@/components/catalog/duplicate-variant"
 import { ListingDetailSection } from "@/components/catalog/listing-detail"
 import {
@@ -104,14 +105,17 @@ function ListingBlock({
       warehouseStatus={product.status}
     >
       {listing.isDefault ? null : (
-        <DuplicateVariantPanel
-          productId={product.id}
-          accountId={listing.accountId}
-          original={{ title: product.title, description: product.description, price: product.price }}
-          variant={listing.variant ?? null}
-          locked={DUPLICATE_LOCKED.has(listing.status)}
-          preparing={listing.status === "PREPARING"}
-        />
+        <>
+          <DuplicateVariantPanel
+            productId={product.id}
+            accountId={listing.accountId}
+            original={{ title: product.title, description: product.description, price: product.price }}
+            variant={listing.variant ?? null}
+            locked={DUPLICATE_LOCKED.has(listing.status)}
+            preparing={listing.status === "PREPARING"}
+          />
+          <DuplicatePhotosButton productId={product.id} accountId={listing.accountId} />
+        </>
       )}
       <ListingActions product={product} listing={listing} />
     </ListingDetailSection>

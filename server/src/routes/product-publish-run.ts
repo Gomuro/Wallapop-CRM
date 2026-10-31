@@ -16,6 +16,7 @@ import { weightBandsFromCategoryAttributes } from "../../../lib/inventory/wallap
 import { wallapopItemUrlOrNull } from "../../../lib/inventory/wallapop-item-url"
 import { liveHrefForListing } from "../lib/wallapop-already-live"
 import { publishTextForListing } from "../lib/listing-variant/publish-text"
+import { findDefaultAccountId } from "../lib/default-account"
 import {
   ALREADY_POSTED_MESSAGE,
   decimalToNumber,
@@ -193,6 +194,7 @@ async function playwrightProductPublish(ready: PublishReady) {
     typeAttributes: ready.product.typeAttributes,
     uploadFields: categoryFields.uploadFields,
     weightBands: categoryFields.weightBands,
+    photoStyle: (await findDefaultAccountId(ready.prisma)) === ready.accountId ? "default" : "duplicate",
   })
 }
 

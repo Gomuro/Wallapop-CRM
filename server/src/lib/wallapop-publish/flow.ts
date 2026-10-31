@@ -159,7 +159,7 @@ async function prepareUniquePhotos(input: PublishWallapopInput) {
   const sourcePaths = input.imagePaths.slice(0, 10);
   const listingId = input.listingId?.trim() || sourcePaths.join("\n");
   try {
-    return await uniquifyPublishPhotos({ imagePaths: sourcePaths, listingId });
+    return await uniquifyPublishPhotos({ imagePaths: sourcePaths, listingId, style: input.photoStyle });
   } catch (error) {
     throw new WallapopPublishError(
       "photos",

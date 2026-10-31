@@ -3,15 +3,18 @@ import request from "supertest"
 import { afterAll, beforeAll, beforeEach, describe, expect, it, vi } from "vitest"
 
 const browser = vi.hoisted(() => ({
-  calls: [] as Array<{ title: string; description: string; price: number }>,
+  calls: [] as Array<{ title: string; description: string; price: number; photoStyle?: string }>,
 }))
 
 vi.mock("../src/lib/wallapop-publish", async (original) => ({
   ...(await original<typeof import("../src/lib/wallapop-publish")>()),
-  publishWallapopInBrowser: vi.fn(async (input: { title: string; description: string; price: number }) => {
-    browser.calls.push({ title: input.title, description: input.description, price: input.price })
-    return { dryRun: true, step: "dry-run", externalUrl: null }
-  }),
+  publishWallapopInBrowser: vi.fn(
+    async (input: { title: string; description: string; price: number; photoStyle?: string }) => {
+      const { title, description, price, photoStyle } = input
+      browser.calls.push({ title, description, price, photoStyle })
+      return { dryRun: true, step: "dry-run", externalUrl: null }
+    },
+  ),
 }))
 
 import { createApp } from "../src/app"
@@ -134,12 +137,12 @@ describe("publish run sends the duplicate text to the Wallapop form", () => {
     await prisma.productListing.update({ where: where(), data: { status: "POSTING" } })
     const result = await executeLivePublish(await readyFor(productId, secondAccountId), productId, true)
     expect(result.ok).toBe(true)
-    expect(browser.calls).toEqual([{ ...REWRITE, price: 184.98 }])
+    expect(browser.calls).toEqual([{ ...REWRITE, price: 184.98, photoStyle: "duplicate" }])
   })
 
   it("fills the form with the original text on the default account", async () => {
     const result = await executeLivePublish(await readyFor(productId, defaultAccountId), productId, false)
     expect(result.ok).toBe(true)
-    expect(browser.calls).toEqual([PRODUCT])
+    expect(browser.calls).toEqual([{ ...PRODUCT, photoStyle: "default" }])
   })
 })

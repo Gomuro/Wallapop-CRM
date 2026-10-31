@@ -1,4 +1,5 @@
 import type { CategoryUploadField } from "../../../../lib/inventory/category-upload-fields";
+import type { PhotoStyle } from "../image-unique/shoot";
 
 export const UPLOAD_URL = "https://es.wallapop.com/app/catalog/upload";
 export const SUMMARY_MAX = 50;
@@ -82,6 +83,8 @@ export type PublishWallapopCopy = {
   dryRun: boolean;
   /** Chrome debugging port for this account. Omit = the first account. */
   cdpPort?: number;
+  /** "duplicate" on a non-default account: stronger crop and a turn, colour kept. */
+  photoStyle?: PhotoStyle;
 };
 
 export type PublishWallapopShipping = {
