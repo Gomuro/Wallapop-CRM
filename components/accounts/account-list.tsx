@@ -29,26 +29,12 @@ import {
 import { Input } from "@/components/ui/input"
 import { Label } from "@/components/ui/label"
 import {
-  FIRST_ACCOUNT_CDP_PORT,
-  FIRST_ACCOUNT_PROFILE_NAME,
-} from "@/lib/accounts/chrome-place"
-import {
   createAccountCard,
   deleteAccountCard,
   listAccountCards,
   type ApiAccountCard,
 } from "@/lib/api/account-cards"
 import { ApiError } from "@/lib/api/errors"
-function ChromePlace({ account }: { account: ApiAccountCard }) {
-  return (
-    <div className="space-y-1 text-sm text-muted-foreground">
-      <p>Puerto {account.cdpPort ?? FIRST_ACCOUNT_CDP_PORT}</p>
-      <p>Perfil {account.profileName ?? FIRST_ACCOUNT_PROFILE_NAME}</p>
-      <p>Catálogo de este login</p>
-    </div>
-  )
-}
-
 function cadence(ms: number | null): string | null {
   if (ms == null || ms <= 0) return null
   const { value, unit } = msToAutopostIntervalInput(ms)
@@ -160,7 +146,6 @@ function AccountBody({ account }: { account: ApiAccountCard }) {
       </CardHeader>
       <CardContent>
         <RestrictionWarning account={account} />
-        <ChromePlace account={account} />
         {process.env.NODE_ENV === "development" ? (
           <DevWatchChrome accountId={account.id} />
         ) : null}
