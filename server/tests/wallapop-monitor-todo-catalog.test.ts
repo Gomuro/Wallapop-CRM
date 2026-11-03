@@ -19,6 +19,11 @@ type CatalogOpts = {
   reloadOnSwitchMs?: number
   /** The switcher renders this late, or never (VPS 19:46Z: the URL alone passed). */
   switcherAfterMs?: number | "never"
+  /**
+   * Next on this tab's last page moves the pager but keeps the old rows, like
+   * "521-560 de 536" on the VPS. Once: a second request renders it. Forever: never.
+   */
+  staleLastPage?: { tab: string; forever?: boolean }
 }
 
 function proCatalogHtml(opts: CatalogOpts): string {
@@ -77,7 +82,22 @@ function proCatalogHtml(opts: CatalogOpts): string {
       if (mayReset && tab !== "Activos") { catalog = "multi"; resets += 1; label() }
       render()
     }))
-    document.getElementById("next").addEventListener("click", () => { pageNo += 1; render() })
+    const stale = ${JSON.stringify(opts.staleLastPage ?? null)}
+    let staled = 0
+    document.getElementById("next").addEventListener("click", () => {
+      pageNo += 1
+      const all = DATA[tab][catalog]
+      const last = (pageNo + 1) * SIZE >= all.length
+      if (stale && stale.tab === tab && last && (stale.forever || staled === 0)) {
+        staled += 1
+        const shown = document.getElementById("rows").children.length
+        const from = pageNo * SIZE + 1
+        document.getElementById("pager").textContent = from + " - " + (from + shown - 1) + " de " + all.length
+        document.getElementById("next").classList.add("PaginationActions__action--disabled")
+        return
+      }
+      render()
+    })
     document.getElementById("prev").addEventListener("click", () => { pageNo = Math.max(0, pageNo - 1); render() })
     label(); render()
     const switcherAfter = ${JSON.stringify(opts.switcherAfterMs ?? null)}
@@ -157,4 +177,28 @@ describe("the catalog switcher must be on the page", () => {
     expect(await scrapeProCatalogs(page)).toBeNull()
     await page.close()
   }, 60_000)
+})
+
+describe("a last page that keeps the old rows", () => {
+  it("asks for the page again and reads it (VPS: 520 of 536, pager 521-560)", async () => {
+    const page = await catalogPage({ resetOnTab: false, todoMissing: false, staleLastPage: { tab: "Activos" } })
+    const result = await scrapeProCatalogs(page)
+    expect(result?.published.map((row) => row.href).sort()).toEqual([
+      "https://es.wallapop.com/item/mesa-5",
+      "https://es.wallapop.com/item/olla-1",
+      "https://es.wallapop.com/item/silla-4",
+    ])
+    expect(result?.sold).toHaveLength(3)
+    await page.close()
+  }, 90_000)
+
+  it("still ends the pass incomplete when the page never loads", async () => {
+    const page = await catalogPage({
+      resetOnTab: false,
+      todoMissing: false,
+      staleLastPage: { tab: "Activos", forever: true },
+    })
+    expect(await scrapeProCatalogs(page)).toBeNull()
+    await page.close()
+  }, 90_000)
 })

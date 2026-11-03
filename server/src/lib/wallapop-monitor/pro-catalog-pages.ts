@@ -13,6 +13,7 @@ import {
 } from "./pro-catalog-eval"
 import { openTabOnTodo, stillOnTab, type TabDeps } from "./pro-catalog-guard"
 import { closeProCatalogModal } from "./pro-catalog-modal"
+import { reloadIfStale, type StaleDeps } from "./pro-catalog-stale"
 
 const MAX_PAGES = 20
 const PAGE_WAIT_MS = 8_000
@@ -226,6 +227,8 @@ async function settleAfterNext(page: Page): Promise<void> {
   await page.waitForTimeout(last ? LAST_PAGE_SETTLE_MS : PAGE_SETTLE_MS)
 }
 
+const STALE_DEPS: StaleDeps = { readShot, waitForPage: waitForListedPage }
+
 async function collectProPages(
   page: Page,
   settle = false,
@@ -249,6 +252,7 @@ async function collectProPages(
       previousHref: shot.rows[0]?.href,
     })
     if (settle) await settleAfterNext(page)
+    if (!(await reloadIfStale(page, shot, STALE_DEPS))) break
   }
   return { seen, total, pager }
 }
