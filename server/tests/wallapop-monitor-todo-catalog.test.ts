@@ -1,7 +1,7 @@
 import { chromium, type Page } from "playwright"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
-import { scrapeProCatalogs } from "../src/lib/wallapop-monitor/pro-catalog"
+import { ensureTodoElCatalogo, scrapeProCatalogs } from "../src/lib/wallapop-monitor/pro-catalog"
 
 const URL_TODO = "https://catalog.test/app/catalog/management"
 
@@ -12,7 +12,14 @@ const URL_TODO = "https://catalog.test/app/catalog/management"
  * `resetOnce`: only the first such click does. `reloadOnSwitchMs`: picking a
  * catalog reloads the list a moment later and lands on Activos (VPS 3.11 10:57Z).
  */
-type CatalogOpts = { resetOnTab: boolean; todoMissing: boolean; resetOnce?: boolean; reloadOnSwitchMs?: number }
+type CatalogOpts = {
+  resetOnTab: boolean
+  todoMissing: boolean
+  resetOnce?: boolean
+  reloadOnSwitchMs?: number
+  /** The switcher renders this late, or never (VPS 19:46Z: the URL alone passed). */
+  switcherAfterMs?: number | "never"
+}
 
 function proCatalogHtml(opts: CatalogOpts): string {
   return `<body>
@@ -73,6 +80,11 @@ function proCatalogHtml(opts: CatalogOpts): string {
     document.getElementById("next").addEventListener("click", () => { pageNo += 1; render() })
     document.getElementById("prev").addEventListener("click", () => { pageNo = Math.max(0, pageNo - 1); render() })
     label(); render()
+    const switcherAfter = ${JSON.stringify(opts.switcherAfterMs ?? null)}
+    if (switcherAfter !== null) {
+      sw.remove()
+      if (switcherAfter !== "never") setTimeout(() => document.body.prepend(sw), switcherAfter)
+    }
   </script></body>`
 }
 
@@ -127,4 +139,22 @@ describe("Pro tabs are read only under «Todo el catálogo»", () => {
     expect(await scrapeProCatalogs(page)).toBeNull()
     await page.close()
   })
+})
+
+describe("the catalog switcher must be on the page", () => {
+  it("waits for a switcher that renders late, then reads the full lists", async () => {
+    const page = await catalogPage({ resetOnTab: false, todoMissing: false, switcherAfterMs: 1_500 })
+    expect(await ensureTodoElCatalogo(page, 5_000)).toBe(true)
+    const result = await scrapeProCatalogs(page)
+    expect(result?.sold).toHaveLength(3)
+    expect(result?.published).toHaveLength(3)
+    await page.close()
+  }, 60_000)
+
+  it("stops the pass when the switcher never shows, even on /app/catalog/management", async () => {
+    const page = await catalogPage({ resetOnTab: false, todoMissing: false, switcherAfterMs: "never" })
+    expect(await ensureTodoElCatalogo(page, 1_000)).toBe(false)
+    expect(await scrapeProCatalogs(page)).toBeNull()
+    await page.close()
+  }, 60_000)
 })

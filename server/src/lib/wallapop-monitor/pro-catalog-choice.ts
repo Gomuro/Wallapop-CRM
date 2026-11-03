@@ -3,6 +3,12 @@ import type { Page } from "playwright"
 import { log } from "../log"
 
 const CATALOG_SWITCH_WAIT_MS = 15_000
+/**
+ * VPS 2026-11-03 10:17Z and 19:46Z: the switcher was not rendered yet, the URL alone
+ * passed, and Activos was read under Multicategoría (527 instead of 536).
+ */
+export const SWITCHER_WAIT_MS = 20_000
+const SWITCHER_PRESENT_EVAL = `Boolean(document.querySelector('[aria-label^="Catálogo seleccionado"]'))`
 const TODO_CATALOG_LABEL = "todo el catálogo"
 
 type CatalogChoice = {
@@ -110,13 +116,23 @@ async function clickTodoCatalogItem(
   return (await page.evaluate(CLICK_TODO_CATALOG_EVAL)) as "clicked" | "missing"
 }
 
-function logNoCatalogSwitcher(page: Page, ok: boolean): void {
-  log("info", "wallapop_monitor_catalog_switch", {
+function logNoCatalogSwitcher(page: Page, waitedMs: number): void {
+  log("warn", "wallapop_monitor_catalog_switch", {
     skipped: true,
     reason: "no_switcher",
     url: page.url(),
-    ok,
+    waitedMs,
+    ok: false,
   })
+}
+
+async function waitForSwitcher(page: Page, timeoutMs: number): Promise<boolean> {
+  try {
+    await page.waitForFunction(SWITCHER_PRESENT_EVAL, undefined, { timeout: timeoutMs, polling: 250 })
+    return true
+  } catch {
+    return false
+  }
 }
 
 function logCatalogAlreadyTodo(page: Page, label: string): void {
@@ -162,13 +178,13 @@ function logCatalogSwitchFailed(
 }
 
 /**
- * Whether the page shows the full list right now. With a switcher it must say
- * «Todo el catálogo» on `/app/catalog/management`. Without one, the URL decides.
+ * Whether the page shows the full list right now: the switcher says «Todo el catálogo»
+ * on `/app/catalog/management`. No switcher on a PRO page is not proof of the full list.
  */
 export async function isOnTodoCatalog(page: Page): Promise<{ ok: boolean; label: string }> {
   try {
     const choice = await readCatalogChoice(page)
-    if (!choice.hasSwitcher) return { ok: isFullCatalogUrl(page.url()), label: "" }
+    if (!choice.hasSwitcher) return { ok: false, label: "" }
     return { ok: choiceIsTodo(choice, page.url()), label: choice.label }
   } catch {
     return { ok: false, label: "" }
@@ -176,19 +192,23 @@ export async function isOnTodoCatalog(page: Page): Promise<{ ok: boolean; label:
 }
 
 /**
- * Pro accounts keep two lists. The trigger is the light-DOM
+ * Pro accounts keep two lists. Waits for the switcher; without it the pass stops. The trigger is the light-DOM
  * `[aria-label^="Catálogo seleccionado"]` (`div.walla-dropdown__inner-input`).
  * Options are `walla-dropdown-item` inside that dropdown, including shadow.
  * "Suscripción Multicategoría" is consumer goods only. "Todo el catálogo" is
  * the full list. The selected value sticks, so opening `/catalog/management`
  * still lands on `/consumergoods` until this item is clicked.
  */
-export async function ensureTodoElCatalogo(page: Page): Promise<boolean> {
+export async function ensureTodoElCatalogo(
+  page: Page,
+  switcherWaitMs = SWITCHER_WAIT_MS,
+): Promise<boolean> {
+  const started = Date.now()
+  await waitForSwitcher(page, switcherWaitMs)
   const before = await readCatalogChoice(page)
   if (!before.hasSwitcher) {
-    const ok = isFullCatalogUrl(page.url())
-    logNoCatalogSwitcher(page, ok)
-    return ok
+    logNoCatalogSwitcher(page, Date.now() - started)
+    return false
   }
   if (choiceIsTodo(before, page.url())) {
     logCatalogAlreadyTodo(page, before.label)
