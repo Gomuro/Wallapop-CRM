@@ -36,7 +36,7 @@ async function pageFacts(page: Page): Promise<Record<string, unknown>> {
   }
 }
 
-/** Screenshot plus the HTML without scripts, so no session data lands in the file. Overwrites `name`. */
+/** Screenshot plus the HTML without scripts or styles, so no session data lands in the file. Overwrites `name`. */
 export async function saveSoldSnapshot(
   page: Page,
   name: string,
@@ -47,13 +47,21 @@ export async function saveSoldSnapshot(
   try {
     await mkdir(dir, { recursive: true })
     await page.screenshot({ path: `${base}.png`, timeout: 5_000 }).catch(() => {})
-    const html = (await page.content()).replace(/<script\b[\s\S]*?<\/script>/gi, "")
+    // Inline styles alone filled the 400k cap on the VPS (2026-11-03), so the markup was lost.
+    const html = (await page.content())
+      .replace(/<script\b[\s\S]*?<\/script>/gi, "")
+      .replace(/<style\b[\s\S]*?<\/style>/gi, "")
     await writeFile(`${base}.html`, html.slice(0, HTML_MAX_CHARS), "utf8")
     return base
   } catch (error) {
     log("warn", "wallapop_sold_snapshot_failed", { message: firstLine(error) })
     return null
   }
+}
+
+/** Same as saveSoldSnapshot, but not from tests (they would write into server/logs). */
+export async function saveSoldSnapshotOutsideTests(page: Page, name: string): Promise<string | null> {
+  return isTest() ? null : saveSoldSnapshot(page, name)
 }
 
 /** VPS 2026-10-23: three sales stopped at confirm and the log did not say what the tab showed. */

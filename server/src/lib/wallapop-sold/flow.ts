@@ -11,18 +11,14 @@ import {
   findItemAlreadySold,
   findSellerSoldButton,
 } from "./click"
-import {
-  clickSellerSoldAndWaitTab,
-  gotoItemPage,
-  gotoVendidosCatalog,
-} from "./nav"
+import { clickSellerSoldAndWaitTab, gotoItemPage } from "./nav"
 import {
   MarkWallapopSoldInput,
   MarkWallapopSoldResult,
   SoldStep,
   WallapopSoldError,
 } from "./types"
-import { vendidosFirstRowMatches, vendidosHrefMatches } from "./verify"
+import { verifySoldInVendidos } from "./vendidos"
 
 const SELLER_BLOCK_WAIT_MS = 20_000
 
@@ -98,10 +94,7 @@ async function confirmAndVerifyVendidos(
   const { tab: modalPage, confirm } = await clickSellerSoldAndWaitTab(itemPage)
   if (confirm) await clickMarkAsSoldConfirm(modalPage)
   await modalPage.waitForTimeout(2_000)
-  await gotoVendidosCatalog(modalPage)
-  const matched = matchAnywhere
-    ? await vendidosHrefMatches(modalPage, itemUrl)
-    : await vendidosFirstRowMatches(modalPage, itemUrl)
+  const matched = await verifySoldInVendidos(modalPage, itemUrl, matchAnywhere)
   if (!matched) {
     throw new WallapopSoldError(
       "vendidos",

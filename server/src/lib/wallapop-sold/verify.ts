@@ -63,11 +63,14 @@ export async function scrapeSoldCatalogRows(
 export async function vendidosHrefMatches(
   page: Page,
   itemUrl: string,
+  context: Record<string, unknown> = {},
 ): Promise<boolean> {
   const rows = await scrapeSoldCatalogRows(page)
   const ok = soldCatalogHrefMatches(rows, itemUrl)
   log(ok ? "info" : "warn", "wallapop_sold_vendidos_verify", {
     ok,
+    ...context,
+    url: page.url(),
     anywhere: true,
     scanned: rows.length,
   })
@@ -77,11 +80,14 @@ export async function vendidosHrefMatches(
 export async function vendidosFirstRowMatches(
   page: Page,
   itemUrl: string,
+  context: Record<string, unknown> = {},
 ): Promise<boolean> {
   const rows = await scrapeSoldCatalogRows(page)
   const ok = firstSoldCatalogHrefMatches(rows, itemUrl)
   log(ok ? "info" : "warn", "wallapop_sold_vendidos_verify", {
     ok,
+    ...context,
+    url: page.url(),
     scanned: rows.length,
     firstHref: rows[0]?.href ?? null,
   })

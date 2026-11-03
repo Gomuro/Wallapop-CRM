@@ -256,7 +256,8 @@ async function collectProPages(
 
 const TAB_DEPS: TabDeps = { openTab, selectedTabLabel }
 
-async function readAllPages(
+/** One PRO tab under «Todo el catálogo», every pager page. Null when the tab or catalog could not be held. */
+export async function readAllPages(
   page: Page,
   tab: string,
   confirmHrefs?: string[],
