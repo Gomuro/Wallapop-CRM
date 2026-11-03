@@ -11,6 +11,7 @@ import {
   clickTabEval,
   parseProPager,
 } from "./pro-catalog-eval"
+import { ensureTodoElCatalogo, isOnTodoCatalog } from "./pro-catalog-choice"
 import { closeProCatalogModal } from "./pro-catalog-modal"
 
 const MAX_PAGES = 20
@@ -252,13 +253,37 @@ async function collectProPages(
   return { seen, total, pager }
 }
 
+/**
+ * Under «Suscripción Multicategoría» each tab hides the other sections (3.11:
+ * Vendidos 5 instead of 9, Activos 526 instead of 535). Every Pro tab is read
+ * only under «Todo el catálogo»: checked after the tab opens, switched if not.
+ */
+async function openTabOnTodo(page: Page, tab: string): Promise<boolean> {
+  await openTab(page, tab)
+  const before = await isOnTodoCatalog(page)
+  let switched = false
+  if (!before.ok) {
+    switched = await ensureTodoElCatalogo(page)
+    // The switch can reload the list on Activos, so open the tab again.
+    await openTab(page, tab)
+  }
+  const ok = before.ok || (await isOnTodoCatalog(page)).ok
+  log(ok ? "info" : "warn", "wallapop_monitor_catalog_guard", {
+    tab,
+    before: before.label || page.url(),
+    switched,
+    ok,
+  })
+  return ok
+}
+
 async function readAllPages(
   page: Page,
   tab: string,
   confirmHrefs?: string[],
 ): Promise<{ rows: ProCatalogRow[]; total: number | null } | null> {
   await closeProCatalogModal(page, tab)
-  await openTab(page, tab)
+  if (!(await openTabOnTodo(page, tab))) return null
   await confirmActivosIfNeeded(page, tab, confirmHrefs)
   const { seen, total, pager } = await collectProPages(page, true)
   if (proCatalogIncomplete(total, seen.size)) {

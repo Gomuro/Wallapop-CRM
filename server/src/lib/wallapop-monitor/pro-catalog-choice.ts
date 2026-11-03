@@ -162,6 +162,20 @@ function logCatalogSwitchFailed(
 }
 
 /**
+ * Whether the page shows the full list right now. With a switcher it must say
+ * «Todo el catálogo» on `/app/catalog/management`. Without one, the URL decides.
+ */
+export async function isOnTodoCatalog(page: Page): Promise<{ ok: boolean; label: string }> {
+  try {
+    const choice = await readCatalogChoice(page)
+    if (!choice.hasSwitcher) return { ok: isFullCatalogUrl(page.url()), label: "" }
+    return { ok: choiceIsTodo(choice, page.url()), label: choice.label }
+  } catch {
+    return { ok: false, label: "" }
+  }
+}
+
+/**
  * Pro accounts keep two lists. The trigger is the light-DOM
  * `[aria-label^="Catálogo seleccionado"]` (`div.walla-dropdown__inner-input`).
  * Options are `walla-dropdown-item` inside that dropdown, including shadow.
