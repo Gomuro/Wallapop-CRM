@@ -30,6 +30,12 @@ type SaleFlow = {
   modalAfterMs?: number
   /** The next page moves on once more before it shows the confirm. */
   redirectFirst?: boolean
+  /**
+   * The item has chats: "Selecciona a quién lo vendiste" comes first (VPS 2026-11-03).
+   * After "Lo vendí fuera de Wallapop" the old confirm shows, or the modal just closes.
+   * "no_outside": the buyer list without that link.
+   */
+  buyers?: "then_confirm" | "then_closes" | "no_outside"
 }
 
 /** Seller block on /item/, like wallapop-item-seller-sold.html. */
@@ -60,13 +66,38 @@ function nextHtml(flow: SaleFlow): string {
       if (flow.redirectFirst && !location.search.includes("again")) {
         setTimeout(() => location.replace(location.href + "&again=1"), 300)
       } else {
-        setTimeout(() => {
-          document.body.insertAdjacentHTML("beforeend", '<ngb-modal-window role="dialog"><tsl-sold-modal>'
-            + '<walla-button id="cancelButton" text="Cancelar"></walla-button>'
-            + '<walla-button id="markAsSoldButton" text="Marcar como vendido"></walla-button>'
-            + '</tsl-sold-modal></ngb-modal-window>')
+        const CONFIRM = '<walla-button id="cancelButton" text="Cancelar"></walla-button>'
+          + '<walla-button id="markAsSoldButton" text="Marcar como vendido"></walla-button>'
+        const BUYERS = '<p>Marcar como vendido</p><h2>Selecciona a quién lo vendiste</h2>'
+          + '<p>Los demás compradores sabrán que ya no está en venta.</p>'
+          + '<div class="buyer" role="button"><b>J.Manuel F.</b><span>No</span></div>'
+          + '<div class="buyer" role="button"><b>Mohamed K.</b><span>Se puede ir por hilla</span></div>'
+          + (flow.buyers === "no_outside" ? "" : '<tsl-sold-outside></tsl-sold-outside>')
+        function wireConfirm() {
           document.getElementById("markAsSoldButton").addEventListener("click", () => {
             window.__soldConfirmed = true
+          })
+        }
+        setTimeout(() => {
+          document.body.insertAdjacentHTML("beforeend", '<ngb-modal-window role="dialog"><tsl-sold-modal>'
+            + (flow.buyers ? BUYERS : CONFIRM) + '</tsl-sold-modal></ngb-modal-window>')
+          document.querySelectorAll(".buyer").forEach((el) => el.addEventListener("click", () => {
+            window.__buyerPicked = true
+          }))
+          const outside = document.querySelector("tsl-sold-outside")
+          if (!flow.buyers) wireConfirm()
+          if (!outside) return
+          const button = document.createElement("button")
+          button.textContent = "Lo vendí fuera de Wallapop"
+          outside.attachShadow({ mode: "open" }).appendChild(button)
+          button.addEventListener("click", () => {
+            const modal = document.querySelector("tsl-sold-modal")
+            if (flow.buyers === "then_closes") {
+              window.__soldConfirmed = true
+              document.querySelector("ngb-modal-window").remove()
+              return
+            }
+            setTimeout(() => { modal.innerHTML = CONFIRM; wireConfirm() }, 300)
           })
         }, flow.modalAfterMs || 0)
       }
@@ -78,7 +109,7 @@ async function serve(route: Route, flow: SaleFlow): Promise<void> {
   const url = route.request().url()
   if (url.startsWith(NEXT_URL)) {
     await new Promise((resolve) => setTimeout(resolve, flow.serveAfterMs ?? 0))
-    await route.fulfill({ contentType: "text/html", body: nextHtml(flow) }).catch(() => {})
+    await route.fulfill({ contentType: "text/html; charset=utf-8", body: nextHtml(flow) }).catch(() => {})
     return
   }
   if (url === ITEM_URL) {
@@ -110,6 +141,10 @@ async function confirmed(tab: Page): Promise<boolean> {
   return Boolean(await tab.evaluate("window.__soldConfirmed === true"))
 }
 
+async function buyerPicked(tab: Page): Promise<boolean> {
+  return Boolean(await tab.evaluate("window.__buyerPicked === true"))
+}
+
 beforeAll(async () => {
   browser = await chromium.launch({ headless: true })
 })
@@ -131,11 +166,13 @@ afterEach(async () => {
 describe("clickSellerSoldAndWaitTab", () => {
   it("takes the confirm in the same tab once Wallapop has loaded the next page", async () => {
     const page = await openItem({ next: "same_tab", goAfterMs: 200, serveAfterMs: 400, modalAfterMs: 600 })
-    const tab = await clickSellerSoldAndWaitTab(page, 10_000)
+    const { tab, confirm } = await clickSellerSoldAndWaitTab(page, 10_000)
+    expect(confirm).toBe(true)
     expect(tab).toBe(page)
     await clickMarkAsSoldConfirm(tab)
     expect(await confirmed(tab)).toBe(true)
     expect(logged("wallapop_sold_modal_same_tab")).toEqual([{ url: NEXT_URL, waitedMs: expect.any(Number) }])
+    expect(logged("wallapop_sold_outside_click")).toEqual([])
   })
 
   it("keeps reading while the tab moves on twice before the confirm shows", async () => {
@@ -146,7 +183,8 @@ describe("clickSellerSoldAndWaitTab", () => {
       modalAfterMs: 500,
       redirectFirst: true,
     })
-    const tab = await clickSellerSoldAndWaitTab(page, 10_000)
+    const { tab, confirm } = await clickSellerSoldAndWaitTab(page, 10_000)
+    expect(confirm).toBe(true)
     expect(tab.url()).toBe(`${NEXT_URL}&again=1`)
     await clickMarkAsSoldConfirm(tab)
     expect(await confirmed(tab)).toBe(true)
@@ -154,7 +192,8 @@ describe("clickSellerSoldAndWaitTab", () => {
 
   it("waits for the confirm in a new tab and closes that tab with the job", async () => {
     const page = await openItem({ next: "popup", modalAfterMs: 700 })
-    const tab = await clickSellerSoldAndWaitTab(page, 10_000)
+    const { tab, confirm } = await clickSellerSoldAndWaitTab(page, 10_000)
+    expect(confirm).toBe(true)
     expect(tab).not.toBe(page)
     expect(tab.url()).toBe(NEXT_URL)
     await clickMarkAsSoldConfirm(tab)
@@ -167,7 +206,7 @@ describe("clickSellerSoldAndWaitTab", () => {
     const waiting = clickSellerSoldAndWaitTab(page, 10_000)
     await new Promise((resolve) => setTimeout(resolve, 150))
     const other = await context!.newPage()
-    const tab = await waiting
+    const { tab } = await waiting
     expect(tab).toBe(page)
     expect(other.isClosed()).toBe(false)
     expect(takeSoldJobPages()).toEqual([])
@@ -190,6 +229,41 @@ describe("clickSellerSoldAndWaitTab", () => {
         snapshot: null,
       }),
     ])
+  })
+})
+
+describe("item with chats: Selecciona a quién lo vendiste", () => {
+  it("clicks Lo vendí fuera de Wallapop, then the confirm, and no buyer", async () => {
+    const page = await openItem({ next: "same_tab", goAfterMs: 100, modalAfterMs: 300, buyers: "then_confirm" })
+    const { tab, confirm } = await clickSellerSoldAndWaitTab(page, 10_000)
+    expect(tab).toBe(page)
+    expect(confirm).toBe(true)
+    await clickMarkAsSoldConfirm(tab)
+    expect(await confirmed(tab)).toBe(true)
+    expect(await buyerPicked(tab)).toBe(false)
+    expect(logged("wallapop_sold_outside_click")).toEqual([{ url: NEXT_URL }])
+    expect(logged("wallapop_sold_modal_same_tab")).toEqual([
+      { url: NEXT_URL, waitedMs: expect.any(Number), outside: true },
+    ])
+  })
+
+  it("goes on without a confirm when the modal closes after Lo vendí fuera de Wallapop", async () => {
+    const page = await openItem({ next: "popup", modalAfterMs: 300, buyers: "then_closes" })
+    const { tab, confirm } = await clickSellerSoldAndWaitTab(page, 10_000)
+    expect(tab).not.toBe(page)
+    expect(confirm).toBe(false)
+    expect(await confirmed(tab)).toBe(true)
+    expect(await buyerPicked(tab)).toBe(false)
+    expect(logged("wallapop_sold_outside_no_confirm")).toEqual([{ url: NEXT_URL }])
+  })
+
+  it("stops without picking a buyer when Lo vendí fuera de Wallapop is missing", async () => {
+    const page = await openItem({ next: "same_tab", modalAfterMs: 200, buyers: "no_outside" })
+    await expect(clickSellerSoldAndWaitTab(page, 1_500)).rejects.toMatchObject({
+      step: "confirm",
+      message: "Wallapop pide elegir comprador y no se encontró «Lo vendí fuera de Wallapop».",
+    })
+    expect(await buyerPicked(page)).toBe(false)
   })
 })
 

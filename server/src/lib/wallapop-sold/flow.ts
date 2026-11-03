@@ -95,8 +95,8 @@ async function confirmAndVerifyVendidos(
   itemUrl: string,
   matchAnywhere: boolean,
 ): Promise<void> {
-  const modalPage = await clickSellerSoldAndWaitTab(itemPage)
-  await clickMarkAsSoldConfirm(modalPage)
+  const { tab: modalPage, confirm } = await clickSellerSoldAndWaitTab(itemPage)
+  if (confirm) await clickMarkAsSoldConfirm(modalPage)
   await modalPage.waitForTimeout(2_000)
   await gotoVendidosCatalog(modalPage)
   const matched = matchAnywhere
