@@ -15,6 +15,11 @@ export type TabDeps = {
  * After a switch: let the list reload, open the tab, and check which tab is selected.
  */
 const AFTER_SWITCH_SETTLE_MS = 3_000
+/**
+ * VPS 3.11 20:24Z: right after the monitor's own switch the list was still redrawing,
+ * no tab was selected and the guard failed the pass. Open the tab again this many times.
+ */
+const TAB_RETRIES = 2
 
 async function onTab(page: Page, tab: string, deps: TabDeps): Promise<boolean> {
   const label = await deps.selectedTabLabel(page).catch(() => null)
@@ -24,7 +29,17 @@ async function onTab(page: Page, tab: string, deps: TabDeps): Promise<boolean> {
 async function reopenTabAfterSwitch(page: Page, tab: string, deps: TabDeps): Promise<void> {
   await page.waitForTimeout(AFTER_SWITCH_SETTLE_MS)
   await deps.openTab(page, tab)
-  if (!(await onTab(page, tab, deps))) await deps.openTab(page, tab)
+}
+
+/** Waits and opens the tab again while another tab, or none, is selected. Returns the retries used. */
+async function reopenUntilOnTab(page: Page, tab: string, deps: TabDeps): Promise<number> {
+  let retries = 0
+  while (retries < TAB_RETRIES && !(await onTab(page, tab, deps))) {
+    retries += 1
+    await page.waitForTimeout(AFTER_SWITCH_SETTLE_MS)
+    await deps.openTab(page, tab)
+  }
+  return retries
 }
 
 /**
@@ -40,6 +55,7 @@ export async function openTabOnTodo(page: Page, tab: string, deps: TabDeps): Pro
     switched = await ensureTodoElCatalogo(page)
     await reopenTabAfterSwitch(page, tab, deps)
   }
+  const tabRetries = await reopenUntilOnTab(page, tab, deps)
   const todo = before.ok || (await isOnTodoCatalog(page)).ok
   const tabOk = await onTab(page, tab, deps)
   const ok = todo && tabOk
@@ -47,6 +63,7 @@ export async function openTabOnTodo(page: Page, tab: string, deps: TabDeps): Pro
     tab,
     before: before.label || page.url(),
     switched,
+    tabRetries,
     tabOk,
     ok,
   })

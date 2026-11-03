@@ -24,6 +24,8 @@ type CatalogOpts = {
    * "521-560 de 536" on the VPS. Once: a second request renders it. Forever: never.
    */
   staleLastPage?: { tab: string; forever?: boolean }
+  /** The first click on this tab does nothing: the list is still redrawing (VPS 20:24Z). */
+  tabLate?: string
 }
 
 function proCatalogHtml(opts: CatalogOpts): string {
@@ -75,8 +77,11 @@ function proCatalogHtml(opts: CatalogOpts): string {
     ${opts.todoMissing ? "" : 'item("Todo el catálogo", "todo")'}
     item("Suscripción Multicategoría", "multi")
     let resets = 0
+    let lateClicks = 0
     document.querySelectorAll("wallapop-tab").forEach((el) => el.addEventListener("click", () => {
-      tab = el.getAttribute("aria-label").split(" ")[0]
+      const clicked = el.getAttribute("aria-label").split(" ")[0]
+      if (clicked === ${JSON.stringify(opts.tabLate ?? null)} && lateClicks++ === 0) return
+      tab = clicked
       pageNo = 0
       const mayReset = ${opts.resetOnTab} && (!${Boolean(opts.resetOnce)} || resets === 0)
       if (mayReset && tab !== "Activos") { catalog = "multi"; resets += 1; label() }
@@ -199,6 +204,16 @@ describe("a last page that keeps the old rows", () => {
       staleLastPage: { tab: "Activos", forever: true },
     })
     expect(await scrapeProCatalogs(page)).toBeNull()
+    await page.close()
+  }, 90_000)
+})
+
+describe("a tab that is not selected yet", () => {
+  it("waits and opens the tab again instead of failing the pass (VPS 20:24Z)", async () => {
+    const page = await catalogPage({ resetOnTab: false, todoMissing: false, tabLate: "Vendidos" })
+    const result = await scrapeProCatalogs(page)
+    expect(result?.sold).toHaveLength(3)
+    expect(result?.published).toHaveLength(3)
     await page.close()
   }, 90_000)
 })
