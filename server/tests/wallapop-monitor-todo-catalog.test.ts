@@ -2,6 +2,7 @@ import { chromium, type Page } from "playwright"
 import { afterAll, beforeAll, describe, expect, it } from "vitest"
 
 import { scrapeProCatalogs } from "../src/lib/wallapop-monitor/pro-catalog"
+import { listedPageReadyEval } from "../src/lib/wallapop-monitor/pro-catalog-pages"
 
 const URL_TODO = "https://catalog.test/app/catalog/management"
 
@@ -88,8 +89,7 @@ afterAll(async () => {
 
 async function catalogPage(opts: CatalogOpts): Promise<Page> {
   const page = await browser.newPage()
-  // The tab-ready check never matches a mixed-case tab name and falls back to the
-  // default timeout (also on the VPS, ~20 s per tab). Keep that short here.
+  // A wait that never matches should fail fast here, not after 30 s.
   page.setDefaultTimeout(2_000)
   await page.route("https://catalog.test/**", (route) =>
     route.fulfill({ status: 200, contentType: "text/html; charset=utf-8", body: proCatalogHtml(opts) }),
@@ -125,6 +125,16 @@ describe("Pro tabs are read only under «Todo el catálogo»", () => {
   it("stops the pass instead of reading a filtered Vendidos", async () => {
     const page = await catalogPage({ resetOnTab: true, todoMissing: true })
     expect(await scrapeProCatalogs(page)).toBeNull()
+    await page.close()
+  })
+})
+
+describe("tab ready check", () => {
+  it("matches a mixed-case tab name once its rows are listed (VPS waited ~20 s per tab)", async () => {
+    const page = await catalogPage({ resetOnTab: false, todoMissing: false })
+    await page.evaluate(`document.querySelector('wallapop-tab[aria-label^="Vendidos"]').click()`)
+    expect(await page.evaluate(listedPageReadyEval({ tab: "Vendidos" }))).toBe(true)
+    expect(await page.evaluate(listedPageReadyEval({ tab: "Activos" }))).toBe(false)
     await page.close()
   })
 })
