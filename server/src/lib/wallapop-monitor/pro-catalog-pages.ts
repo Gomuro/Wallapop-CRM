@@ -47,8 +47,7 @@ async function readShot(page: Page): Promise<PageShot> {
   return { rows: shot?.rows ?? [], pager: shot?.pager ?? "" }
 }
 
-/** Exported for tests. The tab name is matched case-insensitively ("Vendidos" vs "Vendidos (4)"). */
-export function listedPageReadyEval(input: {
+function listedPageReadyEval(input: {
   tab?: string
   previousPager?: string
   previousHref?: string
@@ -59,7 +58,7 @@ export function listedPageReadyEval(input: {
       const tab = [...document.querySelectorAll("wallapop-tab")].find((el) =>
         (el.getAttribute("aria-label") || "")
           .toLowerCase()
-          .startsWith((input.tab || "").toLowerCase()),
+          .startsWith(input.tab || ""),
       )
       if (!tab || tab.getAttribute("aria-selected") !== "true") return false
     }
@@ -89,7 +88,7 @@ async function waitForListedPage(
   expected: { tab?: string; previousPager?: string; previousHref?: string },
 ): Promise<void> {
   await page
-    .waitForFunction(listedPageReadyEval(expected), undefined, { timeout: PAGE_WAIT_MS })
+    .waitForFunction(listedPageReadyEval(expected), { timeout: PAGE_WAIT_MS })
     .catch(() => {})
 }
 
