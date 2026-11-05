@@ -32,6 +32,8 @@ type Desk = {
 
 const desks = new Map<number, Desk>()
 
+const ABORT_CLOSE_TAB_MS = 8_000
+
 function desk(port = firstCdpPort()): Desk {
   let row = desks.get(port)
   if (!row) {
@@ -170,6 +172,26 @@ export function promiseWithin<T>(
   })
 }
 
+/** This publish's Stop signal, read when the job starts. A later job has its own. */
+export function publishAbortSignal(port = firstCdpPort()): AbortSignal | null {
+  return desk(port).publishAbort?.signal ?? null
+}
+
+/** Stop must end the wait even when the call under it never returns. */
+export function rejectOnAbort<T>(
+  promise: Promise<T>,
+  signal: AbortSignal,
+): Promise<T> {
+  return new Promise((resolve, reject) => {
+    const onAbort = () => reject(new PublishAbortedError())
+    if (signal.aborted) onAbort()
+    else signal.addEventListener("abort", onAbort, { once: true })
+    promise
+      .then(resolve, reject)
+      .finally(() => signal.removeEventListener("abort", onAbort))
+  })
+}
+
 /** One quit at a time. Caller must have already seen idle worker slots. */
 export function beginChromeQuit(
   fn: () => Promise<void>,
@@ -213,7 +235,15 @@ export async function abortInFlightPublish(port = firstCdpPort()): Promise<void>
   row.keepChromeAfterAbort = true
   row.publishAbort?.abort()
   log("info", "wallapop_publish_abort_requested")
-  await closeWallapopUploadTab(port)
+  await promiseWithin(
+    closeWallapopUploadTab(port),
+    ABORT_CLOSE_TAB_MS,
+    "Close upload tab",
+  ).catch((error: unknown) => {
+    log("warn", "wallapop_publish_abort_close_failed", {
+      message: error instanceof Error ? error.message : String(error),
+    })
+  })
 }
 
 export function consumeKeepChromeAfterAbort(port = firstCdpPort()): boolean {

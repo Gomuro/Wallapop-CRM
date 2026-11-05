@@ -1,4 +1,4 @@
-import type { BrowserContext, Page } from "playwright"
+import type { Page } from "playwright"
 
 import { log } from "../log"
 import {
@@ -10,8 +10,15 @@ import {
   WALLAPOP_WALL_URL,
   type WallapopBrowserHandle,
 } from "./attach"
-import type { BrowserWorkerSlot } from "./busy"
+import {
+  PublishAbortedError,
+  promiseWithin,
+  publishAbortSignal,
+  rejectOnAbort,
+  type BrowserWorkerSlot,
+} from "./busy"
 import { closeWallapopUploadTab, quitChromeIfNoWorkerSlots } from "./tabs"
+import { fitAccountWindows, WINDOW_CALL_MS } from "./window-size"
 import {
   clearWorkerPage,
   isOwnedWorkerPage,
@@ -34,43 +41,9 @@ type BrowserWithCdp = WallapopBrowserHandle["browser"] & {
   }>
 }
 
+export { fitAccountWindows }
+
 const WINDOW_WAIT_MS = 12_000
-
-/** Fill the monitor so the Activos title column is not clipped with an ellipsis. */
-export async function fitAccountWindows(context: BrowserContext): Promise<void> {
-  const seen = new Set<number>()
-  for (const page of context.pages()) {
-    if (isClosedPage(page)) continue
-    try {
-      const session = await page.context().newCDPSession(page)
-      const info = (await session.send("Browser.getWindowForTarget")) as {
-        windowId?: number
-      }
-      const windowId = info.windowId
-      if (windowId == null || seen.has(windowId)) {
-        await session.detach().catch(() => {})
-        continue
-      }
-      seen.add(windowId)
-      await session.send("Browser.setWindowBounds", {
-        windowId,
-        bounds: { windowState: "maximized" },
-      })
-      await session.detach().catch(() => {})
-    } catch (error) {
-      log("warn", "wallapop_window_size_failed", {
-        message: error instanceof Error ? error.message : String(error),
-      })
-    }
-  }
-  if (seen.size > 0) {
-    log("info", "wallapop_window_sized", {
-      windows: seen.size,
-      windowState: "maximized",
-    })
-  }
-}
-
 /** Clicks need focus. Monitor scrapes in the background and must not steal Eliminar. */
 const FOREGROUND_SLOTS: ReadonlySet<BrowserWorkerSlot> = new Set([
   "publish",
@@ -88,14 +61,18 @@ export function canClaimWorkerPage(input: {
   return !input.wasAlreadyOpen && !input.isClosed && !input.ownedByOtherSlot
 }
 
+async function readTargetId(page: Page): Promise<string | null> {
+  const session = await page.context().newCDPSession(page)
+  const info = (await session.send("Target.getTargetInfo")) as {
+    targetInfo?: { targetId?: string }
+  }
+  await session.detach().catch(() => {})
+  return info.targetInfo?.targetId ?? null
+}
+
 async function targetIdOf(page: Page): Promise<string | null> {
   try {
-    const session = await page.context().newCDPSession(page)
-    const info = (await session.send("Target.getTargetInfo")) as {
-      targetInfo?: { targetId?: string }
-    }
-    await session.detach().catch(() => {})
-    return info.targetInfo?.targetId ?? null
+    return await promiseWithin(readTargetId(page), WINDOW_CALL_MS, "Target id")
   } catch {
     return null
   }
@@ -152,9 +129,20 @@ async function focusClaimedPage(
   page.setDefaultTimeout(ACTION_TIMEOUT_MS)
   claim?.(page)
   if (FOREGROUND_SLOTS.has(slot)) {
-    await page.bringToFront().catch(() => {})
+    await promiseWithin(page.bringToFront(), WINDOW_CALL_MS, "Bring to front").catch(() => {})
   }
   await fitAccountWindows(handle.context)
+}
+
+async function createBlankWindow(
+  browser: BrowserWithCdp,
+  newSession: NonNullable<BrowserWithCdp["newBrowserCDPSession"]>,
+): Promise<{ targetId?: string }> {
+  const session = await newSession.call(browser)
+  return session.send("Target.createTarget", {
+    url: "about:blank",
+    newWindow: true,
+  })
 }
 
 async function openCreatedTarget(
@@ -167,11 +155,11 @@ async function openCreatedTarget(
   const browser = handle.browser as BrowserWithCdp
   if (typeof browser.newBrowserCDPSession !== "function") return null
   try {
-    const session = await browser.newBrowserCDPSession()
-    const created = await session.send("Target.createTarget", {
-      url: "about:blank",
-      newWindow: true,
-    })
+    const created = await promiseWithin(
+      createBlankWindow(browser, browser.newBrowserCDPSession),
+      WINDOW_CALL_MS,
+      "Create window",
+    )
     const page = await waitForTargetPage(handle, before, created.targetId ?? null)
     if (!page) {
       log("warn", "wallapop_worker_window_target_missing", {
@@ -207,7 +195,7 @@ async function openFallbackTab(
       `No se pudo abrir una ventana propia para «${options.logSlot}»; no se reutiliza la pestaña de otro worker.`,
     )
   }
-  const page = await handle.context.newPage()
+  const page = await promiseWithin(handle.context.newPage(), WINDOW_CALL_MS, "New tab")
   await focusClaimedPage(page, handle, slot, options.claim)
   log("info", "wallapop_worker_tab_fallback", {
     slot: options.logSlot,
@@ -228,12 +216,36 @@ async function openOwnedWindow(
   return openFallbackTab(handle, slot, port, { logSlot, claim: options?.claim })
 }
 
+/** Stop lands while the window opens. Nobody takes a window opened after that. */
+async function openWindowUnlessAborted(
+  slot: BrowserWorkerSlot,
+  port: number | undefined,
+  signal: AbortSignal | null,
+): Promise<{ handle: WallapopBrowserHandle; page: Page }> {
+  const handle = await ensureCdpAttached(port)
+  if (signal?.aborted) throw new PublishAbortedError()
+  const page = await openOwnedWindow(handle, slot, port)
+  if (signal?.aborted) {
+    await page.close().catch(() => {})
+    throw new PublishAbortedError()
+  }
+  return { handle, page }
+}
+
+async function openJobWindow(
+  slot: BrowserWorkerSlot,
+  port?: number,
+): Promise<{ handle: WallapopBrowserHandle; page: Page }> {
+  const signal = slot === "publish" ? publishAbortSignal(port) : null
+  const opening = openWindowUnlessAborted(slot, port, signal)
+  return signal ? rejectOnAbort(opening, signal) : opening
+}
+
 export async function ensureWorkerWindow(
   slot: BrowserWorkerSlot,
   port?: number,
 ): Promise<Page> {
-  const handle = await ensureCdpAttached(port)
-  const page = await openOwnedWindow(handle, slot, port)
+  const { handle, page } = await openJobWindow(slot, port)
   setWorkerPage(slot, page, port)
   if (slot === "publish") {
     setWallapopHandle({ ...handle, page, ownedPage: true }, port)

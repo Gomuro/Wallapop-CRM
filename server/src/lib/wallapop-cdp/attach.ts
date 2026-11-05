@@ -2,7 +2,6 @@
  * Chrome CDP attach / page helpers.
  */
 import {
-  chromium,
   type Browser,
   type BrowserContext,
   type Page,
@@ -21,27 +20,24 @@ import { hasLocalProxy } from "./local-proxy"
 
 export { killSpawnedChrome }
 
-import { firstCdpPort } from "../../../../lib/accounts/chrome-place"
 import { log } from "../log"
-import { assertWallapopOnline } from "../wallapop-offline"
-import { promiseWithin, waitForChromeQuit } from "./busy"
+import { ATTACH_LIMIT_MS, oneAttachAtATime } from "./attach-queue"
+import { waitForChromeQuit } from "./busy"
+import {
+  CDP_PORT,
+  cdpUrlForPort,
+  connectOverCdp,
+  isCdpListening,
+  quitListeningChrome,
+  waitForCdp,
+} from "./cdp-connect"
 
-const CDP_CONNECT_TIMEOUT_MS = 15_000
-
-export const CDP_PORT = firstCdpPort()
+export { CDP_PORT }
 export const CDP_URL =
   process.env.WALLAPOP_CDP_URL ?? `http://127.0.0.1:${CDP_PORT}`
 export const NAV_TIMEOUT_MS = 45_000
 export const ACTION_TIMEOUT_MS = 20_000
 export const WALLAPOP_WALL_URL = "https://es.wallapop.com/wall"
-const CDP_READY_TIMEOUT_MS = 30_000
-
-function cdpUrlForPort(port: number): string {
-  if (port === CDP_PORT && process.env.WALLAPOP_CDP_URL?.trim()) {
-    return process.env.WALLAPOP_CDP_URL.trim()
-  }
-  return `http://127.0.0.1:${port}`
-}
 
 export type WallapopBrowserHandle = {
   browser: Browser
@@ -52,7 +48,6 @@ export type WallapopBrowserHandle = {
 }
 
 const handles = new Map<number, WallapopBrowserHandle>()
-
 function resolveCdpPort(port?: number): number {
   return port ?? CDP_PORT
 }
@@ -78,58 +73,8 @@ export function isClosedPage(page: { isClosed(): boolean }): boolean {
   }
 }
 
-async function waitForCdp(cdpUrl: string, timeoutMs = CDP_READY_TIMEOUT_MS) {
-  const versionUrl = `${cdpUrl.replace(/\/$/, "")}/json/version`
-  const deadline = Date.now() + timeoutMs
-  while (Date.now() < deadline) {
-    try {
-      const response = await fetch(versionUrl, {
-        signal: AbortSignal.timeout(1_500),
-      })
-      if (response.ok) return
-    } catch {
-      // not ready yet
-    }
-    await new Promise((resolve) => setTimeout(resolve, 250))
-  }
-  throw new Error(
-    `Chrome CDP no respondió en ${cdpUrl}. ¿Arrancó Chrome con --remote-debugging-port=${CDP_PORT}?`,
-  )
-}
-
 export function hasOpenWallapopBrowser(port = CDP_PORT): boolean {
   return handles.has(port)
-}
-
-async function connectOverCdp(cdpUrl: string) {
-  assertWallapopOnline()
-  const versionUrl = `${cdpUrl.replace(/\/$/, "")}/json/version`
-  try {
-    const response = await fetch(versionUrl, {
-      signal: AbortSignal.timeout(3_000),
-    })
-    if (response.ok) {
-      const json = (await response.json()) as { webSocketDebuggerUrl?: string }
-      if (json.webSocketDebuggerUrl) {
-        const http = new URL(cdpUrl)
-        const ws = new URL(json.webSocketDebuggerUrl)
-        ws.hostname = http.hostname
-        ws.port = http.port
-        return await promiseWithin(
-          chromium.connectOverCDP(ws.toString()),
-          CDP_CONNECT_TIMEOUT_MS,
-          "CDP websocket",
-        )
-      }
-    }
-  } catch (error) {
-    if (error instanceof Error && error.message.includes("timed out")) throw error
-  }
-  return promiseWithin(
-    chromium.connectOverCDP(cdpUrl),
-    CDP_CONNECT_TIMEOUT_MS,
-    "CDP",
-  )
 }
 
 export async function connectCdpHandle(port = CDP_PORT): Promise<WallapopBrowserHandle> {
@@ -157,40 +102,6 @@ export async function connectCdpHandle(port = CDP_PORT): Promise<WallapopBrowser
   return { browser, context, page, ownedPage }
 }
 
-async function isCdpListening(cdpUrl: string): Promise<boolean> {
-  try {
-    const response = await fetch(`${cdpUrl.replace(/\/$/, "")}/json/version`, {
-      signal: AbortSignal.timeout(1_200),
-    })
-    return response.ok
-  } catch {
-    return false
-  }
-}
-
-async function quitListeningChrome(port: number): Promise<void> {
-  const cdpUrl = cdpUrlForPort(port)
-  if (await isCdpListening(cdpUrl)) {
-    try {
-      const browser = await connectOverCdp(cdpUrl)
-      try {
-        const session = await browser.newBrowserCDPSession()
-        await session.send("Browser.close")
-      } catch {
-        await browser.close().catch(() => {})
-      }
-    } catch {
-      // already down
-    }
-  }
-  await killSpawnedChrome(port)
-  const deadline = Date.now() + 10_000
-  while (Date.now() < deadline) {
-    if (!(await isCdpListening(cdpUrl))) return
-    await new Promise((resolve) => setTimeout(resolve, 200))
-  }
-}
-
 /**
  * 1) Attach to Chrome already listening on CDP.
  * 2) If closed — start real Google Chrome, then attach.
@@ -211,9 +122,20 @@ async function reuseAuthedChrome(
   return null
 }
 
-export async function attachOrLaunch(
+export function attachOrLaunch(
   proxyInput?: string | null,
   port = CDP_PORT,
+): Promise<WallapopBrowserHandle> {
+  return oneAttachAtATime(
+    port,
+    () => attachOrLaunchNow(proxyInput, port),
+    ATTACH_LIMIT_MS,
+  )
+}
+
+async function attachOrLaunchNow(
+  proxyInput: string | null | undefined,
+  port: number,
 ): Promise<WallapopBrowserHandle> {
   if (parseChromeProxy(proxyInput ?? null)) {
     rememberChromeProxy(port, proxyInput)
@@ -271,7 +193,7 @@ async function resetStaleCdpHandle(port = CDP_PORT): Promise<void> {
 async function attachCdpHandleOrThrow(port = CDP_PORT): Promise<void> {
   if (getWallapopHandle(port)) return
   try {
-    setWallapopHandle(await attachOrLaunch(undefined, port), port)
+    setWallapopHandle(await attachOrLaunchNow(undefined, port), port)
     log("info", "wallapop_cdp_ensure_attached", { cdpUrl: cdpUrlForPort(port) })
   } catch (error) {
     throw new Error(cdpUnavailableMessage(error, port))
@@ -289,7 +211,7 @@ async function reopenCdpIfPagesFail(port = CDP_PORT): Promise<void> {
     })
     setWallapopHandle(null, port)
     try {
-      setWallapopHandle(await attachOrLaunch(undefined, port), port)
+      setWallapopHandle(await attachOrLaunchNow(undefined, port), port)
     } catch (reconnectError) {
       throw new Error(cdpUnavailableMessage(reconnectError, port))
     }
@@ -300,7 +222,14 @@ async function reopenCdpIfPagesFail(port = CDP_PORT): Promise<void> {
  * Attach (or spawn) Chrome CDP. Shared by publish/sold worker windows
  * and login. Does not open a job tab/window.
  */
-export async function ensureCdpAttached(port = CDP_PORT): Promise<WallapopBrowserHandle> {
+export function ensureCdpAttached(
+  port = CDP_PORT,
+  limitMs = ATTACH_LIMIT_MS,
+): Promise<WallapopBrowserHandle> {
+  return oneAttachAtATime(port, () => ensureCdpAttachedNow(port), limitMs)
+}
+
+async function ensureCdpAttachedNow(port: number): Promise<WallapopBrowserHandle> {
   await waitForChromeQuit(port)
   await resetStaleCdpHandle(port)
   await attachCdpHandleOrThrow(port)
